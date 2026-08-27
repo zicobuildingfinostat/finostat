@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Secrets. Never commit these.
+# A bare `.env` pattern matches at EVERY directory level, so this covers
+# server/.env as well as any .env at the root.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+*.env
+!.env.example
+!*.env.example
+*.key
+*.pem
+secrets.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+._*
+
+# Local backups and scratch
+*.bak
+*.orig
+index.backup.html

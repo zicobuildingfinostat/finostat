@@ -1,0 +1,6 @@
+index.backup.html
+server/.env
+server/tests
+**/__pycache__
+*.pyc
+.DS_Store

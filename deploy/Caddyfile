@@ -1,0 +1,31 @@
+# Caddy gets and renews TLS certificates automatically. Put this at
+# /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+
+finostat.com {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:8000 {
+		# REQUIRED for the live sheet and news wire. Without this Caddy buffers
+		# the response and server-sent events never reach the browser -- the page
+		# silently falls back to polling and you lose the sub-250ms refresh.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/finostat.log
+		format console
+	}
+}
+
+# Everyone links the bare domain; keep one canonical host for SEO.
+www.finostat.com {
+	redir https://finostat.com{uri} permanent
+}

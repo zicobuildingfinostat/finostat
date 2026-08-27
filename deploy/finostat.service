@@ -1,0 +1,35 @@
+# /etc/systemd/system/finostat.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now finostat
+
+[Unit]
+Description=Finostat market data server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=finostat
+Group=finostat
+WorkingDirectory=/opt/finostat/server
+EnvironmentFile=/opt/finostat/server/.env
+ExecStart=/usr/bin/python3 app.py
+Restart=always
+RestartSec=5
+
+# The access token expires daily; a crash loop should not hammer Kite.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/finostat
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
