@@ -39,7 +39,10 @@ def _float(name: str, default: float) -> float:
 
 
 HOST = os.environ.get("FINOSTAT_HOST", "127.0.0.1")
-PORT = _int("FINOSTAT_PORT", 8000)
+# Railway, Render and Fly inject $PORT and route to it. Binding anything else
+# makes the deploy look healthy while the site is unreachable, so fall back to
+# it before the default. FINOSTAT_PORT still wins when set explicitly.
+PORT = _int("FINOSTAT_PORT", _int("PORT", 8000))
 
 # "kite" uses the broker feed below; "simulator" (the default) needs no credentials.
 FEED = os.environ.get("FINOSTAT_FEED", "simulator").strip().lower()

@@ -18,7 +18,7 @@ USER finostat
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/status',timeout=4).status==200 else 1)"
+  CMD python3 -c "import os,urllib.request,sys; p=os.environ.get('FINOSTAT_PORT') or os.environ.get('PORT') or '8000'; sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/api/status',timeout=4).status==200 else 1)"
 
 WORKDIR /app/server
 CMD ["python3", "app.py"]

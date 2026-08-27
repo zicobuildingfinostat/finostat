@@ -1,0 +1,14 @@
+# Docker reads this from the build context root (the repo root), NOT from
+# beside the Dockerfile. Keeping it here is what makes it take effect.
+.git
+.gitignore
+index.backup.html
+**/.env
+**/.env.*
+!**/.env.example
+server/tests
+**/__pycache__
+*.pyc
+.DS_Store
+deploy/DEPLOY.md
+deploy/SETUP.md
