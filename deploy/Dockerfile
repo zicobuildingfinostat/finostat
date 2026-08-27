@@ -1,10 +1,12 @@
 # Finostat. No dependencies, so no build stage and nothing to install.
 FROM python:3.12-slim
 
+# Deliberately no FINOSTAT_PORT here. The platform decides: Fly sets it in
+# fly.toml, Railway/Render inject $PORT, and config.py falls back to 8000 for a
+# plain `docker run`. Pinning it here would silently override the platform.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    FINOSTAT_HOST=0.0.0.0 \
-    FINOSTAT_PORT=8000
+    FINOSTAT_HOST=0.0.0.0
 
 WORKDIR /app
 COPY index.html og.jpg robots.txt sitemap.xml /app/
@@ -15,6 +17,7 @@ RUN useradd --system --create-home --shell /usr/sbin/nologin finostat \
     && chown -R finostat:finostat /app
 USER finostat
 
+# Documentation only; the real port comes from the environment.
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

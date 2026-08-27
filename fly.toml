@@ -1,0 +1,42 @@
+# Fly.io configuration for Finostat.
+app = "finostat"
+primary_region = "bom"   # Mumbai: closest to the exchanges and to Indian users
+
+[build]
+  dockerfile = "deploy/Dockerfile"
+
+[env]
+  FINOSTAT_HOST = "0.0.0.0"
+  FINOSTAT_PORT = "8080"
+  FINOSTAT_FEED = "upstox"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # These two matter more here than on a normal web app. The server holds one
+  # WebSocket open to Upstox for the whole market session; if Fly suspends the
+  # machine the feed dies and the sheets go stale. Keep it running.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    # Each browser holds two server-sent-event streams open (sheet + news),
+    # so the connection ceiling is reached far sooner than on a request/response
+    # app. Give it room.
+    hard_limit = 250
+    soft_limit = 200
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[checks.status]
+  type = "http"
+  port = 8080
+  path = "/api/status"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "20s"
