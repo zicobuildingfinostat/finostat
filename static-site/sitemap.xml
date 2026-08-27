@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://finostat.com/</loc><priority>1.0</priority></url>
+  <url><loc>https://finostat.com/learn</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/blog</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/about</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/founders</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/contact</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/terms</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/privacy</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/butterfly-spread-scanner</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/ratio-spread-scanner</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/cross-butterfly-scanner</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/mcx-options-arbitrage</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/gamma-exposure</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/volatility-surface</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/tools/gift-nifty</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/strategies/short-straddle</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/strategies/iron-condor</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/strategies/butterfly-spread</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/strategies/ratio-spread</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/strategies/calendar-spread</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/strategies/cross-butterfly</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/learn/options-greeks</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/learn/implied-volatility</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/learn/option-chain-analysis</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/learn/how-to-read-the-sheets</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/live-session</loc><priority>0.7</priority></url>
+</urlset>
