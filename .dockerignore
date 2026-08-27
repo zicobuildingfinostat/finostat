@@ -12,3 +12,6 @@ server/tests
 .DS_Store
 deploy/DEPLOY.md
 deploy/SETUP.md
+
+# The legacy archive carried over from the old repo; not part of the build.
+*.zip
