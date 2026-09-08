@@ -8,6 +8,8 @@
   python3 admin.py assessments-csv > leads.csv
   python3 admin.py assessment-delete 7   # remove one submission
   python3 admin.py quotes                # lines visitors wrote; ★ = may be published
+  python3 admin.py brief-now open|close [YYYY-MM-DD]   # ask the server to take a brief snapshot now
+  python3 admin.py briefs                # stored briefs
 
 On Fly:  fly ssh console --app finostat -C "python3 /app/server/admin.py users"
 """
@@ -53,6 +55,16 @@ def main(argv: list[str]) -> int:
             a = __import__("json").loads(r["answers"])
             print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['ts']))}  {r['name'][:22]:<22} {r['email']:<32} {r['phone']}  {r['profile']:<12} {r['score']}/7  "
                   f"{assessment.describe('years', a.get('years'))} · {assessment.describe('goal', a.get('goal'))}")
+        return 0
+    if cmd == "brief-now" and len(argv) >= 3:
+        import pathlib
+        (au.path.parent / "brief.trigger").write_text(" ".join(argv[2:4]))
+        print(f"  trigger written; the server takes the {argv[2]} snapshot within 30s (watch /api/status.brief)"); return 0
+    if cmd == "briefs":
+        import brief as briefmod
+        st = briefmod.Briefs(au.path)
+        for d in st.dates(30):
+            r = st.get(d); print(f"  {d}  open={'yes' if r['open'] else 'no ':<3} close={'yes' if r['close'] else 'no'}")
         return 0
     if cmd == "quotes":
         import assessment, json as _json

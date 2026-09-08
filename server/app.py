@@ -34,6 +34,7 @@ import alerts as alertsmod
 import assessment
 import auth as authmod
 import backup
+import brief
 import builder
 import chains
 import contracts
@@ -59,9 +60,11 @@ ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
                                user_email=AUTH.email_for)
 BACKUP = backup.DailyBackup(AUTH.path, AUTH.path.parent / "backups")
 ASSESS = assessment.Assessments(AUTH.path)
+BRIEFS = brief.Briefs(AUTH.path)
 CONSTITUENTS = indices.Constituents("NIFTY50")
 FEED.index_members = CONSTITUENTS.members
 CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts.ContractIndex())
+BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger")
 
 
 def _plan_of(user) -> str:
@@ -351,6 +354,21 @@ class Handler(BaseHTTPRequestHandler):
                                   "text/html; charset=utf-8")
             if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
+            if route == "/brief":
+                return self._send(brief.render_index(BRIEFS), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route.startswith("/brief/"):
+                date = route[len("/brief/"):]
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+                    body = brief.render_day(BRIEFS, date)
+                    if body is not None:
+                        return self._send(body, "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/api/brief":
+                rec = BRIEFS.latest()
+                return self._json(rec or {"error": "no brief yet"}, 200 if rec else 404)
+            if route == "/sitemap.xml":
+                static = (config.STATIC_ROOT / "sitemap.xml").read_text(encoding="utf-8")
+                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + "</urlset>")
+                return self._send(xml.encode("utf-8"), "application/xml; charset=utf-8", cache="public, max-age=3600")
             if route == "/about":
                 return self._redirect("/founders")
             if route in RETIRED or route.startswith("/tools/"):
@@ -432,6 +450,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "interval": getattr(FEED, "interval", None),
                                    "recorder": RECORDER.stats(),
                                    "auth": {"smtp_configured": mailer.configured()},
+            "brief": {"last": BRIEF.last, "dates": BRIEFS.dates(3)},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -809,6 +828,7 @@ def main() -> int:
     BACKUP.start()
     CONSTITUENTS.start()
     CHAINS.start()
+    BRIEF.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -822,6 +842,7 @@ def main() -> int:
         BACKUP.stop()
         CONSTITUENTS.stop()
         CHAINS.stop()
+        BRIEF.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()
