@@ -27,6 +27,8 @@ from urllib.parse import urlparse, parse_qs
 import config
 import feeds
 import news
+import pages
+import recorder
 
 logging.basicConfig(
     level=os.environ.get("FINOSTAT_LOG", "INFO").upper(),
@@ -37,11 +39,12 @@ log = logging.getLogger("finostat")
 
 FEED = feeds.build_feed()
 NEWS = news.NewsHub()
+RECORDER = recorder.Recorder()
 
 # Routes the marketing page links to that are not built yet. They get an
 # on-brand 404 instead of a stack trace, so a stray click never looks broken.
 KNOWN_ROUTES = {
-    "/login": "Sign in", "/signup": "Create your account", "/dashboard": "The terminal",
+    "/login": "Sign in", "/signup": "Create your account",
     "/analysis": "Analysis tools", "/live-session": "Book a live session",
     "/learn": "Learn", "/blog": "Blog", "/about": "About", "/founders": "Founders",
     "/contact": "Contact", "/terms": "Terms of service", "/privacy": "Privacy policy",
@@ -226,6 +229,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if route in ("/", "/index.html"):
                 return self._send(PAGE.render(), "text/html; charset=utf-8")
+            if route == "/dashboard":
+                return self._send(pages.render_dashboard(FEED.snapshot()),
+                                  "text/html; charset=utf-8")
             if route == "/api/quotes":
                 return self._json(FEED.snapshot().get("quotes", []))
             if route == "/api/sheet":
@@ -241,7 +247,20 @@ class Handler(BaseHTTPRequestHandler):
                                    "error": snap.get("error"), "headlines": len(NEWS.latest(999)),
                                    "ticks": snap.get("ticks"), "sheet_subscribers": SHEETS.count(),
                                    "interval": getattr(FEED, "interval", None),
+                                   "recorder": RECORDER.stats(),
                                    "time": time.time()})
+            if route == "/api/history":
+                qs = parse_qs(parsed.query)
+                since = None
+                try:
+                    if qs.get("since"): since = float(qs["since"][0])
+                except ValueError:
+                    pass
+                try:
+                    limit = max(1, min(2000, int(qs.get("limit", ["300"])[0])))
+                except ValueError:
+                    limit = 300
+                return self._json(RECORDER.history(since=since, limit=limit))
             if route == "/api/news":
                 limit = 30
                 try:
@@ -380,6 +399,8 @@ class Server(ThreadingHTTPServer):
 
 def main() -> int:
     FEED.add_listener(SHEETS.publish)
+    FEED.add_listener(RECORDER.on_snapshot)
+    RECORDER.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -388,6 +409,7 @@ def main() -> int:
         log.info("shutting down")
         FEED.stop()
         NEWS.stop()
+        RECORDER.stop()
         threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, shutdown)

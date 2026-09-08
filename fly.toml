@@ -1,6 +1,6 @@
 # Fly.io configuration for Finostat.
 app = "finostat"
-primary_region = "bom"   # Mumbai: closest to the exchanges and to Indian users
+primary_region = "sin"   # Singapore: Fly deprecated bom (Mumbai); sin is the nearest region
 
 [build]
   dockerfile = "deploy/Dockerfile"
@@ -9,6 +9,13 @@ primary_region = "bom"   # Mumbai: closest to the exchanges and to Indian users
   FINOSTAT_HOST = "0.0.0.0"
   FINOSTAT_PORT = "8080"
   FINOSTAT_FEED = "upstox"
+  FINOSTAT_DATA_DIR = "/data"
+
+# The tick recorder's home. History cannot be backfilled, so this volume is
+# the only copy of every session recorded so far.
+[mounts]
+  source = "finostat_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080
