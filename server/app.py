@@ -30,6 +30,7 @@ import news
 import alerts as alertsmod
 import auth as authmod
 import backup
+import indices
 import mailer
 import pages
 import recorder
@@ -50,6 +51,8 @@ AUTH = authmod.Auth()
 ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
                                user_email=AUTH.email_for)
 BACKUP = backup.DailyBackup(AUTH.path, AUTH.path.parent / "backups")
+CONSTITUENTS = indices.Constituents("NIFTY50")
+FEED.index_members = CONSTITUENTS.members
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 
 # Routes the marketing page links to that are not built yet. They get an
@@ -358,10 +361,13 @@ class Handler(BaseHTTPRequestHandler):
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
                                    "backup": BACKUP.stats(),
+                                   "indices": {"nifty50": CONSTITUENTS.stats()},
                                    "time": time.time()})
             if route == "/api/symbols":
                 qs = parse_qs(parsed.query)
                 snap = FEED.snapshot()
+                if qs.get("group", [""])[0].lower() in ("nifty50", "n50"):
+                    return self._json(universe.group(snap.get("universe") or {}, "n50"))
                 try:
                     limit = int(qs.get("limit", ["20"])[0])
                 except ValueError:
@@ -600,6 +606,7 @@ def main() -> int:
     RECORDER.start()
     ALERTS.start()
     BACKUP.start()
+    CONSTITUENTS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -611,6 +618,7 @@ def main() -> int:
         RECORDER.stop()
         ALERTS.stop()
         BACKUP.stop()
+        CONSTITUENTS.stop()
         AUTH.checkpoint()
         threading.Thread(target=server.shutdown, daemon=True).start()
 

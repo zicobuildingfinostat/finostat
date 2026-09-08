@@ -68,6 +68,9 @@ class Feed:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._listeners: list = []
+        # Set by the app to a callable returning the current Nifty 50 symbols,
+        # so universe entries can carry an n50 flag that follows NSE's list.
+        self.index_members = lambda: set()
 
     def add_listener(self, fn) -> None:
         """Called with each new snapshot -- used to push updates to browsers."""
@@ -216,10 +219,11 @@ class SimulatorFeed(Feed):
         mini_chain = self._chain(mini_sym, mini_spot, mini_step)
 
         universe = {}
+        members = set(self.index_members())
         for s, (name, _px) in self.STOCKS.items():
             key = "NSE:" + s
             price, base = self._spot[key], self._open[key]
-            universe[key] = {"symbol": s, "exchange": "NSE", "name": name, "fo": True,
+            universe[key] = {"symbol": s, "exchange": "NSE", "name": name, "fo": True, "n50": s in members,
                              "price": round(price, 2), "change": round((price - base) / base * 100.0, 2)}
         self._publish(
             quotes=quotes,

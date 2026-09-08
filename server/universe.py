@@ -24,6 +24,8 @@ def search(universe: dict, quotes: list, q: str, limit: int = 20) -> list[dict]:
             rank = 3
         else:
             continue
+        if e.get("n50"):
+            rank -= 0.1       # index constituents are what most searches want
         if not e.get("fo"):
             rank += 0.5
         if e.get("exchange") == "BSE":
@@ -31,6 +33,13 @@ def search(universe: dict, quotes: list, q: str, limit: int = 20) -> list[dict]:
         hits.append((rank, sym, dict(e, key=key)))
     hits.sort(key=lambda h: (h[0], len(h[1]), h[1]))
     return [h[2] for h in hits[:limit]]
+
+
+def group(universe: dict, flag: str = "n50") -> list[dict]:
+    """Every entry carrying `flag`, symbol order."""
+    out = [dict(e, key=k) for k, e in (universe or {}).items() if e.get(flag)]
+    out.sort(key=lambda e: e.get("symbol", ""))
+    return out
 
 
 def lookup(universe: dict, quotes: list, keys) -> dict:

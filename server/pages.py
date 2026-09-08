@@ -128,6 +128,11 @@ button{cursor:pointer;background:none;border:0}
 .srch-list small{color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .srch-list em{font-style:normal;color:var(--gold);font-size:9px;letter-spacing:.1em}
 .al-form .srch input{padding:5px 6px}
+.n50 tr{cursor:pointer}
+.n50 tr:hover td{background:rgba(106,53,240,.18)}
+.n50 td:first-child{color:var(--text)}
+.n50 td:first-child small{display:block;color:var(--faint);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.n50 td.w{color:var(--gold)}
 .panel{background:var(--panel);border:1px solid var(--line-strong);display:flex;flex-direction:column;min-width:0;min-height:0;box-shadow:0 14px 40px rgba(0,0,0,.35)}
 .panel-hd{display:flex;align-items:center;gap:12px;padding:6px 11px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);font-size:11px;letter-spacing:.06em;flex-shrink:0}
 .panel-hd .k{color:var(--gold);font-weight:600}
@@ -273,6 +278,13 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
       <span class="r"><span id="watch-sync">local</span></span></div>
     <div class="watch scroll" id="watch"></div>
     <form class="watch-add" id="watch-add" autocomplete="off"><div class="srch"><input id="watch-q" placeholder="search NSE stock or index…" aria-label="Search symbols"><ul class="srch-list" id="watch-res" hidden></ul></div><button type="submit">ADD</button></form>
+  </section>
+
+  <section class="panel" id="p-n50" aria-label="Nifty 50 constituents">
+    <div class="panel-hd"><span class="k">N50</span><span class="s">NIFTY 50 · CONSTITUENTS</span>
+      <span class="r"><span id="n50-note">—</span></span></div>
+    <div class="scroll"><table class="n50"><thead><tr><th>SYMBOL</th><th>LTP</th><th>CHG</th></tr></thead>
+      <tbody id="n50-rows"><tr><td colspan="3" style="color:var(--faint)">loading constituents…</td></tr></tbody></table></div>
   </section>
 
   <section class="panel a-wire" id="p-wire" aria-label="News wire">
@@ -579,7 +591,7 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['wire','News wire'],['mini','Mini sheet']];
+var PANELS=[['sheet','BFLY sheet'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
 var prefs={watchlist:['NIFTY 50','BANKNIFTY','INDIA VIX'],layout:{hide:[]}};
 try{ var lp=JSON.parse(localStorage.getItem('fino_prefs_v1')||'null'); if(lp&&lp.watchlist) prefs=lp; }catch(e){}
 var signedIn=false, saveTimer=null;
@@ -671,6 +683,29 @@ function pollStocks(){
   }).catch(function(){});
 }
 setInterval(pollStocks, 2000);
+
+/* Nifty 50 constituents: the official list, live, sorted by movers */
+var n50Rows=document.getElementById('n50-rows'), n50Note=document.getElementById('n50-note');
+function pollN50(){
+  var panel=document.getElementById('p-n50'); if(panel&&panel.hidden) return;
+  fetch('/api/symbols?group=nifty50').then(function(r){ return r.json(); }).then(function(list){
+    if(!list||!list.length){ n50Rows.innerHTML='<tr><td colspan="3" style="color:var(--faint)">constituents not quoting yet</td></tr>'; return; }
+    list.sort(function(a,b){ return (b.change||0)-(a.change||0); });
+    var watched=prefs.watchlist||[];
+    n50Rows.innerHTML=list.map(function(e){
+      var w=watched.indexOf(e.key)>=0;
+      return '<tr data-key="'+esc(e.key)+'" title="'+(w?'in your watchlist':'click to add to watchlist')+'"><td'+(w?' class="w"':'')+'>'+esc(e.symbol)+'<small>'+esc(e.name||'')+'</small></td><td>'+fmt(e.price)+'</td><td class="'+(e.change<0?'down':'up')+'">'+(e.change>=0?'▲ ':'▼ ')+Math.abs(e.change||0).toFixed(2)+'%</td></tr>';
+    }).join('');
+    var up=list.filter(function(e){ return e.change>0; }).length;
+    n50Note.textContent=list.length+' names · '+up+' up · '+(list.length-up)+' down';
+  }).catch(function(){});
+}
+n50Rows.addEventListener('click',function(e){
+  var tr=e.target.closest('tr[data-key]'); if(!tr) return;
+  var k=tr.getAttribute('data-key'); prefs.watchlist=(prefs.watchlist||[]);
+  if(prefs.watchlist.indexOf(k)<0){ prefs.watchlist.push(k); renderWatch(); savePrefs(); pollStocks(); pollN50(); }
+});
+setInterval(pollN50, 2500); setTimeout(pollN50, 600);
 watchEl.addEventListener('click',function(e){
   var b=e.target.closest('button[data-sym]'); if(!b) return;
   prefs.watchlist=(prefs.watchlist||[]).filter(function(s){ return s!==b.getAttribute('data-sym'); });

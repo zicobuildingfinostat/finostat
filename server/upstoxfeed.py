@@ -99,6 +99,7 @@ class UpstoxFeed(Feed):
         self._stop_extra = threading.Event()
         self._uni_dirty = True
         self._universe_cache: dict = {}
+        self._members_seen: set | None = None
 
     # -- lifecycle ----------------------------------------------------------
     def start(self) -> None:
@@ -443,6 +444,10 @@ class UpstoxFeed(Feed):
         # iterate the published one, so it must never be mutated after
         # publish. With ~7,000 names, rebuilding at 8 Hz when nothing changed
         # would be the single biggest CPU cost, hence the dirty flag.
+        members = set(self.index_members())
+        if members != self._members_seen:
+            self._members_seen = members
+            self._uni_dirty = True
         if self._uni_dirty:
             universe = {}
             for key, meta in self._meta.items():
@@ -454,7 +459,8 @@ class UpstoxFeed(Feed):
                 close = self._closes.get(key)
                 universe[meta["label"]] = {
                     "symbol": meta["symbol"], "exchange": meta["exchange"], "name": meta["name"],
-                    "fo": meta["fo"], "price": round(price, 2),
+                    "fo": meta["fo"], "n50": meta["exchange"] == "NSE" and meta["symbol"] in members,
+                    "price": round(price, 2),
                     "change": round((price - close) / close * 100.0, 2) if close else 0.0,
                 }
             self._universe_cache = universe

@@ -90,7 +90,8 @@ layer do not change — they never learn where the prices came from.
 | `POST /auth/logout` | Ends the session |
 | `GET /api/me` | `{email, prefs}` for the signed-in user, else 401 |
 | `POST /api/me/prefs` | JSON object merged into the user's prefs; requires `X-Requested-With: fetch` |
-| `GET /api/symbols?q=` | Search the stock universe + indices (`limit` ≤ 50); F&O names rank first |
+| `GET /api/symbols?q=` | Search the stock universe + indices (`limit` ≤ 50); Nifty 50 and F&O names rank first |
+| `GET /api/symbols?group=nifty50` | The 50 Nifty 50 constituents with live quotes (NSE's official list, refreshed daily) |
 | `GET /api/quote?s=A,B` | Quotes for explicit keys, e.g. `NSE:RELIANCE,NIFTY 50` (≤ 50) |
 | `GET /api/alerts` | Signed-in user's alert rules and recent firings |
 | `POST /api/alerts` | Create a rule `{metric, strike?, cmp, value, email}`; evaluated immediately and on every live tick |
@@ -211,3 +212,12 @@ Deliberately, the universe is **never** part of the SSE push or the tick recorde
 the 8 Hz stream stays index-only (~650 bytes an event) and stock quotes are polled
 through `/api/quote`. The universe dict is only rebuilt when a stock actually ticked,
 and the ~90 MB instrument masters are freed once instruments are resolved.
+
+## Nifty 50 constituents
+
+`server/indices.py` fetches NSE's official constituents CSV daily (cached on the volume,
+with a built-in snapshot as the last resort; `/api/status.indices.nifty50.source` says
+which is in effect). Each NSE stock in the universe carries an `n50` flag that follows
+that list, the terminal's **N50** panel shows all 50 live sorted by % change, and a row
+click adds the stock to the watchlist. Index membership changes twice a year, which is
+why this is fetched rather than hard-coded.

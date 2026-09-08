@@ -26,4 +26,11 @@ check("no match -> empty", U.search(uni, quotes, "zzz") == [])
 l = U.lookup(uni, quotes, ["NSE:TCS","NIFTY 50","NSE:NOPE"])
 check("lookup stocks + indices, ignores unknown", set(l) == {"NSE:TCS","NIFTY 50"} and l["NSE:TCS"]["price"] == 3512.7, l)
 check("lookup caps at 50", len(U.lookup(uni, quotes, ["NSE:TCS"]*60)) == 1)
+uni["NSE:TCS"]["n50"] = True; uni["NSE:RELIANCE"]["n50"] = True
+g = U.group(uni, "n50")
+check("group returns only flagged, symbol order", [x["key"] for x in g] == ["NSE:RELIANCE","NSE:TCS"], [x["key"] for x in g])
+uni["NSE:TATACONSUM"] = {"symbol":"TATACONSUM","name":"TATA CONSUMER PRODUCT LTD","exchange":"NSE","fo":True,"n50":True,"price":1100.0,"change":0.2}
+uni["NSE:TATASTEEL"]["n50"] = False
+r = [x["key"] for x in U.search(uni, quotes, "tata")]
+check("n50 nudges ranking within a tier (TATACONSUM over TATASTEEL, both F&O prefix hits)", r[:2] == ["NSE:TATACONSUM","NSE:TATASTEEL"], r)
 print("\nRESULT:", "ALL PASS" if ok else "FAILURES"); sys.exit(0 if ok else 1)
