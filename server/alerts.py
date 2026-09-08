@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import math
+import pathlib
 import queue
 import sqlite3
 import threading
@@ -135,8 +136,8 @@ class AlertEngine:
         # condition that is already true fires immediately instead of waiting
         # for the next tick.
         self._last_snap: dict | None = None
-        with self._conn() as c:
-            c.executescript(_SCHEMA)
+        from auth import open_or_quarantine
+        open_or_quarantine(pathlib.Path(self.path), _SCHEMA)
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path, timeout=10, check_same_thread=False)

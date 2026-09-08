@@ -15,3 +15,9 @@ deploy/SETUP.md
 
 # The legacy archive carried over from the old repo; not part of the build.
 *.zip
+
+# Local databases: production uses the /data volume, never the image.
+**/data/
+**/*.db
+**/*.db-wal
+**/*.db-shm

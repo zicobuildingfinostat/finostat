@@ -61,6 +61,18 @@ check("5 per address then blocked", all(got[:5]) and got[5] is None, [bool(g) fo
 got_ip = [au2.create_link(f"u{i}@x.com", ip="7.7.7.7") for i in range(21)]
 check("20 per IP then blocked", all(got_ip[:20]) and got_ip[20] is None)
 
+print("\n=== corrupt database self-heals ===")
+bad = tmp / "corrupt.db"
+bad.write_bytes(b"this is not a sqlite file at all, just garbage bytes\n" * 20)
+(tmp / "corrupt.db-wal").write_bytes(b"x")
+au3 = A.Auth(bad)
+q = list(tmp.glob("corrupt.db.corrupt-*"))
+check("unreadable db quarantined (renamed, not deleted)", any(p.name.endswith(tuple("0123456789")) for p in q) and len(q) >= 1, [p.name for p in q])
+check("stray -wal quarantined too", any(p.name.endswith("-wal") for p in q), [p.name for p in q])
+tok = au3.create_link("heal@x.com", ip="1.1.1.1")
+check("fresh db works", au3.redeem_link(tok) is not None)
+check("garbage preserved for inspection", any(p.read_bytes().startswith(b"this is not") for p in q if p.name.endswith(tuple("0123456789"))))
+
 print("\n=== cookies ===")
 h = A.Auth.cookie_header("abc", secure=True)
 check("cookie has HttpOnly/Secure/SameSite", all(x in h for x in ("HttpOnly", "Secure", "SameSite=Lax", "Max-Age")), h)

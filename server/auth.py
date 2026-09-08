@@ -67,6 +67,33 @@ def _h(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
+    """Apply the schema; if the file is unreadable, set it aside and start clean.
+
+    A corrupt database must never take the site down. The bad file is renamed,
+    not deleted, so the cause can be inspected afterwards.
+    """
+    def apply():
+        c = sqlite3.connect(path, timeout=10)
+        try:
+            c.executescript(schema)
+            c.execute("PRAGMA journal_mode=WAL")
+            c.commit()
+        finally:
+            c.close()
+    try:
+        apply()
+    except sqlite3.DatabaseError as exc:
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            src = pathlib.Path(str(path) + suffix)
+            if src.exists():
+                src.rename(f"{path}.corrupt-{stamp}{suffix}")
+        log.error("%s was unreadable (%s); quarantined as %s.corrupt-%s and recreated",
+                  path.name, exc, path.name, stamp)
+        apply()
+
+
 def normalize_email(raw: str) -> str | None:
     email = (raw or "").strip().lower()
     if len(email) > 254 or not _EMAIL.match(email):
@@ -103,9 +130,7 @@ class Auth:
         self.path = path or (_data_dir() / "finostat.db")
         self._lock = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._conn() as c:
-            c.executescript(_SCHEMA)
-            c.execute("PRAGMA journal_mode=WAL")
+        open_or_quarantine(self.path, _SCHEMA)
         self.link_limit_email = RateLimiter(limit=5, window=15 * 60)
         self.link_limit_ip = RateLimiter(limit=20, window=15 * 60)
 
