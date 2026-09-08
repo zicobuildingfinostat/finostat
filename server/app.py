@@ -27,6 +27,7 @@ from urllib.parse import urlparse, parse_qs, quote
 import config
 import feeds
 import news
+import alerts as alertsmod
 import auth as authmod
 import mailer
 import pages
@@ -44,6 +45,8 @@ FEED = feeds.build_feed()
 NEWS = news.NewsHub()
 RECORDER = recorder.Recorder()
 AUTH = authmod.Auth()
+ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
+                               user_email=AUTH.email_for)
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 
 # Routes the marketing page links to that are not built yet. They get an
@@ -289,6 +292,12 @@ class Handler(BaseHTTPRequestHandler):
                 if user is None:
                     return self._json({"error": "not signed in"}, 401)
                 return self._json({"email": user["email"], "prefs": AUTH.get_prefs(user["id"])})
+            if route == "/api/alerts":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                return self._json({"alerts": ALERTS.list_for(user["id"]),
+                                   "events": ALERTS.events_for(user["id"])})
             if route.startswith("/strategies/"):
                 slug = route[len("/strategies/"):]
                 snap = FEED.snapshot()
@@ -325,6 +334,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "interval": getattr(FEED, "interval", None),
                                    "recorder": RECORDER.stats(),
                                    "auth": {"smtp_configured": mailer.configured()},
+                                   "alerts": ALERTS.stats(),
                                    "time": time.time()})
             if route == "/api/history":
                 qs = parse_qs(parsed.query)
@@ -379,6 +389,32 @@ class Handler(BaseHTTPRequestHandler):
                 sid = authmod.Auth.sid_from_cookie_header(self.headers.get("Cookie"))
                 AUTH.destroy_session(sid)
                 return self._redirect("/", [("Set-Cookie", authmod.Auth.clear_cookie_header(self._secure()))])
+            if route == "/api/alerts" or route.startswith("/api/alerts/"):
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if route == "/api/alerts":
+                    try:
+                        payload = json.loads(self._read_body().decode("utf-8"))
+                    except ValueError:
+                        return self._json({"error": "invalid json"}, 400)
+                    if not isinstance(payload, dict):
+                        return self._json({"error": "expected an object"}, 400)
+                    symbols = {q.get("symbol") for q in FEED.snapshot().get("quotes", [])}
+                    rule, err = alertsmod.validate(payload, symbols or None)
+                    if rule is None:
+                        return self._json({"error": err}, 400)
+                    created = ALERTS.create(user["id"], rule)
+                    if created is None:
+                        return self._json({"error": f"limit of {alertsmod.MAX_PER_USER} alerts"}, 409)
+                    return self._json({"ok": True, "alert": created})
+                parts = route.split("/")           # /api/alerts/<id>/<action>
+                if len(parts) == 5 and parts[3].isdigit() and parts[4] in ("rearm", "delete"):
+                    fn = ALERTS.rearm if parts[4] == "rearm" else ALERTS.delete
+                    return self._json({"ok": fn(user["id"], int(parts[3]))})
+                return self._json({"error": "not found"}, 404)
             if route == "/api/me/prefs":
                 user = self._current_user()
                 if user is None:
@@ -523,7 +559,9 @@ class Server(ThreadingHTTPServer):
 def main() -> int:
     FEED.add_listener(SHEETS.publish)
     FEED.add_listener(RECORDER.on_snapshot)
+    FEED.add_listener(ALERTS.on_snapshot)
     RECORDER.start()
+    ALERTS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -533,6 +571,7 @@ def main() -> int:
         FEED.stop()
         NEWS.stop()
         RECORDER.stop()
+        ALERTS.stop()
         threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, shutdown)

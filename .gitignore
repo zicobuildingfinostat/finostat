@@ -31,3 +31,4 @@ index.backup.html
 # local helper, not part of the project
 push-to-github.sh
 store-token.sh
+server/set-smtp.sh

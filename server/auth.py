@@ -177,6 +177,11 @@ class Auth:
         with self._lock, self._conn() as c:
             c.execute("DELETE FROM sessions WHERE sid_hash=?", (_h(sid),))
 
+    def email_for(self, user_id: int) -> str | None:
+        with self._conn() as c:
+            row = c.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+        return row["email"] if row else None
+
     # -- prefs --------------------------------------------------------------
     def get_prefs(self, user_id: int) -> dict:
         with self._conn() as c:

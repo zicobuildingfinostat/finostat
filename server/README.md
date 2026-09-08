@@ -90,6 +90,9 @@ layer do not change — they never learn where the prices came from.
 | `POST /auth/logout` | Ends the session |
 | `GET /api/me` | `{email, prefs}` for the signed-in user, else 401 |
 | `POST /api/me/prefs` | JSON object merged into the user's prefs; requires `X-Requested-With: fetch` |
+| `GET /api/alerts` | Signed-in user's alert rules and recent firings |
+| `POST /api/alerts` | Create a rule `{metric, strike?, cmp, value, email}`; evaluated immediately and on every live tick |
+| `POST /api/alerts/<id>/rearm`, `.../delete` | Re-arm a fired rule / remove a rule |
 
 Unbuilt routes the marketing page links to (`/dashboard`, `/login`,
 `/strategies/*`, …) return an on-brand 404 rather than a stack trace.
@@ -165,3 +168,13 @@ limited per address and per IP. Sending needs `SMTP_HOST/PORT/USER/PASS/FROM` �
 set, links are **logged** instead (dev mode) and `/login` says so. Emailed links use
 `FINOSTAT_PUBLIC_URL`, never the request's Host header. Accounts currently sync the
 terminal's watchlist and panel layout across devices.
+
+## Server-side alerts
+
+Signed-in users' alert rules live in the account (`server/alerts.py`) and are evaluated on
+the server against every **live** snapshot, at most once a second — so they fire with every
+tab closed. A firing is written to the account, emailed (one email per user per tick,
+however many rules tripped), and shown in the terminal on its next poll. Rules fire once and
+then wait to be re-armed. Rules are also checked at creation and on re-arm against the last
+live snapshot, so a condition that is already true fires immediately even after hours.
+Simulator snapshots are never evaluated. Signed-out users keep the browser-side engine.

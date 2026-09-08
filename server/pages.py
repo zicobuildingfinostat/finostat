@@ -141,7 +141,10 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 .chart .legend b{color:var(--gold);font-weight:500}
 
 /* alerts */
-.al-form{display:grid;grid-template-columns:1.2fr .9fr .55fr .8fr auto;gap:6px;padding:9px 10px;border-bottom:1px solid var(--line)}
+.al-form{display:grid;grid-template-columns:1.2fr .9fr .55fr .8fr auto auto;gap:6px;padding:9px 10px;border-bottom:1px solid var(--line);align-items:center}
+.al-mail{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap}
+.al-mail input{accent-color:#f5c842}
+.al-list small.fv{color:var(--gold)}
 .al-form select,.al-form input{background:#06031a;border:1px solid var(--line-strong);color:var(--text);font-size:11px;padding:5px 6px;min-width:0}
 .al-form button{background:var(--gold);color:#2a1a02;font-weight:600;font-size:10.5px;letter-spacing:.08em;padding:5px 10px}
 .al-form button:hover{filter:brightness(1.1)}
@@ -234,13 +237,14 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
 
     <section class="panel" style="flex:1.25" id="p-alerts" aria-label="Alerts">
-      <div class="panel-hd"><span class="k">ALRT</span><span class="s">MY ALERTS</span>
+      <div class="panel-hd"><span class="k">ALRT</span><span class="s" id="al-mode">MY ALERTS · LOCAL</span>
         <span class="r"><span id="al-count">0 ARMED</span></span></div>
       <form class="al-form" id="al-form">
         <select id="al-metric"></select>
         <select id="al-strike" disabled><option value="">strike…</option></select>
         <select id="al-cmp"><option value=">=">≥</option><option value="<=">≤</option></select>
         <input id="al-value" type="number" step="any" placeholder="value" required>
+        <label class="al-mail" id="al-mail-wrap" hidden title="Email me when this fires"><input type="checkbox" id="al-email" checked> ✉</label>
         <button type="submit">ARM</button>
       </form>
       <ul class="al-list scroll" id="al-list" style="flex:1.2"></ul>
@@ -426,6 +430,11 @@ function renderAlerts(){
 }
 alList.addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
+  if(serverAlerts){
+    var id=b.getAttribute('data-id'); if(!id) return;
+    srvPost('/api/alerts/'+id+'/'+b.getAttribute('data-act')).then(loadServerAlerts);
+    return;
+  }
   var i=Number(b.getAttribute('data-i'));
   if(b.getAttribute('data-act')==='del') alerts.splice(i,1);
   else if(b.getAttribute('data-act')==='rearm') alerts[i].state='armed';
@@ -436,6 +445,11 @@ alForm.addEventListener('submit',function(e){
   var m=METRICS.filter(function(x){ return x.id===alMetric.value; })[0];
   if(m.strike && !alStrike.value){ alStrike.focus(); return; }
   var v=parseFloat(alValue.value); if(isNaN(v)) return;
+  if(serverAlerts){
+    srvPost('/api/alerts',{metric:alMetric.value,strike:m.strike?Number(alStrike.value):null,cmp:alCmp.value,value:v,email:alEmail.checked})
+      .then(function(r){ if(r&&r.error){ logAlert('Not armed: '+r.error); } alValue.value=''; loadServerAlerts(); });
+    return;
+  }
   alerts.push({metric:alMetric.value,strike:m.strike?Number(alStrike.value):null,cmp:alCmp.value,value:v,state:'armed',created:Date.now()});
   alValue.value=''; saveAlerts(); renderAlerts();
 });
@@ -450,14 +464,15 @@ function beep(){
     o.stop(ctx.currentTime+0.4);
   }catch(e){}
 }
-function logAlert(msg){
+function logAlert(msg, ts){
   var li=document.createElement('li');
-  var t=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour12:false});
+  var t=new Date(ts?ts*1000:Date.now()).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour12:false});
   li.innerHTML='<time>'+t+'</time><span>'+msg+'</span>';
   alLog.prepend(li);
   while(alLog.children.length>40) alLog.lastElementChild.remove();
 }
 function evalAlerts(){
+  if(serverAlerts){ return; }
   var fired=false;
   alerts.forEach(function(a){
     if(a.state!=='armed') return;
@@ -536,7 +551,7 @@ function renderWho(user){
 }
 fetch('/api/me',{credentials:'same-origin'}).then(function(r){ return r.ok?r.json():null; }).then(function(me){
   if(me&&me.email){
-    signedIn=true; renderWho(me);
+    signedIn=true; renderWho(me); enableServerAlerts();
     if(me.prefs&&me.prefs.watchlist){ prefs=me.prefs; if(!prefs.layout) prefs.layout={hide:[]}; }
     syncEl.textContent='synced';
     try{ localStorage.setItem('fino_prefs_v1',JSON.stringify(prefs)); }catch(e){}
@@ -590,6 +605,56 @@ document.getElementById('watch-add').addEventListener('submit',function(e){
   renderWatch(); savePrefs();
 });
 
+/* ---------- server-side alerts (signed in) ---------- */
+var serverAlerts=false, srvAlerts=[], lastEventId=0, srvTimer=null;
+var alMode=document.getElementById('al-mode'), alMailWrap=document.getElementById('al-mail-wrap'), alEmail=document.getElementById('al-email');
+function srvLabel(a){
+  var m=a.metric.indexOf('spot:')===0 ? a.metric.slice(5)+' spot' : a.metric==='straddle' ? 'ATM straddle' : a.metric.toUpperCase()+' '+a.strike;
+  return m+' '+(a.cmp==='>='?'≥':'≤')+' '+a.value;
+}
+function renderServerAlerts(){
+  var armed=srvAlerts.filter(function(a){ return a.state==='armed'; }).length;
+  alCount.textContent=armed+' ARMED';
+  if(!srvAlerts.length){ alList.innerHTML='<li class="al-empty">No alerts on your account. Arm one above — the server watches it even when this tab is closed, and emails you when it fires.</li>'; return; }
+  alList.innerHTML=srvAlerts.map(function(a){
+    var cur=metricValue(a.metric,a.strike);
+    var tag=a.state==='fired'?'<span class="tag fired">FIRED</span>':'<span class="tag hot">ARMED</span>';
+    var sub=a.state==='fired'&&a.fired_value!=null?'<small class="fv">fired at '+Number(a.fired_value).toFixed(2)+'</small>':'<small>now '+(cur==null?'—':cur.toFixed(2))+(a.email?' · ✉':'')+'</small>';
+    var act=a.state==='fired'?'<button class="rearm" data-id="'+a.id+'" data-act="rearm">RE-ARM</button>':'';
+    return '<li><div><b>'+esc(srvLabel(a))+'</b>'+sub+'</div>'+tag+'<span>'+act+' <button data-id="'+a.id+'" data-act="delete">✕</button></span></li>';
+  }).join('');
+}
+function srvPost(path, body){
+  return fetch(path,{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},
+    body:JSON.stringify(body||{})}).then(function(r){ return r.json(); });
+}
+function loadServerAlerts(){
+  return fetch('/api/alerts',{credentials:'same-origin'}).then(function(r){ return r.ok?r.json():null; }).then(function(d){
+    if(!d) return;
+    srvAlerts=d.alerts||[];
+    var evs=(d.events||[]).slice().reverse();
+    var fresh=evs.filter(function(e){ return e.id>lastEventId; });
+    if(lastEventId>0 && fresh.length){
+      fresh.forEach(function(e){ logAlert(e.message, e.ts); });
+      beep();
+      if('Notification' in window && Notification.permission==='granted'){
+        try{ new Notification('Finostat alert',{body:fresh.map(function(e){ return e.message; }).join('\n'),icon:'/og.jpg'}); }catch(err){}
+      }
+    } else if(lastEventId===0){
+      evs.slice(-8).forEach(function(e){ logAlert(e.message, e.ts); });
+    }
+    if(evs.length) lastEventId=Math.max(lastEventId, evs[evs.length-1].id);
+    renderServerAlerts();
+  }).catch(function(){});
+}
+function enableServerAlerts(){
+  serverAlerts=true;
+  alMode.textContent='MY ALERTS · SERVER'; alMailWrap.hidden=false;
+  loadServerAlerts();
+  if(!srvTimer) srvTimer=setInterval(loadServerAlerts, 4000);
+}
+
 /* ---------- ingest a sheet payload ---------- */
 function ingest(d){
   state.lastEvent=Date.now();
@@ -598,17 +663,19 @@ function ingest(d){
   if(d.mini && d.mini.length){ state.mini=d.mini; renderMini(d.mini); }
   if(d.straddle!=null){ state.straddle=d.straddle; pushStraddle(d.straddle); }
   if(typeof d.live==='boolean') state.live=d.live;
-  evalAlerts(); renderAlerts();
+  if(serverAlerts){ renderServerAlerts(); } else { evalAlerts(); renderAlerts(); }
   document.getElementById('sheet-note').textContent = state.live?'live':'delayed';
 }
 
 /* ---------- connection ---------- */
-var conn=document.getElementById('conn');
+var conn=document.getElementById('conn'), sheetStream=null;
 function setConn(){
+  var open = sheetStream ? sheetStream.readyState===1 : !!pollTimer;
   var fresh = Date.now()-state.lastEvent < 6000;
-  if(fresh && state.live){ conn.textContent='LIVE'; conn.classList.remove('off'); }
-  else if(fresh){ conn.textContent='DELAYED'; conn.classList.remove('off'); }
-  else { conn.textContent='RECONNECTING'; conn.classList.add('off'); }
+  if(!open){ conn.textContent='RECONNECTING'; conn.classList.add('off'); return; }
+  conn.classList.remove('off');
+  // A quiet market sends no ticks; that is idle, not broken.
+  conn.textContent = fresh ? (state.live?'LIVE':'DELAYED') : (state.live?'LIVE · IDLE':'IDLE');
 }
 setInterval(setConn,2000);
 
@@ -622,7 +689,7 @@ function startPolling(){ if(!pollTimer) pollTimer=setInterval(function(){
 function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
 
 if('EventSource' in window){
-  var ss=new EventSource('/api/sheet/stream');
+  var ss=new EventSource('/api/sheet/stream'); sheetStream=ss;
   ss.addEventListener('sheet',function(e){
     stopPolling();
     var d; try{ d=JSON.parse(e.data); }catch(err){ return; }
