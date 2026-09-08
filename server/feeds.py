@@ -128,6 +128,11 @@ class Feed:
         """(ltp, close) for a subscribed contract key; feeds that stream override."""
         return (None, None)
 
+    def stats_of(self, key: str) -> dict:
+        """Open interest, volume and top-of-book for a contract key, when the
+        feed carries them (full-mode sockets do). {} otherwise."""
+        return {}
+
     def subscribe_dynamic(self, metas: dict) -> None:
         """Start streaming extra contract keys (meta per key). Overridden by live feeds."""
 

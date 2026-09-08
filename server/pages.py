@@ -155,6 +155,17 @@ button{cursor:pointer;background:none;border:0}
 .bl-metrics div{background:var(--panel);padding:7px 10px}
 .bl-metrics small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
 .bl-metrics b{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.02em}
+.bl-tools button.on{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.bl-oi{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.bl-oi div{background:var(--panel);padding:6px 10px}.bl-oi small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.bl-oi b{font-family:var(--display);font-size:19px;font-weight:600}
+.bl-chain{border-bottom:1px solid var(--line)}.bl-chain table{border-collapse:collapse;width:100%;font-size:10.5px;min-width:560px}
+.bl-chain th{font-size:9.5px;letter-spacing:.08em;color:var(--faint);font-weight:500;padding:4px 6px;text-align:right;border-bottom:1px solid var(--line-strong)}
+.bl-chain td{padding:3px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid rgba(190,150,255,.07);position:relative}
+.bl-chain td.k{text-align:center;color:var(--gold);font-weight:600;background:rgba(106,53,240,.12)}.bl-chain tr.atm td{background:rgba(106,53,240,.28)}
+.bl-chain td.oi i{position:absolute;top:2px;bottom:2px;z-index:0;opacity:.28}.bl-chain td.ce.oi i{right:0;background:var(--down)}.bl-chain td.pe.oi i{left:0;background:var(--up)}
+.bl-chain td.oi span{position:relative;z-index:1}.bl-chain td.px{color:var(--text);cursor:pointer}.bl-chain td.px:hover{color:var(--gold)}
+.bl-chain td.wall{box-shadow:inset 0 0 0 1px var(--gold)}.bl-chain .ch{color:var(--muted);font-size:9.5px}
+.bl-chain .note{padding:5px 10px;font-size:9.5px;color:var(--faint);letter-spacing:.04em}
 .bl-chart{padding:8px 10px 4px}
 .bl-chart svg{width:100%;height:130px;display:block}
 .bl-axis{display:flex;justify-content:space-between;font-size:9.5px;color:var(--faint);letter-spacing:.06em;margin-top:2px}
@@ -325,7 +336,9 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <div class="bl-body" id="bl-body" hidden>
       <div class="bl-scroll"><table class="bl-legs"><thead><tr><th>SIDE</th><th>QTY</th><th>TYPE</th><th>STRIKE</th><th>LTP</th><th>IV</th><th>Δ</th><th></th></tr></thead>
         <tbody id="bl-legs"></tbody></table></div>
-      <div class="bl-tools"><button type="button" id="bl-add">+ LEG</button><span id="bl-lot"></span></div>
+      <div class="bl-tools"><button type="button" id="bl-add">+ LEG</button><button type="button" id="bl-chain-btn" title="Option chain with open interest">CHAIN</button><span id="bl-lot"></span></div>
+      <div class="bl-oi" id="bl-oi" hidden></div>
+      <div class="bl-chain" id="bl-chain" hidden><div class="bl-scroll"><table><thead><tr><th>OI</th><th>ΔOI</th><th>IV</th><th>CE</th><th>STRIKE</th><th>PE</th><th>IV</th><th>ΔOI</th><th>OI</th></tr></thead><tbody id="bl-chain-rows"></tbody></table></div><div class="note" id="bl-chain-note"></div></div>
       <div class="bl-metrics" id="bl-metrics"></div>
       <div class="bl-chart"><svg id="bl-payoff" viewBox="0 0 320 130" preserveAspectRatio="none" aria-label="Payoff at expiry"></svg>
         <div class="bl-axis" id="bl-axis"></div></div>
@@ -774,6 +787,32 @@ loadUnderlyings();
   blRes.addEventListener('mousedown',function(e){ var li=e.target.closest('li[data-i]'); if(li){ choose(Number(li.getAttribute('data-i'))); e.preventDefault(); } });
   blU.addEventListener('blur',function(){ setTimeout(function(){ items=[]; render(); },120); });
 })();
+var blChainBtn=document.getElementById('bl-chain-btn'), blOi=document.getElementById('bl-oi'), blChain=document.getElementById('bl-chain'), blChainRows=document.getElementById('bl-chain-rows'), blChainNote=document.getElementById('bl-chain-note');
+bl.chainOpen=false;
+function kfmt(n){ if(n==null) return '—'; var a=Math.abs(n); return (n<0?'-':'')+(a>=1e7?(a/1e7).toFixed(2)+'cr':a>=1e5?(a/1e5).toFixed(1)+'L':a>=1000?(a/1000).toFixed(1)+'k':String(a)); }
+function loadChain(){
+  if(!bl.u||!bl.chainOpen) return;
+  fetch('/api/chain?u='+encodeURIComponent(bl.u)+(bl.expiry?'&expiry='+bl.expiry:''),{credentials:'same-origin'}).then(function(r){ return r.json(); }).then(renderChain).catch(function(){});
+}
+function renderChain(c){
+  if(!c||!c.rows){ blChainRows.innerHTML=''; blChainNote.textContent=c&&c.error?c.error:'chain unavailable'; blOi.hidden=true; return; }
+  var o=c.oi, mx=o&&o.max_oi?o.max_oi:0;
+  if(o){ blOi.hidden=false;
+    blOi.innerHTML=[['PCR (OI)',o.pcr!=null?o.pcr.toFixed(2):'—'],['max pain',o.max_pain!=null?fmt(o.max_pain,0):'—'],['call wall',o.call_wall!=null?fmt(o.call_wall,0):'—'],['put wall',o.put_wall!=null?fmt(o.put_wall,0):'—'],['call OI',kfmt(o.tot_ce)],['put OI',kfmt(o.tot_pe)]]
+      .map(function(x){ return '<div><small>'+x[0]+'</small><b>'+x[1]+'</b></div>'; }).join('');
+  } else blOi.hidden=true;
+  blChainRows.innerHTML=c.rows.map(function(r){
+    var ce=r.ce||{}, pe=r.pe||{};
+    function oiTd(side,s){ var w=mx&&s.oi?Math.round(s.oi/mx*100):0; return '<td class="'+side+' oi'+(o&&((side==='ce'&&r.strike===o.call_wall)||(side==='pe'&&r.strike===o.put_wall))?' wall':'')+'"><i style="width:'+w+'%"></i><span>'+kfmt(s.oi)+'</span></td>'; }
+    function chTd(s){ return '<td class="ch">'+(s.oi_chg==null?'—':(s.oi_chg>0?'+':'')+kfmt(s.oi_chg))+'</td>'; }
+    return '<tr'+(r.atm?' class="atm"':'')+'>'+oiTd('ce',ce)+chTd(ce)+'<td>'+(ce.iv!=null?ce.iv.toFixed(1):'—')+'</td><td class="px" data-r="CE" data-k="'+r.strike+'">'+(ce.ltp!=null?ce.ltp.toFixed(2):'—')+'</td>'
+      +'<td class="k">'+r.strike+'</td><td class="px" data-r="PE" data-k="'+r.strike+'">'+(pe.ltp!=null?pe.ltp.toFixed(2):'—')+'</td><td>'+(pe.iv!=null?pe.iv.toFixed(1):'—')+'</td>'+chTd(pe)+oiTd('pe',pe)+'</tr>';
+  }).join('');
+  var since=null; c.rows.some(function(r){ var s=(r.ce&&r.ce.oi_since)||(r.pe&&r.pe.oi_since); if(s){ since=s; return true; } });
+  blChainNote.textContent=(o?'OI from the exchange feed · ΔOI since the first tick seen today · click a price to add that leg':'this chain socket carries no open interest yet')+(c.live?'':' · last traded');
+}
+blChainBtn.addEventListener('click',function(){ bl.chainOpen=!bl.chainOpen; blChainBtn.classList.toggle('on',bl.chainOpen); blChain.hidden=!bl.chainOpen; if(!bl.chainOpen) blOi.hidden=true; else loadChain(); });
+blChainRows.addEventListener('click',function(e){ var td=e.target.closest('td.px'); if(!td||bl.legs.length>=8) return; bl.legs.push({right:td.getAttribute('data-r'),strike:Number(td.getAttribute('data-k')),qty:1}); bl.preset=null; priceStrategy(); });
 function stopPricing(){ if(bl.timer){ clearInterval(bl.timer); bl.timer=null; } }
 function showLock(err){
   stopPricing();                                   // nothing to price while locked
@@ -789,7 +828,7 @@ function showLock(err){
     btn.onclick=function(){ btn.disabled=true; srvPost('/auth/upgrade',{plan:need}).then(function(r){ note.textContent=r.ok?'Request sent — you will get an email when it is active.':(r.error||'could not send'); btn.textContent=r.ok?'REQUESTED':btn.textContent; }); }; }
 }
 function selectUnderlying(key){
-  bl.u=key; bl.expiry=null; bl.legs=[]; bl.preset='short-straddle'; blLock.hidden=true; blLock.removeAttribute('data-need'); blEmpty.hidden=true; blBody.hidden=true;
+  bl.u=key; bl.expiry=null; bl.legs=[]; bl.preset='short-straddle'; blLock.hidden=true; blLock.removeAttribute('data-need'); blEmpty.hidden=true; blBody.hidden=true; blChainRows.innerHTML=''; blOi.hidden=true;
   blStatus.textContent='loading chain…'; blTitle.textContent='STRATEGY BUILDER · '+key;
   priceStrategy(true);
 }
@@ -808,6 +847,7 @@ function priceStrategy(first){
     Array.prototype.forEach.call(blPresets.querySelectorAll('button'),function(b){ b.classList.toggle('on', b.getAttribute('data-p')===bl.preset); });
     renderBuilder(d); blBody.hidden=false; blLock.hidden=true; blEmpty.hidden=true;
     blStatus.textContent=(d.live?'LIVE':'DELAYED')+' · spot '+fmt(d.spot)+(d.warming?' · warming':'');
+    loadChain();
     if(!bl.timer) bl.timer=setInterval(priceStrategy,3000);
   }).catch(function(){ blStatus.textContent='offline'; });
 }

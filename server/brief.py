@@ -111,6 +111,7 @@ def snapshot_underlying(feed, chains, ukey: str, wait: float = 40.0) -> dict | N
         "atm_iv": atm_iv, "skew": skew, "ce_delta": ce.get("delta"), "pe_delta": pe.get("delta"),
         "theta_lot": round(((ce.get("theta") or 0) + (pe.get("theta") or 0)) * chain["lot"], 0),
         "strategies": strategies, "live": bool(chain.get("live")),
+        "oi": chain.get("oi"),
     }
 
 
@@ -196,6 +197,19 @@ def narrative(d: dict) -> list[str]:
             f"On the other side, the long straddle costs ₹{_n(abs(ls['net_lot']))} a lot and needs NIFTY beyond {' or '.join(_n(b) for b in ls['breakevens'])} at expiry to pay. "
             f"It bleeds about ₹{_n(abs(n['theta_lot']))} a day in time value right now. Buy it only if you expect the market to move more than it is charging for — "
             f"and know why.")
+    oi = n.get("oi")
+    if oi and oi.get("tot_ce"):
+        walls = []
+        if oi.get("call_wall"):
+            walls.append(f"the largest call open interest above spot sits at {_n(oi['call_wall'])} — the strike writers are defending as resistance")
+        if oi.get("put_wall"):
+            walls.append(f"the largest put open interest below sits at {_n(oi['put_wall'])}, the floor")
+        pcr = oi.get("pcr")
+        pcr_read = ("a hedged, put-heavy book" if pcr and pcr > 1.2 else "a complacent, call-heavy book" if pcr and pcr < 0.7 else "a balanced book") if pcr is not None else ""
+        paras.append(
+            f"Open interest across the loaded strikes: {'; '.join(walls)}. " if walls else ""
+            + (f"Put–call ratio {pcr:.2f} ({pcr_read}). " if pcr is not None else "")
+            + (f"Max pain — the expiry price that leaves the most option value worthless — is {_n(oi['max_pain'])}." if oi.get("max_pain") else ""))
     others = [d["u"][u] for u in UNDERLYINGS[1:] if u in d["u"]]
     if others:
         bits = [f"{o['u']} {_n(o['spot'])} with a straddle of ₹{_n(o['straddle'])} (±{o['move_pct']:.2f}%, expiry {datetime.fromtimestamp(o['expiry'] / 1000, IST).strftime('%d %b')})" for o in others]
@@ -388,7 +402,11 @@ def _kpis(n: dict, vix) -> str:
             f'<div><small>Implied move</small><b>±{n["move_pct"]:.2f}<i>%</i></b><div class="sub">±{_n(n["straddle"])} pts · {n["days"]:.1f} days</div></div>'
             f'<div><small>Expected range</small><b style="font-size:20px">{_n(n["lo"])} – {_n(n["hi"])}</b><div class="sub">spot ± straddle</div></div>'
             f'<div><small>ATM IV</small><b>{_n(n["atm_iv"], 1)}<i>%</i></b><div class="sub">skew {n["skew"]:+.1f} pts</div></div>'
-            f'<div><small>India VIX</small><b>{_n(vix, 2)}</b></div></div>')
+            f'<div><small>India VIX</small><b>{_n(vix, 2)}</b></div>'
+            + (f'<div><small>PCR · max pain</small><b>{_n(n["oi"]["pcr"], 2)}<i> · {_n(n["oi"]["max_pain"])}</i></b></div>'
+               f'<div><small>OI walls</small><b style="font-size:20px">{_n(n["oi"]["put_wall"])} / {_n(n["oi"]["call_wall"])}</b><div class="sub">put floor / call ceiling</div></div>'
+               if n.get("oi") and n["oi"].get("tot_ce") else "")
+            + '</div>')
 
 
 def _strats(n: dict) -> str:

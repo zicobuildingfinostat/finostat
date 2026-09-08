@@ -20,6 +20,28 @@ from contracts import INDEX_UNDERLYINGS
 log = logging.getLogger("finostat.chains")
 
 
+def oi_summary(rows: list[dict], spot: float) -> dict | None:
+    """PCR, max pain and the OI walls over the loaded strikes. None if the
+    feed carries no open interest for this chain."""
+    ce = [(r["strike"], r["ce"]["oi"]) for r in rows if r.get("ce") and r["ce"].get("oi") is not None]
+    pe = [(r["strike"], r["pe"]["oi"]) for r in rows if r.get("pe") and r["pe"].get("oi") is not None]
+    if not ce and not pe:
+        return None
+    tot_ce, tot_pe = sum(o for _, o in ce), sum(o for _, o in pe)
+    strikes = sorted({k for k, _ in ce} | {k for k, _ in pe})
+    pain = None
+    if strikes and (tot_ce or tot_pe):
+        pain = min(strikes, key=lambda s: sum(o * max(s - k, 0) for k, o in ce) + sum(o * max(k - s, 0) for k, o in pe))
+    above = [(k, o) for k, o in ce if k >= spot]
+    below = [(k, o) for k, o in pe if k <= spot]
+    call_wall = max(above, key=lambda x: x[1])[0] if above else None
+    put_wall = max(below, key=lambda x: x[1])[0] if below else None
+    since = None
+    return {"pcr": round(tot_pe / tot_ce, 2) if tot_ce else None, "max_pain": pain,
+            "call_wall": call_wall, "put_wall": put_wall, "tot_ce": tot_ce, "tot_pe": tot_pe,
+            "max_oi": max([o for _, o in ce + pe] or [0])}
+
+
 class ChainManager:
     def __init__(self, feed, contracts, half: int = 10, ttl: float = 600.0, max_warm: int = 40):
         self.feed, self.contracts = feed, contracts
@@ -83,7 +105,10 @@ class ChainManager:
                     continue
                 iv = bs.implied_vol(ltp, spot, row["strike"], t, right) if t > 0 else None
                 g = bs.greeks(spot, row["strike"], t, iv, right) if iv else None
+                st = self._stats(key)
                 entry[right.lower()] = {
+                    "oi": st.get("oi"), "oi_chg": st.get("oi_chg"), "vol": st.get("vol"),
+                    "bid": st.get("bid"), "ask": st.get("ask"),
                     "ltp": round(ltp, 2),
                     "change": round((ltp - close) / close * 100.0, 2) if close else None,
                     "iv": round(iv * 100.0, 2) if iv else None,
@@ -95,13 +120,22 @@ class ChainManager:
             rows.append(entry)
         step = self.contracts.step(name, expiry)
         atm = next((r["strike"] for r in ladder if r["atm"]), None)
+        oi = oi_summary(rows, spot)
         return {
+            "oi": oi,
             "underlying": ukey, "kind": kind, "name": name, "exchange": exch,
             "spot": round(spot, 2), "expiry": expiry, "expiries": expiries[:6],
             "step": step, "atm": atm, "lot": ladder[0]["lot"], "t_years": round(t, 6),
             "rows": rows, "warming": missing > 0, "missing": missing,
             "live": bool(self.feed.snapshot().get("live")),
         }
+
+    def _stats(self, key: str) -> dict:
+        fn = getattr(self.feed, "stats_of", None)          # simulator / older feeds carry no OI
+        try:
+            return (fn(key) if fn else None) or {}
+        except Exception:
+            return {}
 
     def _ensure_warm(self, ukey: str, name: str, expiry: int, ladder: list[dict]) -> None:
         with self._lock:

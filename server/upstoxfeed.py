@@ -63,6 +63,12 @@ UNDERLYINGS = {
 # Feed.ltpc = 1 ; LTPC.ltp = 1, LTPC.cp = 4 ; FeedResponse.feeds = 2
 F_FEEDS, F_LTPC, F_LTP, F_CP = 2, 1, 1, 4
 F_FULLFEED, F_MARKETFF, F_INDEXFF = 2, 1, 2
+# MarketFullFeed (mode "full"): ltpc=1 marketLevel=2 optionGreeks=3 marketOHLC=4 atp=5 vtt=6 oi=7 iv=8 tbq=9 tsq=10
+FF_LEVEL, FF_VTT, FF_OI, FF_IV = 2, 6, 7, 8
+LV_QUOTES, Q_BIDQ, Q_BIDP, Q_ASKQ, Q_ASKP = 1, 1, 2, 3, 4
+# FirstLevelWithGreeks (mode "option_greeks"): ltpc=1 firstDepth=2 optionGreeks=3 vtt=4 oi=5 iv=6
+F_FIRSTLEVEL, FL_DEPTH, FL_VTT, FL_OI = 3, 2, 4, 5
+DYN_MODE = "full"          # the chain socket carries <= ~1,700 contracts: within full-mode's 2,000 cap
 
 
 class UpstoxError(RuntimeError):
@@ -95,6 +101,9 @@ class UpstoxFeed(Feed):
         self._meta: dict[str, dict] = {}
         self._spot_key: str | None = None
         self._ws: wsclient.WebSocket | None = None
+        self._stats: dict = {}                         # key -> {oi, vol, bid, ask, ...} from full-mode sockets
+        self._oi_open: dict = {}                       # key -> (ist_date, first oi seen today, ts)
+        self._logged_fields = False
         self._sockets: set = set()                     # every open socket, closed only by its reader
         self._sockets_lock = threading.Lock()
         self._threads: list = []
@@ -393,6 +402,17 @@ class UpstoxFeed(Feed):
     def price_of(self, key: str):
         return (self._prices.get(key), self._closes.get(key))
 
+    def stats_of(self, key: str) -> dict:
+        s = self._stats.get(key)
+        if not s:
+            return {}
+        out = dict(s)
+        base = self._oi_open.get(key)
+        if base and s.get("oi") is not None:
+            out["oi_open"], out["oi_since"] = base[1], base[2]
+            out["oi_chg"] = s["oi"] - base[1]
+        return out
+
     def subscribe_dynamic(self, metas: dict) -> None:
         with self._dyn_lock:
             new = [k for k in metas if k not in self._dyn_keys]
@@ -429,7 +449,7 @@ class UpstoxFeed(Feed):
             ws.send_binary(json.dumps({
                 "guid": f"finostat-{tag}-{int(time.time())}-{i // 1000}",
                 "method": method,
-                "data": {"mode": "ltpc", "instrumentKeys": keys[i:i + 1000]},
+                "data": {"mode": DYN_MODE, "instrumentKeys": keys[i:i + 1000]},
             }).encode("utf-8"))
 
     def _dyn_loop(self) -> None:
@@ -517,6 +537,30 @@ class UpstoxFeed(Feed):
             return None, None
         return mp.as_double(ltpc, F_LTP), mp.as_double(ltpc, F_CP)
 
+    @staticmethod
+    def _extract_stats(feed: dict) -> dict | None:
+        """OI, volume and top of book from a full-mode or option_greeks-mode Feed."""
+        full = mp.as_message(feed, F_FULLFEED)
+        if full is not None:
+            ff = mp.as_message(full, F_MARKETFF)
+            if ff is None:
+                return None
+            out = {"oi": mp.as_double(ff, FF_OI), "vol": mp.as_int(ff, FF_VTT), "iv_feed": mp.as_double(ff, FF_IV)}
+            level = mp.as_message(ff, FF_LEVEL)
+            q = mp.as_messages(level, LV_QUOTES)[0] if level and mp.as_messages(level, LV_QUOTES) else None
+        else:
+            fl = mp.as_message(feed, F_FIRSTLEVEL)
+            if fl is None:
+                return None
+            out = {"oi": mp.as_double(fl, FL_OI), "vol": mp.as_int(fl, FL_VTT)}
+            q = mp.as_message(fl, FL_DEPTH)
+        if q is not None:
+            out.update({"bid": mp.as_double(q, Q_BIDP), "bid_q": mp.as_int(q, Q_BIDQ),
+                        "ask": mp.as_double(q, Q_ASKP), "ask_q": mp.as_int(q, Q_ASKQ)})
+        if out.get("oi") is not None:
+            out["oi"] = int(out["oi"])
+        return out
+
     def _ingest(self, payload: bytes) -> None:
         response = mp.decode(payload)
         feeds = mp.as_map(response, F_FEEDS)
@@ -533,6 +577,20 @@ class UpstoxFeed(Feed):
                     self._uni_dirty = True
             if close:
                 self._closes[key] = close
+            if meta["kind"] == "option":
+                st = self._extract_stats(feed)
+                if st:
+                    if not self._logged_fields:
+                        self._logged_fields = True
+                        log.info("chain socket carries %s fields: %s", DYN_MODE, sorted(k for k, v in st.items() if v is not None))
+                    prev = self._stats.get(key) or {}
+                    prev.update({k: v for k, v in st.items() if v is not None})
+                    self._stats[key] = prev
+                    if st.get("oi") is not None:
+                        today = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 19800))
+                        base = self._oi_open.get(key)
+                        if base is None or base[0] != today:
+                            self._oi_open[key] = (today, st["oi"], time.time())
         self._ticks += len(feeds)
         self._dirty.set()
 
