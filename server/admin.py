@@ -7,6 +7,7 @@
   python3 admin.py assessments [N]     # latest N trader assessments (default 50)
   python3 admin.py assessments-csv > leads.csv
   python3 admin.py assessment-delete 7   # remove one submission
+  python3 admin.py quotes                # lines visitors wrote; ★ = may be published
 
 On Fly:  fly ssh console --app finostat -C "python3 /app/server/admin.py users"
 """
@@ -52,6 +53,16 @@ def main(argv: list[str]) -> int:
             a = __import__("json").loads(r["answers"])
             print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['ts']))}  {r['name'][:22]:<22} {r['email']:<32} {r['phone']}  {r['profile']:<12} {r['score']}/7  "
                   f"{assessment.describe('years', a.get('years'))} · {assessment.describe('goal', a.get('goal'))}")
+        return 0
+    if cmd == "quotes":
+        import assessment, json as _json
+        rows = assessment.Assessments(au.path).quotes()
+        if not rows:
+            print("  no quotes yet")
+        for r in rows:
+            a = _json.loads(r["answers"])
+            who = f"{r['name'].split()[0]}, {a.get('city') or 'India'}"
+            print(f"  #{r['id']:<4} {'★' if r['quote_ok'] else ' '} {who:<24} <{r['email']}>\n        “{r['quote']}”")
         return 0
     if cmd == "assessment-delete" and len(argv) == 3:
         import assessment

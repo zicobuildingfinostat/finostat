@@ -593,6 +593,26 @@ class Handler(BaseHTTPRequestHandler):
                                  args=(f"Trader assessment: {answers['name']} — {result['profile']} {result['score']}/{result['total']}",
                                        assessment.owner_lines(answers, result)), daemon=True).start()
                 return self._json(result)
+            if route == "/api/assessment/quote":
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                try:
+                    aid = int(body.get("id"))
+                except (TypeError, ValueError):
+                    return self._json({"error": "Not found"}, 404)
+                q, err = ASSESS.add_quote(aid, str(body.get("token", "")), str(body.get("quote", "")), bool(body.get("allow")))
+                if err:
+                    return self._json({"error": err}, 404 if err == "Not found" else 400)
+                threading.Thread(target=mailer.send_owner_note,
+                                 args=(f"Finostat quote from {q['name']}" + (" (OK to publish)" if q["allow"] else " (private)"),
+                                       [f"{q['name']} <{q['email']}> wrote:", "", f"“{q['quote']}”", "",
+                                        "Quotable on the homepage: " + ("YES — first name + city only" if q["allow"] else "NO — private feedback"),
+                                        "All quotes:  fly ssh console --app finostat -C \"python3 /app/server/admin.py quotes\""]), daemon=True).start()
+                return self._json({"ok": True})
             if route == "/auth/upgrade":
                 user = self._current_user()
                 if user is None:

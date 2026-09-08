@@ -15,6 +15,7 @@ import json
 import logging
 import pathlib
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -253,6 +254,16 @@ class Assessments:
         self._lock = threading.Lock()
         from auth import open_or_quarantine
         open_or_quarantine(self.path, _SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Columns added after the table first shipped."""
+        with self._conn() as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(assessments)")}
+            for col, ddl in (("token", "TEXT NOT NULL DEFAULT ''"), ("quote", "TEXT NOT NULL DEFAULT ''"),
+                             ("quote_ok", "INTEGER NOT NULL DEFAULT 0")):
+                if col not in cols:
+                    c.execute(f"ALTER TABLE assessments ADD COLUMN {col} {ddl}")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path, timeout=10, check_same_thread=False)
@@ -270,11 +281,34 @@ class Assessments:
             if ip and recent >= self.per_ip_hour:
                 return None, "Too many submissions from this connection; try again later", 429
             result = score(answers)
-            cur = c.execute("INSERT INTO assessments(ts,ip,name,email,phone,answers,score,profile) VALUES(?,?,?,?,?,?,?,?)",
+            token = secrets.token_urlsafe(16)          # lets the result page attach a quote later, nobody else
+            cur = c.execute("INSERT INTO assessments(ts,ip,name,email,phone,answers,score,profile,token) VALUES(?,?,?,?,?,?,?,?,?)",
                             (time.time(), ip, answers["name"], answers["email"], answers["phone"],
-                             json.dumps(answers, separators=(",", ":")), result["score"], result["profile"]))
+                             json.dumps(answers, separators=(",", ":")), result["score"], result["profile"], token))
             result["id"] = cur.lastrowid
+            result["token"] = token
+            result["first"] = answers["name"].split()[0]
+            result["city"] = answers.get("city") or ""
         return result, None, 200
+
+    def add_quote(self, aid, token: str, quote: str, allow: bool) -> tuple[dict | None, str | None]:
+        """Attach the optional 'may we quote you' line. Needs the submission's token."""
+        quote = " ".join(str(quote or "").split())[:280]
+        if not quote:
+            return None, "Write a line first"
+        with self._lock, self._conn() as c:
+            row = c.execute("SELECT id,name,email,token,quote FROM assessments WHERE id=?", (aid,)).fetchone()
+            if row is None or not token or not secrets.compare_digest(row["token"], str(token)):
+                return None, "Not found"
+            if row["quote"]:
+                return None, "Already sent — thank you"
+            c.execute("UPDATE assessments SET quote=?, quote_ok=? WHERE id=?", (quote, 1 if allow else 0, aid))
+        return {"name": row["name"], "email": row["email"], "quote": quote, "allow": bool(allow)}, None
+
+    def quotes(self) -> list[dict]:
+        with self._conn() as c:
+            rows = c.execute("SELECT id,ts,name,email,answers,quote,quote_ok FROM assessments WHERE quote!='' ORDER BY id DESC").fetchall()
+        return [dict(r) for r in rows]
 
     def recent(self, limit: int = 50) -> list[dict]:
         with self._conn() as c:
@@ -396,6 +430,7 @@ CSS = """
 .fa-result ul{list-style:none;padding:0;margin:0}.fa-result li{padding:9px 0;border-top:1px solid var(--line,#2c1c66);font-size:13.5px;line-height:1.5}.fa-result li em{font-style:normal;color:var(--down,#ff5c6c)}.fa-result li b{color:var(--up,#3dd68c);font-weight:500}.fa-result li a{color:var(--cyan,#7fe0f0);font-family:var(--mono,monospace);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;white-space:nowrap}
 .fa-result .flag{padding:10px 12px;border-left:3px solid var(--down,#ff5c6c);background:rgba(255,92,108,.07);font-size:13.5px;line-height:1.5;margin:0 0 8px}
 .fa-result .pitch{margin:4px 0 14px;padding:16px 18px;border:1px solid var(--line-strong,#4a34a0);background:linear-gradient(180deg,rgba(106,53,240,.18),rgba(12,6,38,.6))}.fa-result .pitch small{display:block;font-family:var(--mono,monospace);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan,#7fe0f0);margin-bottom:6px}.fa-result .pitch b{display:block;font-family:var(--display,"Barlow Condensed",Impact,sans-serif);font-size:24px;line-height:1.05;text-transform:uppercase;color:var(--gold,#f5c842);margin-bottom:8px}.fa-result .pitch ul{margin:0 0 12px}.fa-result .pitch li{border:0;padding:4px 0 4px 18px;position:relative;color:var(--text,#f1edff)}.fa-result .pitch li::before{content:"▸";position:absolute;left:0;color:var(--gold,#f5c842)}.fa-result .pitch em{display:block;font-style:normal;font-size:12px;color:var(--faint,#6d609e);margin-top:10px}
+.fa-result .quote{margin:8px 0 14px;padding:14px 16px;border:1px dashed var(--line-strong,#4a34a0)}.fa-result .quote h4{margin-top:0}.fa-result .quote textarea{width:100%;background:var(--bg,#0c0626);border:1px solid var(--line-strong,#4a34a0);color:var(--text,#f1edff);padding:10px 12px;font:inherit;font-size:14px;outline:0;resize:vertical;margin:0 0 10px}.fa-result .quote textarea:focus{border-color:var(--gold,#f5c842)}.fa-result .quote .fa-nav{margin-top:10px}
 @media(max-width:560px){.fa-opts{grid-template-columns:1fr}.fa-result .prof{grid-template-columns:1fr}.fa-body{padding:14px 14px 18px}.fa-intro h2{font-size:26px}}
 """
 
@@ -436,7 +471,10 @@ function wire(card){
     h+='<h4>Suggested plan</h4><p>'+(r.plan==='starter'?'Starter (free) is enough for now: Finch, the delayed sheets and the index builder. Learn on it; it costs nothing.':r.plan==='desk'?'Desk — the full live terminal for the active expiry trader.':'Pro desk — everything live, plus four years of expiry history.')+'</p>';
     if(r.pitch){ var pp=r.pitch; h+='<div class="pitch"><small>'+esc(pp.name)+' · '+esc(pp.price)+'</small><b>'+esc(pp.head)+'</b><p>'+esc(pp.why)+'</p><ul>'+pp.points.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul><div class="fa-nav"><a class="fa-btn primary" href="/login">Start with '+esc(pp.name)+' →</a><a class="fa-btn ghost" href="/#plans">Compare plans</a></div><em>No card needed to sign in. Request the upgrade from the terminal and we switch it on the same day; cancel any time.</em></div>'; }
     h+='<div class="fa-nav"><a class="fa-btn primary" href="'+esc(r.start.path)+'">Go →</a><a class="fa-btn ghost" href="/finch">All Finch chapters</a>'+(mode==='modal'?'<button type="button" class="fa-btn ghost" data-act="close">Close</button>':'')+'</div>';
-    res.innerHTML=h; var c=res.querySelector('[data-act=close]'); if(c) c.addEventListener('click',close_); }
+    h+='<div class="quote" id="fa-quote"><h4>One more thing</h4><p>What would make Finostat worth your time? One honest line — good or bad. If you tick the box we may show it on the homepage as “'+esc((r.first||'you'))+', '+esc(r.city||'India')+'”.</p><textarea maxlength="280" rows="3" placeholder="e.g. I want alerts that email me when my level trades, and a course that uses today\'s chain."></textarea><label class="fa-consent"><input type="checkbox"><i></i><span>You may quote me on finostat.com (first name and city only)</span></label><div class="fa-nav"><button type="button" class="fa-btn ghost" data-act="quote">Send →</button><span class="fa-err" hidden></span></div></div>';
+    res.innerHTML=h; var c=res.querySelector('[data-act=close]'); if(c) c.addEventListener('click',close_);
+    var qb=res.querySelector('#fa-quote'); if(qb){ var qbtn=qb.querySelector('[data-act=quote]'), qerr=qb.querySelector('.fa-err'); qbtn.addEventListener('click',function(){ var text=qb.querySelector('textarea').value.trim(); if(!text){ qerr.textContent='Write a line first.'; qerr.hidden=false; return; } qbtn.disabled=true;
+      fetch('/api/assessment/quote',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},body:JSON.stringify({id:r.id,token:r.token,quote:text,allow:qb.querySelector('input').checked})}).then(function(x){ return x.json().then(function(d){ return {ok:x.ok,d:d}; }); }).then(function(x){ if(!x.ok){ qbtn.disabled=false; qerr.textContent=x.d.error||'Try again'; qerr.hidden=false; return; } qb.innerHTML='<h4>Thank you</h4><p>Got it. If you said we may quote you, we will ask before we do.</p>'; }).catch(function(){ qbtn.disabled=false; qerr.textContent='Network error'; qerr.hidden=false; }); }); } }
   back.addEventListener('click',function(){ if(cur>0) show(cur-1); });
   skip.addEventListener('click',function(){ store({skipped:Date.now()}); if(mode==='modal') close_(); else location.href='/'; });
   next.addEventListener('click',function(){ if(!validStep(cur)) return; if(cur<steps.length-1){ show(cur+1); return; }
