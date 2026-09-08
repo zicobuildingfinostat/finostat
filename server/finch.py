@@ -174,12 +174,37 @@ _HEAD = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name
 <meta property="og:type" content="article"><meta property="og:site_name" content="Finostat"><meta property="og:title" content="__TITLE__"><meta property="og:description" content="__DESC__"><meta property="og:image" content="https://finostat.com/og.jpg"><meta property="og:url" content="https://finostat.com__PATH__">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<style>__CSS__</style></head><body>
+__LD__<style>__CSS__</style></head><body>
 <header class="top"><a class="logo" href="/finch">FINCH<b>·</b>BY FINOSTAT</a><div class="r"><span class="live-dot off" id="live-dot">MARKET DATA</span><a href="/dashboard">TERMINAL</a><a href="/">SITE</a></div></header>
 <main class="wrap">"""
 
 _FOOT = """<p class="disc">Finch is education, not advice. Every number marked live is today's real market, which is exactly why the examples will not match what you read yesterday. Derivatives can lose more than you put in; nothing here is a recommendation to trade. Finostat is not affiliated with NSE, BSE, MCX or SEBI.</p>
 </main><script>__JS__</script></body></html>"""
+
+
+_AUTHOR = {"@type": "Person", "@id": "https://finostat.com/founders#person", "name": "Zico Karmakar", "url": "https://finostat.com/founders"}
+_PUB = {"@type": "Organization", "@id": "https://finostat.com/#org", "name": "Finostat", "url": "https://finostat.com/", "logo": {"@type": "ImageObject", "url": "https://finostat.com/og.jpg"}}
+
+
+def _ld(obj) -> str:
+    return '<script type="application/ld+json">' + json.dumps(obj, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/") + "</script>"
+
+
+def _ld_course() -> str:
+    return _ld({"@context": "https://schema.org", "@type": "Course", "@id": "https://finostat.com/finch", "url": "https://finostat.com/finch",
+                "name": "Finch by Finostat — F&O and options trading for beginners",
+                "description": "A free twelve-chapter derivatives course taught on the live Indian market: futures, options, the Greeks, implied volatility, expiry, strategies and risk.",
+                "provider": _PUB, "author": _AUTHOR, "isAccessibleForFree": True, "inLanguage": "en-IN",
+                "hasCourseInstance": {"@type": "CourseInstance", "courseMode": "online", "courseWorkload": "PT4H"},
+                "hasPart": [{"@type": "Article", "name": c["title"], "url": f"https://finostat.com/finch/{c['slug']}"} for c in CHAPTERS]})
+
+
+def _ld_article(c: dict, n: int) -> str:
+    return _ld({"@context": "https://schema.org", "@type": "Article", "@id": f"https://finostat.com/finch/{c['slug']}",
+                "mainEntityOfPage": f"https://finostat.com/finch/{c['slug']}", "headline": c["title"], "description": c["summary"],
+                "author": _AUTHOR, "publisher": _PUB, "isPartOf": {"@id": "https://finostat.com/finch"}, "position": n,
+                "datePublished": "2026-09-08", "dateModified": "2026-09-08", "inLanguage": "en-IN", "isAccessibleForFree": True,
+                "image": "https://finostat.com/og.jpg"})
 
 
 def _esc(s: str) -> str:
@@ -207,7 +232,7 @@ def render_index() -> bytes:
 <div class="grid">{cards}</div>"""
     doc = (_HEAD.replace("__TITLE__", "Finch by Finostat — learn F&O and options trading on the live market")
            .replace("__DESC__", "A free, deep derivatives course for beginners: futures, options, the Greeks, implied volatility, expiry mechanics, strategies and risk — with live NIFTY examples.")
-           .replace("__PATH__", "/finch").replace("__CSS__", _CSS))
+           .replace("__PATH__", "/finch").replace("__LD__", _ld_course()).replace("__CSS__", _CSS))
     return (doc + body + _FOOT.replace("__JS__", _JS)).encode("utf-8")
 
 
@@ -229,7 +254,7 @@ def render_chapter(slug: str) -> bytes | None:
 <article>{c["body"]}</article>
 {pager}</div></div>"""
     doc = (_HEAD.replace("__TITLE__", _esc(c["title"]) + " — Finch by Finostat")
-           .replace("__DESC__", _esc(c["summary"])).replace("__PATH__", f"/finch/{slug}").replace("__CSS__", _CSS))
+           .replace("__DESC__", _esc(c["summary"])).replace("__PATH__", f"/finch/{slug}").replace("__LD__", _ld_article(c, i + 1)).replace("__CSS__", _CSS))
     return (doc + body + _FOOT.replace("__JS__", _JS)).encode("utf-8")
 
 

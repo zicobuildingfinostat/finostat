@@ -84,7 +84,7 @@ PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 # on-brand 404 instead of a stack trace, so a stray click never looks broken.
 KNOWN_ROUTES = {
     "/analysis": "Analysis tools", "/live-session": "Book a live session",
-    "/blog": "Blog", "/about": "About",
+    "/blog": "Blog",
     "/contact": "Contact", "/terms": "Terms of service", "/privacy": "Privacy policy",
 }
 KNOWN_PREFIXES = ("/tools/", "/strategies/")
@@ -334,6 +334,8 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/dashboard":
                 return self._send(pages.render_dashboard(FEED.snapshot()),
                                   "text/html; charset=utf-8")
+            if route == "/about":
+                return self._redirect("/founders")
             if route in ("/founders", "/founder"):
                 return self._send(founder.render(), "text/html; charset=utf-8", cache="public, max-age=600")
             if route == "/assessment":
