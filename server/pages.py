@@ -545,3 +545,192 @@ renderAlerts();
 
 def render_dashboard(snapshot: dict) -> bytes:
     return DASHBOARD.replace("__SEED__", _seed(snapshot)).encode("utf-8")
+
+
+STRATEGY = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__NAME__ — Finostat</title>
+<meta name="description" content="__BLURB__">
+<meta name="theme-color" content="#0c0626">
+<link rel="icon" href="/og.jpg">
+<link rel="canonical" href="https://finostat.com/strategies/__SLUG__">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0626;--panel:#120a33;--panel-hd:#1c1052;--line:#2c1c66;--line-strong:#4a34a0;
+  --gold:#f5c842;--gold-2:#ffe27a;--cyan:#7fe0f0;--up:#3dd68c;--down:#ff5c6c;
+  --text:#f1edff;--muted:#a89ccf;--faint:#6d609e;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Barlow Condensed",Impact,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg);scroll-behavior:smooth}
+body{color:var(--text);font-family:var(--body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:repeating-linear-gradient(0deg,rgba(200,180,255,.03) 0 1px,transparent 1px 3px)}
+html::after{content:"";position:fixed;inset:0;z-index:-1;
+  background:radial-gradient(ellipse 70% 45% at 50% 0%,rgba(122,60,245,.45),transparent 70%),var(--bg)}
+a{color:inherit;text-decoration:none}
+.top{display:flex;align-items:center;gap:14px;height:48px;padding:0 16px;
+  background:rgba(12,6,38,.94);border-bottom:1px solid var(--line-strong);
+  font-family:var(--mono);font-size:11px;position:sticky;top:0;z-index:5;flex-wrap:wrap}
+.top .logo{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;
+  background:linear-gradient(180deg,#fff 20%,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+.top .r{margin-left:auto;display:flex;gap:14px;color:var(--faint);letter-spacing:.06em}
+.top .r a:hover{color:var(--gold)}
+.live{color:var(--up);display:inline-flex;align-items:center;gap:6px}
+.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 1.6s infinite}
+.live.off{color:var(--down)}.live.off::before{background:var(--down);box-shadow:none;animation:none}
+@keyframes pulse{50%{opacity:.35}}
+.wrap{width:min(1080px,calc(100% - 36px));margin:0 auto;position:relative;z-index:1;padding:34px 0 64px}
+.crumb{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.crumb a:hover{color:var(--gold)}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(38px,5vw,58px);line-height:.95;text-transform:uppercase;margin:10px 0 6px}
+.tagline{color:var(--muted);max-width:64ch;font-size:16px}
+.facts{display:flex;gap:22px;margin:18px 0 26px;font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;flex-wrap:wrap}
+.facts b{display:block;color:var(--cyan);font-size:13px;font-weight:500;margin-top:2px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line-strong);font-family:var(--mono);font-size:12.5px;box-shadow:0 16px 44px rgba(0,0,0,.35)}
+.panel-hd{display:flex;align-items:center;gap:12px;padding:7px 12px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);font-size:11px;letter-spacing:.06em}
+.panel-hd .k{color:var(--gold);font-weight:600}
+.panel-hd .s{color:var(--cyan)}
+.panel-hd .r{margin-left:auto;color:var(--faint)}
+.pay{padding:14px 14px 8px;background:#08041f}
+.pay svg{width:100%;height:auto;display:block}
+table{width:100%;border-collapse:collapse}
+th{font-weight:500;color:var(--cyan);text-align:right;padding:7px 12px;border-bottom:1px solid var(--line);font-size:10.5px;letter-spacing:.08em}
+th:first-child,td:first-child{text-align:left}
+td{padding:6px 12px;text-align:right;border-bottom:1px solid rgba(190,150,255,.08);font-variant-numeric:tabular-nums}
+td.act-b{color:var(--up)}td.act-s{color:var(--down)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;padding:13px 14px}
+dt{color:var(--faint);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding-top:2px}
+dd{color:var(--gold-2);text-align:right;font-size:13.5px}
+.note{margin:0;padding:10px 14px;border-top:1px solid var(--line);color:var(--muted);font-family:var(--body);font-size:13px}
+.detail{margin-top:26px;color:var(--muted);max-width:74ch;font-size:15.5px}
+.others{margin-top:40px}
+.others h2{font-family:var(--display);font-size:22px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips a{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:8px 13px;border:1px solid var(--line-strong);color:var(--muted)}
+.chips a:hover{border-color:var(--gold);color:var(--gold)}
+.cta{margin-top:34px;display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:12px 18px;border:1px solid var(--line-strong)}
+.btn:hover{border-color:var(--gold);color:var(--gold)}
+.btn.primary{background:linear-gradient(180deg,var(--gold-2),#f2b830);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.btn.primary:hover{filter:brightness(1.08);color:#000}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/">FINOSTAT</a>
+  <div class="r"><span class="live off" id="conn">—</span><a href="/dashboard">TERMINAL</a><a href="/#strategies">ALL STRATEGIES</a></div>
+</header>
+<main class="wrap">
+  <nav class="crumb"><a href="/">FINO</a> · <a href="/#strategies">STRATEGIES</a> · __CODE__</nav>
+  <h1>__NAME__</h1>
+  <p class="tagline">__BLURB__</p>
+  <div class="facts">
+    <div>BIAS<b>__BIAS__</b></div>
+    <div>VOL VIEW<b>__VOL__</b></div>
+    <div>RISK<b>__RISK__</b></div>
+    <div>STRUCTURE<b>__TAG__</b></div>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-hd"><span class="k">__CODE__</span><span class="s">PAYOFF AT EXPIRY</span></div>
+      <div class="pay"><svg viewBox="0 0 200 78" aria-label="Payoff diagram">
+        <line x1="8" y1="48" x2="192" y2="48" stroke="#4a34a0" stroke-width="1" stroke-dasharray="3 3"/>
+        <path d="__PAYOFF__" fill="none" stroke="#f5c842" stroke-width="2"/></svg></div>
+    </section>
+    <section class="panel">
+      <div class="panel-hd"><span class="k">LEGS</span><span class="s" id="sym">LIVE CHAIN</span><span class="r" id="upd">—</span></div>
+      <table><thead><tr><th>ACTION</th><th>QTY</th><th>TYPE</th><th>STRIKE</th><th>LAST</th></tr></thead>
+      <tbody id="legs"></tbody></table>
+      <dl id="metrics"></dl>
+      <p class="note" id="note" hidden></p>
+    </section>
+  </div>
+
+  <p class="detail">__DETAIL__</p>
+
+  <div class="cta">
+    <a class="btn primary" href="/dashboard">Watch it live on the terminal →</a>
+    <a class="btn" href="/#plans">See plans</a>
+  </div>
+
+  <div class="others"><h2>Other structures</h2><div class="chips">__OTHERS__</div></div>
+</main>
+<script>window.SEED=__SEED__;</script>
+<script>
+(function(){
+"use strict";
+var SLUG="__SLUG__";
+var legsEl=document.getElementById('legs'), metEl=document.getElementById('metrics'),
+    noteEl=document.getElementById('note'), conn=document.getElementById('conn'),
+    upd=document.getElementById('upd'), symEl=document.getElementById('sym');
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function render(d, live){
+  if(!d) return;
+  legsEl.innerHTML=(d.legs||[]).map(function(l){
+    var cls=l.action==='BUY'?'act-b':'act-s';
+    var last=l.price==null?(l.note?esc(l.note):'—'):'₹'+l.price.toFixed(1);
+    return '<tr><td class="'+cls+'">'+l.action+'</td><td>'+l.count+'×</td><td>'+l.right+'</td><td>'+l.strike+'</td><td>'+last+'</td></tr>';
+  }).join('');
+  metEl.innerHTML=(d.metrics||[]).map(function(m){
+    return '<dt>'+esc(m[0])+'</dt><dd>'+esc(m[1])+'</dd>';
+  }).join('');
+  if(d.note){ noteEl.textContent=d.note; noteEl.hidden=false; } else { noteEl.hidden=true; }
+  conn.textContent=live?'LIVE':'DELAYED';
+  conn.classList.toggle('off',!live);
+  upd.textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour12:false});
+}
+var seed=window.SEED||null;
+if(seed){ symEl.textContent=(seed.symbol||'NIFTY')+' · LIVE CHAIN'; render(seed.strategy, seed.live); }
+function poll(){
+  fetch('/api/strategies').then(function(r){ return r.json(); }).then(function(all){
+    var mine=(all.strategies||[]).filter(function(x){ return x.slug===SLUG; })[0];
+    symEl.textContent=(all.symbol||'NIFTY')+' · LIVE CHAIN';
+    render(mine, all.live);
+  }).catch(function(){ conn.textContent='OFFLINE'; conn.classList.add('off'); });
+}
+poll(); setInterval(poll, 2500);
+})();
+</script>
+</body>
+</html>
+"""
+
+
+def render_strategy(slug: str, snapshot: dict, computed: dict) -> bytes | None:
+    import strategies as st
+    meta = st.BY_SLUG.get(slug)
+    if meta is None:
+        return None
+    others = "".join(
+        f'<a href="/strategies/{c["slug"]}">{c["name"]}</a>'
+        for c in st.CATALOG if c["slug"] != slug
+    )
+    seed = {
+        "symbol": snapshot.get("symbol", "NIFTY"),
+        "live": bool(snapshot.get("live")),
+        "strategy": computed,
+    }
+    seed_js = json.dumps(seed, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
+    doc = STRATEGY
+    for token, value in (
+        ("__SLUG__", slug), ("__NAME__", meta["name"]), ("__CODE__", meta["code"]),
+        ("__BLURB__", meta["blurb"]), ("__DETAIL__", meta["detail"]),
+        ("__BIAS__", meta["bias"]), ("__VOL__", meta["vol"]), ("__RISK__", meta["risk"]),
+        ("__TAG__", meta["tag"]), ("__PAYOFF__", meta["payoff"]),
+        ("__OTHERS__", others), ("__SEED__", seed_js),
+    ):
+        doc = doc.replace(token, value)
+    return doc.encode("utf-8")

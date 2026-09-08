@@ -29,6 +29,7 @@ import feeds
 import news
 import pages
 import recorder
+import strategies
 
 logging.basicConfig(
     level=os.environ.get("FINOSTAT_LOG", "INFO").upper(),
@@ -232,6 +233,25 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/dashboard":
                 return self._send(pages.render_dashboard(FEED.snapshot()),
                                   "text/html; charset=utf-8")
+            if route.startswith("/strategies/"):
+                slug = route[len("/strategies/"):]
+                snap = FEED.snapshot()
+                computed = strategies.compute(
+                    slug, snap.get("sheet", {}).get("rows", []),
+                    snap.get("atm"), snap.get("straddle"))
+                if computed is not None:
+                    body = pages.render_strategy(slug, snap, computed)
+                    if body is not None:
+                        return self._send(body, "text/html; charset=utf-8")
+            if route == "/api/strategies":
+                snap = FEED.snapshot()
+                return self._json({
+                    "symbol": snap.get("symbol"), "live": snap.get("live"),
+                    "atm": snap.get("atm"),
+                    "strategies": strategies.compute_all(
+                        snap.get("sheet", {}).get("rows", []),
+                        snap.get("atm"), snap.get("straddle")),
+                })
             if route == "/api/quotes":
                 return self._json(FEED.snapshot().get("quotes", []))
             if route == "/api/sheet":
