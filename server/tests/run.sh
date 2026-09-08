@@ -3,7 +3,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 fail=0
-for t in test_wsclient.py test_kiteticker.py test_miniproto.py test_recorder.py test_strategies.py test_auth.py test_alerts.py; do
+for t in test_wsclient.py test_kiteticker.py test_miniproto.py test_recorder.py test_strategies.py test_auth.py test_alerts.py test_universe.py; do
   echo "--- $t"
   python3 "$t" || fail=1
 done

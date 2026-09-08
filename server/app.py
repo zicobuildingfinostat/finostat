@@ -33,6 +33,7 @@ import mailer
 import pages
 import recorder
 import strategies
+import universe
 
 logging.basicConfig(
     level=os.environ.get("FINOSTAT_LOG", "INFO").upper(),
@@ -67,6 +68,23 @@ STATIC_SUFFIXES = {
     ".woff", ".woff2", ".ttf", ".otf", ".eot", ".pdf", ".mp4", ".webm",
 }
 STATIC_DENY_DIRS = {"server", "deploy", "tests", "node_modules", "__pycache__"}
+
+
+def _load() -> dict:
+    """Process cost, so a market-open check can see what the universe costs."""
+    try:
+        import resource
+        ru = resource.getrusage(resource.RUSAGE_SELF)
+        rss = ru.ru_maxrss
+        if sys.platform != "darwin":       # linux reports KB, macOS bytes
+            rss *= 1024
+        return {"rss_mb": round(rss / 1048576, 1), "cpu_s": round(ru.ru_utime + ru.ru_stime, 1),
+                "threads": threading.active_count(), "uptime_s": int(time.time() - _STARTED)}
+    except Exception:
+        return {}
+
+
+_STARTED = time.time()
 
 
 def _json_safe(payload: dict | list) -> bytes:
@@ -335,7 +353,22 @@ class Handler(BaseHTTPRequestHandler):
                                    "recorder": RECORDER.stats(),
                                    "auth": {"smtp_configured": mailer.configured()},
                                    "alerts": ALERTS.stats(),
+                                   "universe": len(snap.get("universe") or {}),
+                                   "load": _load(),
                                    "time": time.time()})
+            if route == "/api/symbols":
+                qs = parse_qs(parsed.query)
+                snap = FEED.snapshot()
+                try:
+                    limit = int(qs.get("limit", ["20"])[0])
+                except ValueError:
+                    limit = 20
+                return self._json(universe.search(snap.get("universe") or {}, snap.get("quotes") or [],
+                                                  qs.get("q", [""])[0], limit))
+            if route == "/api/quote":
+                keys = [k for k in parse_qs(parsed.query).get("s", [""])[0].split(",") if k]
+                snap = FEED.snapshot()
+                return self._json(universe.lookup(snap.get("universe") or {}, snap.get("quotes") or [], keys))
             if route == "/api/history":
                 qs = parse_qs(parsed.query)
                 since = None
@@ -402,7 +435,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self._json({"error": "invalid json"}, 400)
                     if not isinstance(payload, dict):
                         return self._json({"error": "expected an object"}, 400)
-                    symbols = {q.get("symbol") for q in FEED.snapshot().get("quotes", [])}
+                    snap = FEED.snapshot()
+                    symbols = {q.get("symbol") for q in snap.get("quotes", [])} | set((snap.get("universe") or {}).keys())
                     rule, err = alertsmod.validate(payload, symbols or None)
                     if rule is None:
                         return self._json({"error": err}, 400)

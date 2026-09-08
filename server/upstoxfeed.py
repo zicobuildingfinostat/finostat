@@ -189,8 +189,30 @@ class UpstoxFeed(Feed):
             }
 
         count = sum(1 for m in self._meta.values() if m["kind"] == "option")
-        log.info("ticker: subscribing to %d instruments (%d options)", len(self._meta), count)
+        stocks = self._resolve_universe()
+        log.info("ticker: subscribing to %d instruments (%d options, %d stocks)",
+                 len(self._meta), count, stocks)
         return list(self._meta)
+
+    def _resolve_universe(self) -> int:
+        """Every NSE equity, flagged F&O when a futures contract exists on it."""
+        if config.UNIVERSE == "none":
+            return 0
+        rows = self._instruments("NSE")
+        fo = {r.get("underlying_symbol") or r.get("name") for r in rows
+              if r.get("segment") == "NSE_FO" and r.get("instrument_type") == "FUT"}
+        n = 0
+        for r in rows:
+            if r.get("segment") != "NSE_EQ" or r.get("instrument_type") != "EQ":
+                continue
+            sym = r.get("trading_symbol") or ""
+            key = r.get("instrument_key")
+            if not sym or not key or key in self._meta:
+                continue
+            self._meta[key] = {"kind": "stock", "label": "NSE:" + sym, "symbol": sym,
+                               "exchange": "NSE", "name": r.get("name", ""), "fo": sym in fo}
+            n += 1
+        return n
 
     # -- socket -------------------------------------------------------------
     def _authorized_url(self) -> str:
@@ -259,11 +281,13 @@ class UpstoxFeed(Feed):
         # The subscribe payload is JSON, but must go in a *binary* frame.
         # ltpc mode carries last price and close, which is all the sheet needs,
         # and is a fraction of the bandwidth of full mode.
-        ws.send_binary(json.dumps({
-            "guid": f"finostat-{int(time.time())}",
-            "method": "sub",
-            "data": {"mode": "ltpc", "instrumentKeys": keys},
-        }).encode("utf-8"))
+        # Thousands of keys: send in chunks rather than one enormous frame.
+        for i in range(0, len(keys), 1000):
+            ws.send_binary(json.dumps({
+                "guid": f"finostat-{int(time.time())}-{i // 1000}",
+                "method": "sub",
+                "data": {"mode": "ltpc", "instrumentKeys": keys[i:i + 1000]},
+            }).encode("utf-8"))
         self._ws = ws
         log.info("subscribed to %d instruments in ltpc mode", len(keys))
 
@@ -350,6 +374,22 @@ class UpstoxFeed(Feed):
         order = {label: i for i, (label, _spec) in enumerate(TAPE)}
         quotes.sort(key=lambda q: order.get(q["symbol"], 99))
 
+        # A fresh dict each time: readers on other threads iterate the
+        # published one, so it must never be mutated after publish.
+        universe = {}
+        for key, meta in self._meta.items():
+            if meta["kind"] != "stock":
+                continue
+            price = self._prices.get(key)
+            if price is None:
+                continue
+            close = self._closes.get(key)
+            universe[meta["label"]] = {
+                "symbol": meta["symbol"], "exchange": meta["exchange"], "name": meta["name"],
+                "fo": meta["fo"], "price": round(price, 2),
+                "change": round((price - close) / close * 100.0, 2) if close else 0.0,
+            }
+
         self._publish(
             quotes=quotes,
             sheet={"rows": sheets.butterfly_rows(chain, spot, step,
@@ -357,5 +397,5 @@ class UpstoxFeed(Feed):
             mini=sheets.mini_rows(chain, spot, step),
             straddle=sheets.straddle_price(chain, spot, step),
             symbol=sym, atm=sheets.atm_strike(spot, step),
-            live=True, error=None, ticks=self._ticks,
+            live=True, error=None, ticks=self._ticks, universe=universe,
         )

@@ -90,6 +90,8 @@ layer do not change — they never learn where the prices came from.
 | `POST /auth/logout` | Ends the session |
 | `GET /api/me` | `{email, prefs}` for the signed-in user, else 401 |
 | `POST /api/me/prefs` | JSON object merged into the user's prefs; requires `X-Requested-With: fetch` |
+| `GET /api/symbols?q=` | Search the stock universe + indices (`limit` ≤ 50); F&O names rank first |
+| `GET /api/quote?s=A,B` | Quotes for explicit keys, e.g. `NSE:RELIANCE,NIFTY 50` (≤ 50) |
 | `GET /api/alerts` | Signed-in user's alert rules and recent firings |
 | `POST /api/alerts` | Create a rule `{metric, strike?, cmp, value, email}`; evaluated immediately and on every live tick |
 | `POST /api/alerts/<id>/rearm`, `.../delete` | Re-arm a fired rule / remove a rule |
@@ -178,3 +180,16 @@ however many rules tripped), and shown in the terminal on its next poll. Rules f
 then wait to be re-armed. Rules are also checked at creation and on re-arm against the last
 live snapshot, so a condition that is already true fires immediately even after hours.
 Simulator snapshots are never evaluated. Signed-out users keep the browser-side engine.
+
+## Stock universe
+
+With `FINOSTAT_UNIVERSE=nse` (the default) the Upstox feed also subscribes every NSE
+equity (`NSE_EQ` / type `EQ`, ~2,650 names) in LTPC mode on the same socket as the
+index tape and option chain -- Upstox allows 5,000 LTPC instruments per socket. Each
+entry is flagged `fo` when a futures contract exists on it (~210 names). Keys look
+like `NSE:RELIANCE`; they work in the watchlist and as `spot:NSE:RELIANCE` alert metrics.
+
+Deliberately, the universe is **never** part of the SSE push or the tick recorder:
+the 8 Hz stream stays index-only (~650 bytes an event) and stock quotes are polled
+through `/api/quote`. BSE is planned as a second socket once CPU on the 512 MB
+machine has been measured with the NSE set live.

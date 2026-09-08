@@ -73,6 +73,10 @@ SHEET_STEP = _int("FINOSTAT_SHEET_STEP", 50)     # strike interval
 SHEET_WING = _int("FINOSTAT_SHEET_WING", 100)    # butterfly wing width, in points
 
 MINI_SYMBOL = os.environ.get("FINOSTAT_MINI_SYMBOL", "BANKNIFTY").strip().upper()
+
+# Stock universe streamed alongside the index tape: "nse" (all NSE equities,
+# F&O-flagged), "none". BSE lands on a second socket once load is measured.
+UNIVERSE = os.environ.get("FINOSTAT_UNIVERSE", "nse").strip().lower()
 MINI_STEP = _int("FINOSTAT_MINI_STEP", 100)
 
 # --- News wire --------------------------------------------------------------

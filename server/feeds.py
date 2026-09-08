@@ -63,7 +63,8 @@ class Feed:
         self._lock = threading.Lock()
         self._snapshot: dict = {"quotes": [], "sheet": {"rows": []}, "mini": [],
                                 "symbol": config.SHEET_SYMBOL, "atm": None,
-                                "straddle": None, "live": False, "error": None}
+                                "straddle": None, "live": False, "error": None,
+                                "universe": {}}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._listeners: list = []
@@ -143,6 +144,12 @@ class SimulatorFeed(Feed):
     def interval(self) -> float:
         return config.SIM_INTERVAL
 
+    # A handful of F&O names so the watchlist and stock alerts work offline.
+    STOCKS = {"RELIANCE": ("RELIANCE INDUSTRIES LTD", 2905.4), "TCS": ("TATA CONSULTANCY SERV LT", 3512.7),
+              "HDFCBANK": ("HDFC BANK LTD", 1687.2), "INFY": ("INFOSYS LIMITED", 1498.9),
+              "ICICIBANK": ("ICICI BANK LTD.", 1182.6), "SBIN": ("STATE BANK OF INDIA", 789.3),
+              "TATAMOTORS": ("TATA MOTORS LIMITED", 974.1), "BAJFINANCE": ("BAJAJ FINANCE LIMITED", 6840.5)}
+
     LEVELS = {
         "NIFTY 50": 24816.47, "BANKNIFTY": 54180.02, "SENSEX": 81418.97,
         "FINNIFTY": 26016.09, "INDIA VIX": 12.84, "GIFT NIFTY": 24859.96,
@@ -153,6 +160,9 @@ class SimulatorFeed(Feed):
         super().__init__()
         self._spot = dict(self.LEVELS)
         self._open = dict(self.LEVELS)
+        for sym, (_name, px) in self.STOCKS.items():
+            self._spot["NSE:" + sym] = px
+            self._open["NSE:" + sym] = px
         self._rng = random.Random(20260827)
 
     # per-tick volatility by instrument
@@ -160,7 +170,7 @@ class SimulatorFeed(Feed):
 
     def _walk(self) -> None:
         for key, value in self._spot.items():
-            anchor = self.LEVELS[key]
+            anchor = self._open[key]
             vol = self.VOL.get(key, 0.0012)
             # Mean reverting, not a free random walk: left unanchored the spot
             # wanders arbitrarily far from a plausible level over a long session,
@@ -205,13 +215,19 @@ class SimulatorFeed(Feed):
         mini_step = UNDERLYING.get(mini_sym, {}).get("step", config.MINI_STEP)
         mini_chain = self._chain(mini_sym, mini_spot, mini_step)
 
+        universe = {}
+        for s, (name, _px) in self.STOCKS.items():
+            key = "NSE:" + s
+            price, base = self._spot[key], self._open[key]
+            universe[key] = {"symbol": s, "exchange": "NSE", "name": name, "fo": True,
+                             "price": round(price, 2), "change": round((price - base) / base * 100.0, 2)}
         self._publish(
             quotes=quotes,
             sheet={"rows": sheets.butterfly_rows(chain, spot, step, config.SHEET_ROWS, config.SHEET_WING)},
             mini=sheets.mini_rows(mini_chain, mini_spot, mini_step),
             straddle=sheets.straddle_price(chain, spot, step),
             symbol=sym, atm=sheets.atm_strike(spot, step),
-            live=False, error=None,
+            live=False, error=None, universe=universe,
         )
 
 

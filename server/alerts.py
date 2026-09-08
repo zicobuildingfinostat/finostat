@@ -73,7 +73,8 @@ def metric_value(snapshot: dict, metric: str, strike) -> float | None:
         for q in snapshot.get("quotes") or []:
             if q.get("symbol") == sym:
                 return q.get("price")
-        return None
+        entry = (snapshot.get("universe") or {}).get(sym)
+        return entry.get("price") if entry else None
     if metric == "straddle":
         return snapshot.get("straddle")
     for row in (snapshot.get("sheet") or {}).get("rows") or []:
