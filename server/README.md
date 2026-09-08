@@ -80,7 +80,16 @@ layer do not change — they never learn where the prices came from.
 | `GET /api/news` | `?limit=N` recent headlines |
 | `GET /api/sheet/stream` | Server-sent events, `event: sheet` — the live sheet and tape |
 | `GET /api/news/stream` | Server-sent events, `event: news` |
-| `GET /api/status` | Feed health — use this for monitoring |
+| `GET /api/status` | Feed health — use this for monitoring (includes `auth.smtp_configured`) |
+| `GET /dashboard` | The terminal: live sheet, tape, straddle, alerts, watchlist, wire |
+| `GET /strategies/<slug>` | Six live strategy sheets; `GET /api/strategies` returns their metrics |
+| `GET /api/history` | Recorded snapshots from the tick recorder (`?since=&limit=`) |
+| `GET /login`, `/signup` | Passwordless sign-in page |
+| `POST /auth/request` | Form post `email=` → emails a one-time link |
+| `GET /auth/verify?token=` | Redeems the link, sets the session cookie, redirects to `/dashboard` |
+| `POST /auth/logout` | Ends the session |
+| `GET /api/me` | `{email, prefs}` for the signed-in user, else 401 |
+| `POST /api/me/prefs` | JSON object merged into the user's prefs; requires `X-Requested-With: fetch` |
 
 Unbuilt routes the marketing page links to (`/dashboard`, `/login`,
 `/strategies/*`, …) return an on-brand 404 rather than a stack trace.
@@ -146,3 +155,13 @@ built against a loopback WebSocket server and synthetic Kite packets:
 - Kite allows **three** concurrent WebSocket connections per api_key. Running
   more than three server processes on one key will start getting refused.
 - GIFT NIFTY is not available on Kite, so it drops off the tape on the live feed.
+
+## Accounts
+
+Sign-in is passwordless: a one-time emailed link (`server/auth.py`, `server/mailer.py`).
+Tokens and session ids are stored only as SHA-256 hashes; links last 15 minutes and burn
+on use; sessions are `HttpOnly; Secure; SameSite=Lax` for 30 days; link requests are rate
+limited per address and per IP. Sending needs `SMTP_HOST/PORT/USER/PASS/FROM` — with none
+set, links are **logged** instead (dev mode) and `/login` says so. Emailed links use
+`FINOSTAT_PUBLIC_URL`, never the request's Host header. Accounts currently sync the
+terminal's watchlist and panel layout across devices.
