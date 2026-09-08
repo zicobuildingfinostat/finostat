@@ -4,6 +4,8 @@
   python3 admin.py set-plan zico@finostat.com pro
   python3 admin.py requests            # pending upgrade requests
   python3 admin.py handled 3           # mark request #3 done
+  python3 admin.py assessments [N]     # latest N trader assessments (default 50)
+  python3 admin.py assessments-csv > leads.csv
 
 On Fly:  fly ssh console --app finostat -C "python3 /app/server/admin.py users"
 """
@@ -37,6 +39,18 @@ def main(argv: list[str]) -> int:
             print("  no pending upgrade requests")
         for r in rows:
             print(f"  #{r['id']:<4} {r['email']:<36} wants {r['plan']:<6} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['ts']))}  {r['note'] or ''}")
+        return 0
+    if cmd in ("assessments", "assessments-csv"):
+        import assessment
+        store = assessment.Assessments(au.path)
+        if cmd == "assessments-csv":
+            sys.stdout.write(store.export_csv()); return 0
+        rows = store.recent(int(argv[2]) if len(argv) > 2 else 50)
+        print(f"  {store.count()} assessments total")
+        for r in rows:
+            a = __import__("json").loads(r["answers"])
+            print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['ts']))}  {r['name'][:22]:<22} {r['email']:<32} {r['phone']}  {r['profile']:<12} {r['score']}/7  "
+                  f"{assessment.describe('years', a.get('years'))} · {assessment.describe('goal', a.get('goal'))}")
         return 0
     if cmd == "handled" and len(argv) == 3:
         au.mark_handled(int(argv[2])); print(f"  request #{argv[2]} marked handled"); return 0

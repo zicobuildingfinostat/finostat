@@ -29,6 +29,7 @@ import feeds
 import finch
 import news
 import alerts as alertsmod
+import assessment
 import auth as authmod
 import backup
 import builder
@@ -55,6 +56,7 @@ AUTH = authmod.Auth()
 ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
                                user_email=AUTH.email_for)
 BACKUP = backup.DailyBackup(AUTH.path, AUTH.path.parent / "backups")
+ASSESS = assessment.Assessments(AUTH.path)
 CONSTITUENTS = indices.Constituents("NIFTY50")
 FEED.index_members = CONSTITUENTS.members
 CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts.ContractIndex())
@@ -238,6 +240,8 @@ class Page:
                 lambda m: m.group(1) + self._wire(items) + m.group(2),
                 doc, count=1, flags=re.S,
             )
+        # First-visit trader assessment (the page's own JS decides whether to pop it).
+        doc = doc.replace("</body>", assessment.widget_html() + "\n</body>", 1)
         return doc.encode("utf-8")
 
     @staticmethod
@@ -329,6 +333,8 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/dashboard":
                 return self._send(pages.render_dashboard(FEED.snapshot()),
                                   "text/html; charset=utf-8")
+            if route == "/assessment":
+                return self._send(assessment.render_page(), "text/html; charset=utf-8", cache="public, max-age=300")
             if route == "/finch":
                 return self._send(finch.render_index(), "text/html; charset=utf-8", cache="public, max-age=300")
             if route.startswith("/finch/"):
@@ -572,6 +578,21 @@ class Handler(BaseHTTPRequestHandler):
                                    "lot": chain["lot"], "atm": chain["atm"], "step": chain["step"],
                                    "strikes": strikes, "legs": legs, "metrics": metrics,
                                    "live": chain["live"], "warming": chain["warming"]})
+            if route == "/api/assessment":
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                result, err, status = ASSESS.submit(body, self._client_ip())
+                if err:
+                    return self._json({"error": err}, status)
+                answers, _ = assessment.validate(body)
+                threading.Thread(target=mailer.send_owner_note,
+                                 args=(f"Trader assessment: {answers['name']} — {result['profile']} {result['score']}/{result['total']}",
+                                       assessment.owner_lines(answers, result)), daemon=True).start()
+                return self._json(result)
             if route == "/auth/upgrade":
                 user = self._current_user()
                 if user is None:
