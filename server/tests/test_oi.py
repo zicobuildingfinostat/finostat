@@ -76,5 +76,27 @@ check("no OI -> None", C.oi_summary([{"strike": 1, "atm": True, "ce": {"ltp": 1}
 def payout(S): return sum(r["ce"]["oi"] * max(S - r["strike"], 0) + r["pe"]["oi"] * max(r["strike"] - S, 0) for r in rows)
 check("max pain is the argmin of total payout", o["max_pain"] == min((r["strike"] for r in rows), key=payout))
 
+
+print("\n=== chain-socket fallback routing (feed refuses a 3rd connection) ===")
+class FakeWS:
+    def __init__(self): self.sent = []
+    def send_binary(self, b): self.sent.append(__import__("json").loads(b))
+f = U.UpstoxFeed.__new__(U.UpstoxFeed)
+f._dyn_lock = threading.Lock(); f._dyn_keys = set(); f._meta = {}; f._prices = {}; f._closes = {}; f._stats = {}
+f._dyn_ws = None; f._dyn_started = True; f._dyn_wake = threading.Event(); f._helpers = {}; f._ws = FakeWS(); f._dyn_refused = 0; f._dyn_fallback = False
+f.subscribe_dynamic({"NSE_FO|A": {"kind": "option"}})
+check("no dedicated socket, no fallback -> nothing sent (the dyn loop will subscribe)", f._ws.sent == [])
+f._dyn_fallback = True; h2 = FakeWS(); f._helpers = {2: h2}
+f.subscribe_dynamic({"NSE_FO|B": {"kind": "option"}})
+check("fallback on -> new keys ride the emptiest universe socket in ltpc", h2.sent and h2.sent[-1]["method"] == "sub" and h2.sent[-1]["data"]["mode"] == "ltpc" and h2.sent[-1]["data"]["instrumentKeys"] == ["NSE_FO|B"], h2.sent)
+h3 = FakeWS(); f._helpers = {2: h2, 3: h3}
+f._route_dyn_via(f._fallback_ws())
+check("_route_dyn_via pushes every chain key to the highest-numbered helper", h3.sent and sorted(h3.sent[-1]["data"]["instrumentKeys"]) == ["NSE_FO|A", "NSE_FO|B"] and h3.sent[-1]["data"]["mode"] == "ltpc", h3.sent)
+f.unsubscribe_dynamic(["NSE_FO|A"])
+check("unsubscribe goes to the same fallback socket", h3.sent[-1]["method"] == "unsub" and h3.sent[-1]["data"]["instrumentKeys"] == ["NSE_FO|A"], h3.sent[-1])
+d = FakeWS(); f._dyn_ws = d; f._dyn_fallback = False
+f.subscribe_dynamic({"NSE_FO|C": {"kind": "option"}})
+check("dedicated socket back -> subscribes there in full mode", d.sent and d.sent[-1]["data"]["mode"] == "full" and d.sent[-1]["data"]["instrumentKeys"] == ["NSE_FO|C"], d.sent)
+
 print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
 sys.exit(1 if fails else 0)

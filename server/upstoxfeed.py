@@ -118,6 +118,9 @@ class UpstoxFeed(Feed):
         self._dyn_lock = threading.Lock()
         self._dyn_keys: set[str] = set()
         self._dyn_ws: wsclient.WebSocket | None = None
+        self._helpers: dict = {}                       # n -> helper universe socket (for the chain fallback)
+        self._dyn_refused = 0                          # consecutive handshake refusals of the chain socket
+        self._dyn_fallback = False                     # chain contracts riding on a universe socket (ltpc, no OI)
         self._dyn_wake = threading.Event()
         self._dyn_started = False
 
@@ -384,13 +387,17 @@ class UpstoxFeed(Feed):
             ws = None
             try:
                 ws = self._open(n, keys)
+                self._helpers[n] = ws
                 backoff = 1.0
+                if self._dyn_fallback:
+                    self._route_dyn_via(ws)
                 self._read_loop(ws, n, stop_extra)
             except (UpstoxError, wsclient.WebSocketError, OSError) as exc:
                 log.warning("socket %d: %s", n, exc)
             except Exception:
                 log.exception("socket %d: unexpected failure", n)
             finally:
+                self._helpers.pop(n, None)
                 if ws is not None:
                     self._release(ws)
             if self._stop.is_set() or stop_extra.is_set():
@@ -422,9 +429,11 @@ class UpstoxFeed(Feed):
             if not self._dyn_started:
                 self._dyn_started = True
                 self._track(threading.Thread(target=self._dyn_loop, name="upstox-dyn", daemon=True))
+        if ws is None and self._dyn_fallback:
+            ws = self._fallback_ws()
         if ws is not None and new:
             try:
-                self._send_sub(ws, "sub", new, tag="dyn")
+                self._send_sub(ws, "sub", new, tag="dyn", mode=None if ws is self._dyn_ws else "ltpc")
             except (wsclient.WebSocketError, OSError) as exc:
                 log.warning("dynamic subscribe failed (%s); the socket will resubscribe", exc)
         self._dyn_wake.set()
@@ -438,18 +447,38 @@ class UpstoxFeed(Feed):
                 self._meta.pop(k, None)
                 self._prices.pop(k, None)
                 self._closes.pop(k, None)
+        if ws is None and self._dyn_fallback:
+            ws = self._fallback_ws()
         if ws is not None and keys:
             try:
-                self._send_sub(ws, "unsub", keys, tag="dyn")
+                self._send_sub(ws, "unsub", keys, tag="dyn", mode=None if ws is self._dyn_ws else "ltpc")
             except (wsclient.WebSocketError, OSError):
                 pass
 
-    def _send_sub(self, ws, method: str, keys: list[str], tag: str = "s") -> None:
+    def _fallback_ws(self):
+        """The universe socket with the most headroom (helpers carry the tail of
+        the universe, so the highest-numbered one is the emptiest)."""
+        if self._helpers:
+            return self._helpers[max(self._helpers)]
+        return self._ws
+
+    def _route_dyn_via(self, ws) -> None:
+        with self._dyn_lock:
+            keys = sorted(self._dyn_keys)
+        if not keys:
+            return
+        try:
+            self._send_sub(ws, "sub", keys, tag="dyn", mode="ltpc")
+            log.info("chain contracts (%d) riding on a universe socket in ltpc mode -- no open interest until the chain socket is allowed", len(keys))
+        except (wsclient.WebSocketError, OSError) as exc:
+            log.warning("fallback chain subscribe failed: %s", exc)
+
+    def _send_sub(self, ws, method: str, keys: list[str], tag: str = "s", mode: str | None = None) -> None:
         for i in range(0, len(keys), 1000):
             ws.send_binary(json.dumps({
                 "guid": f"finostat-{tag}-{int(time.time())}-{i // 1000}",
                 "method": method,
-                "data": {"mode": DYN_MODE, "instrumentKeys": keys[i:i + 1000]},
+                "data": {"mode": mode or DYN_MODE, "instrumentKeys": keys[i:i + 1000]},
             }).encode("utf-8"))
 
     def _dyn_loop(self) -> None:
@@ -472,11 +501,32 @@ class UpstoxFeed(Feed):
                 self._send_sub(ws, "sub", keys, tag="dyn")
                 with self._dyn_lock:
                     self._dyn_ws = ws
+                if self._dyn_fallback:
+                    self._dyn_fallback = False
+                    fb = self._fallback_ws()
+                    if fb is not None:
+                        try:
+                            self._send_sub(fb, "unsub", keys, tag="dyn", mode="ltpc")
+                        except (wsclient.WebSocketError, OSError):
+                            pass
+                    log.info("chain socket allowed again; open interest is back")
+                self._dyn_refused = 0
                 log.info("dynamic socket: subscribed to %d chain contracts", len(keys))
                 backoff = 1.0
                 self._read_loop(ws, 9)
             except (UpstoxError, wsclient.WebSocketError, OSError) as exc:
                 log.warning("dynamic socket: %s", exc)
+                if "403" in str(exc):
+                    self._dyn_refused += 1
+                    if self._dyn_refused >= 2 and not self._dyn_fallback:
+                        self._dyn_fallback = True
+                        log.warning("chain socket refused twice (Upstox allows 2 feed connections on Standard, 5 on Plus); "
+                                    "falling back to a universe socket -- chains work, no open interest")
+                        fb = self._fallback_ws()
+                        if fb is not None:
+                            self._route_dyn_via(fb)
+                    if self._dyn_fallback:
+                        backoff = 300.0                # try the dedicated socket again every 5 min
             except Exception:
                 log.exception("dynamic socket: unexpected failure")
             finally:
