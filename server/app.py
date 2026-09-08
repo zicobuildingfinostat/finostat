@@ -26,6 +26,7 @@ from urllib.parse import urlparse, parse_qs, quote
 
 import config
 import feeds
+import finch
 import news
 import alerts as alertsmod
 import auth as authmod
@@ -80,10 +81,19 @@ PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 # on-brand 404 instead of a stack trace, so a stray click never looks broken.
 KNOWN_ROUTES = {
     "/analysis": "Analysis tools", "/live-session": "Book a live session",
-    "/learn": "Learn", "/blog": "Blog", "/about": "About", "/founders": "Founders",
+    "/blog": "Blog", "/about": "About", "/founders": "Founders",
     "/contact": "Contact", "/terms": "Terms of service", "/privacy": "Privacy policy",
 }
-KNOWN_PREFIXES = ("/tools/", "/strategies/", "/learn/")
+KNOWN_PREFIXES = ("/tools/", "/strategies/")
+
+# The old /learn URLs (linked from the homepage since launch) map onto Finch chapters.
+LEARN_REDIRECTS = {
+    "/learn": "/finch",
+    "/learn/options-greeks": "/finch/the-greeks",
+    "/learn/implied-volatility": "/finch/implied-volatility",
+    "/learn/option-chain-analysis": "/finch/reading-the-chain",
+    "/learn/how-to-read-the-sheets": "/finch/option-pricing",
+}
 
 # Static serving is an ALLOWLIST, not "anything under the project root".
 # The root contains server/ -- which will contain .env with the Kite api_secret
@@ -319,6 +329,16 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/dashboard":
                 return self._send(pages.render_dashboard(FEED.snapshot()),
                                   "text/html; charset=utf-8")
+            if route == "/finch":
+                return self._send(finch.render_index(), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route.startswith("/finch/"):
+                body = finch.render_chapter(route[len("/finch/"):])
+                if body is not None:
+                    return self._send(body, "text/html; charset=utf-8", cache="public, max-age=300")
+            if route in LEARN_REDIRECTS:
+                return self._redirect(LEARN_REDIRECTS[route])
+            if route.startswith("/learn/"):
+                return self._redirect("/finch")
             if route in ("/login", "/signup"):
                 state = parse_qs(parsed.query).get("state", ["form"])[0]
                 return self._send(pages.render_login(state, mailer.configured()),
@@ -735,6 +755,9 @@ def main() -> int:
         BACKUP.stop()
         CONSTITUENTS.stop()
         CHAINS.stop()
+        # A consistent copy first, then fold the WAL: whatever happens to the
+        # live file during the machine stop, the next boot can restore this.
+        BACKUP.run_now()
         AUTH.checkpoint()
         threading.Thread(target=server.shutdown, daemon=True).start()
 

@@ -105,18 +105,38 @@ def _migrate(path: pathlib.Path) -> None:
     c = sqlite3.connect(path, timeout=10)
     try:
         cols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
-        if "plan" not in cols:
+        if cols and "plan" not in cols:            # no users table (another schema shares the helper) -> nothing to do
             c.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'starter'")
             c.commit()
     finally:
         c.close()
 
 
-def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
-    """Apply the schema; if the file is unreadable, set it aside and start clean.
+def _newest_backup(path: pathlib.Path) -> pathlib.Path | None:
+    bdir = path.parent / "backups"
+    try:
+        cands = sorted(bdir.glob(f"{path.stem}-*{path.suffix}"))
+    except OSError:
+        return None
+    for cand in reversed(cands):                       # newest first; skip any that are themselves bad
+        try:
+            c = sqlite3.connect(f"file:{cand}?immutable=1", uri=True)   # WAL-flagged copies need no -shm this way
+            ok = c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            c.close()
+            if ok:
+                return cand
+        except sqlite3.Error:
+            continue
+    return None
 
-    A corrupt database must never take the site down. The bad file is renamed,
-    not deleted, so the cause can be inspected afterwards.
+
+def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
+    """Apply the schema; if the file is unreadable, set it aside, restore the
+    newest good backup if there is one, else start clean.
+
+    A corrupt database must never take the site down, and with backups on the
+    volume it must not cost accounts either. The bad file is renamed, not
+    deleted, so the cause can be inspected afterwards.
     """
     def apply():
         c = sqlite3.connect(path, timeout=10)
@@ -124,6 +144,9 @@ def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
             c.executescript(schema)
             c.execute("PRAGMA journal_mode=WAL")
             c.commit()
+            res = c.execute("PRAGMA integrity_check").fetchone()[0]
+            if res != "ok":
+                raise sqlite3.DatabaseError(f"integrity_check: {res}")
         finally:
             c.close()
     try:
@@ -135,9 +158,17 @@ def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
             src = pathlib.Path(str(path) + suffix)
             if src.exists():
                 src.rename(f"{path}.corrupt-{stamp}{suffix}")
-        log.error("%s was unreadable (%s); quarantined as %s.corrupt-%s and recreated",
-                  path.name, exc, path.name, stamp)
+        backup = _newest_backup(path)
+        if backup is not None:
+            import shutil
+            shutil.copy2(backup, path)
+            log.error("%s was unreadable (%s); quarantined as %s.corrupt-%s and RESTORED from %s",
+                      path.name, exc, path.name, stamp, backup.name)
+        else:
+            log.error("%s was unreadable (%s); quarantined as %s.corrupt-%s and recreated (no backup found)",
+                      path.name, exc, path.name, stamp)
         apply()
+        _migrate(path)
 
 
 def normalize_email(raw: str) -> str | None:

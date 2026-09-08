@@ -92,6 +92,20 @@ tok = au3.create_link("heal@x.com", ip="1.1.1.1")
 check("fresh db works", au3.redeem_link(tok) is not None)
 check("garbage preserved for inspection", any(p.read_bytes().startswith(b"this is not") for p in q if p.name.endswith(tuple("0123456789"))))
 
+print("\n=== corrupt database restores from the newest good backup ===")
+import shutil, sqlite3 as _sq
+src = tmp / "acct.db"
+au4 = A.Auth(src); tok4 = au4.create_link("kept@x.com", ip="2.2.2.2"); au4.redeem_link(tok4)
+(tmp / "backups").mkdir(exist_ok=True)
+good = tmp / "backups" / "acct-20260101-000000.db"
+s_ = _sq.connect(src); d_ = _sq.connect(good); s_.backup(d_); d_.close(); s_.close()
+(tmp / "backups" / "acct-20260102-000000.db").write_bytes(b"garbage newer backup that must be skipped")
+src.write_bytes(b"SQLit" + b"\x17\x03\x03" * 20)                # torn header, like production
+au5 = A.Auth(src)
+check("restored from newest GOOD backup (skipping a bad newer one)", [u["email"] for u in au5.list_users()] == ["kept@x.com"], au5.list_users())
+check("torn file preserved for inspection", list(tmp.glob("acct.db.corrupt-*")))
+check("integrity_check passes after restore", _sq.connect(src).execute("PRAGMA integrity_check").fetchone()[0] == "ok")
+
 print("\n=== cookies ===")
 h = A.Auth.cookie_header("abc", secure=True)
 check("cookie has HttpOnly/Secure/SameSite", all(x in h for x in ("HttpOnly", "Secure", "SameSite=Lax", "Max-Age")), h)
