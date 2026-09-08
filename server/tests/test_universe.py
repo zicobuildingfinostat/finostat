@@ -10,13 +10,15 @@ uni = {"NSE:RELIANCE": {"symbol":"RELIANCE","name":"RELIANCE INDUSTRIES LTD","ex
        "NSE:TCS": {"symbol":"TCS","name":"TATA CONSULTANCY SERV LT","exchange":"NSE","fo":True,"price":3512.7,"change":0.1},
        "NSE:TATASTEEL": {"symbol":"TATASTEEL","name":"TATA STEEL LIMITED","exchange":"NSE","fo":True,"price":152.0,"change":0.0},
        "NSE:TATAINVEST": {"symbol":"TATAINVEST","name":"TATA INVESTMENT CORP LTD","exchange":"NSE","fo":False,"price":6000.0,"change":0.0}}
+uni["BSE:RELIANCE"] = {"symbol":"RELIANCE","name":"RELIANCE INDUSTRIES LTD","exchange":"BSE","fo":True,"price":2905.9,"change":0.3}
 quotes = [{"symbol":"NIFTY 50","price":23650.0,"change":-0.1},{"symbol":"BANKNIFTY","price":51000.0,"change":0.2}]
 r = U.search(uni, quotes, "rel")
-check("prefix hits, F&O first", [x["key"] for x in r][:2] == ["NSE:RELIANCE","NSE:RELINFRA"], [x["key"] for x in r])
+check("prefix hits: NSE listing, then its BSE twin, then non-F&O", [x["key"] for x in r][:3] == ["NSE:RELIANCE","BSE:RELIANCE","NSE:RELINFRA"], [x["key"] for x in r])
 r = U.search(uni, quotes, "tata")
 # symbol-prefix matches outrank name-substring matches; within a tier F&O comes first
 check("prefix beats name-substring; F&O first within a tier", [x["key"] for x in r] == ["NSE:TATASTEEL","NSE:TATAINVEST","NSE:TCS"], [x["key"] for x in r])
 check("exact symbol outranks prefix", U.search(uni, quotes, "TCS")[0]["key"] == "NSE:TCS")
+check("exact BSE symbol still beats an NSE prefix match", U.search(uni, quotes, "RELIANCE")[:2] and [x["key"] for x in U.search(uni, quotes, "RELIANCE")][:2] == ["NSE:RELIANCE","BSE:RELIANCE"])
 check("indices searchable, first", U.search(uni, quotes, "nifty")[0]["key"] == "NIFTY 50")
 check("empty query -> nothing", U.search(uni, quotes, "  ") == [])
 check("limit honoured", len(U.search(uni, quotes, "t", limit=2)) == 2)

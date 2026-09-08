@@ -96,6 +96,9 @@ class UpstoxFeed(Feed):
         self._ws: wsclient.WebSocket | None = None
         self._dirty = threading.Event()
         self._ticks = 0
+        self._stop_extra = threading.Event()
+        self._uni_dirty = True
+        self._universe_cache: dict = {}
 
     # -- lifecycle ----------------------------------------------------------
     def start(self) -> None:
@@ -194,13 +197,17 @@ class UpstoxFeed(Feed):
                  len(self._meta), count, stocks)
         return list(self._meta)
 
+    BSE_GROUPS = {"A", "B", "T", "X", "XT", "EQ"}   # tradable equity groups; F/G are debt
+
     def _resolve_universe(self) -> int:
-        """Every NSE equity, flagged F&O when a futures contract exists on it."""
+        """Every NSE equity (and BSE equity when configured), flagged F&O when a
+        futures contract exists on the company."""
         if config.UNIVERSE == "none":
             return 0
         rows = self._instruments("NSE")
         fo = {r.get("underlying_symbol") or r.get("name") for r in rows
               if r.get("segment") == "NSE_FO" and r.get("instrument_type") == "FUT"}
+        fo_isin = set()
         n = 0
         for r in rows:
             if r.get("segment") != "NSE_EQ" or r.get("instrument_type") != "EQ":
@@ -209,9 +216,30 @@ class UpstoxFeed(Feed):
             key = r.get("instrument_key")
             if not sym or not key or key in self._meta:
                 continue
+            is_fo = sym in fo
+            if is_fo and r.get("isin"):
+                fo_isin.add(r["isin"])
             self._meta[key] = {"kind": "stock", "label": "NSE:" + sym, "symbol": sym,
-                               "exchange": "NSE", "name": r.get("name", ""), "fo": sym in fo}
+                               "exchange": "NSE", "name": r.get("name", ""), "fo": is_fo}
             n += 1
+        if "bse" in config.UNIVERSE:
+            for r in self._instruments("BSE"):
+                if r.get("segment") != "BSE_EQ" or r.get("instrument_type") not in self.BSE_GROUPS:
+                    continue
+                sym = r.get("trading_symbol") or ""
+                key = r.get("instrument_key")
+                if not sym or not key or key in self._meta:
+                    continue
+                self._meta[key] = {"kind": "stock", "label": "BSE:" + sym, "symbol": sym,
+                                   "exchange": "BSE", "name": r.get("name", ""),
+                                   "fo": r.get("isin") in fo_isin}
+                n += 1
+        # The masters are ~90 MB of parsed JSON; on a 512 MB machine that is
+        # the single biggest resident. They are re-downloaded on the next
+        # resolve, which only happens on reconnect.
+        self._master.clear()
+        self._master_day = None
+        self._uni_dirty = True
         return n
 
     # -- socket -------------------------------------------------------------
@@ -242,14 +270,26 @@ class UpstoxFeed(Feed):
         uri = (payload.get("data") or {}).get("authorized_redirect_uri") or (payload.get("data") or {}).get("authorizedRedirectUri")
         return uri or FEED_URL
 
+    SOCKET_CAP = 4500   # Upstox allows 5,000 LTPC instruments per socket; keep headroom
+
     def _run(self) -> None:
+        """Supervisor. Resolves instruments, then opens as many sockets as the
+        key count needs: the first in this thread, the rest in helpers that
+        follow it down so every reconnect re-resolves the whole universe."""
         backoff = 1.0
         while not self._stop.is_set():
+            self._stop_extra = threading.Event()
             try:
                 keys = self._resolve()
-                self._connect(keys)
+                groups = [keys[i:i + self.SOCKET_CAP] for i in range(0, len(keys), self.SOCKET_CAP)]
+                log.info("%d instruments across %d socket(s)", len(keys), len(groups))
+                for n, group in enumerate(groups[1:], start=2):
+                    threading.Thread(target=self._socket_loop, args=(n, group),
+                                     name=f"upstox-{n}", daemon=True).start()
+                ws = self._open(1, groups[0])
+                self._ws = ws
                 backoff = 1.0
-                self._read_forever()
+                self._read_loop(ws, 1)
             except UpstoxError as exc:
                 log.error("%s", exc)
                 self._publish(live=False, error=str(exc))
@@ -260,6 +300,7 @@ class UpstoxFeed(Feed):
                 log.exception("unexpected feed failure")
                 self._publish(live=False, error=str(exc))
             finally:
+                self._stop_extra.set()
                 if self._ws is not None:
                     self._ws.close()
                     self._ws = None
@@ -269,39 +310,60 @@ class UpstoxFeed(Feed):
             self._stop.wait(backoff)
             backoff = min(self.BACKOFF_MAX, backoff * 2)
 
-    def _connect(self, keys: list[str]) -> None:
+    def _socket_loop(self, n: int, keys: list[str]) -> None:
+        """Reconnect loop for an additional socket; lives until the primary restarts."""
+        backoff = 1.0
+        stop_extra = self._stop_extra
+        while not self._stop.is_set() and not stop_extra.is_set():
+            ws = None
+            try:
+                ws = self._open(n, keys)
+                backoff = 1.0
+                self._read_loop(ws, n, stop_extra)
+            except (UpstoxError, wsclient.WebSocketError, OSError) as exc:
+                log.warning("socket %d: %s", n, exc)
+            except Exception:
+                log.exception("socket %d: unexpected failure", n)
+            finally:
+                if ws is not None:
+                    ws.close()
+            if self._stop.is_set() or stop_extra.is_set():
+                break
+            self._stop.wait(backoff)
+            backoff = min(self.BACKOFF_MAX, backoff * 2)
+
+    def _open(self, n: int, keys: list[str]) -> wsclient.WebSocket:
         url = self._authorized_url()
-        log.info("connecting to the Upstox feed")
+        log.info("socket %d: connecting (%d instruments)", n, len(keys))
         ws = wsclient.connect(url, headers={
             "Authorization": f"Bearer {config.UPSTOX_ACCESS_TOKEN}",
             "Accept": "*/*",
             "User-Agent": USER_AGENT,
         }, timeout=20.0)
+        # Read timeout must exceed Upstox's quiet gaps, or an idle market tears
+        # down a healthy socket.
         ws.settimeout(60.0)
         # The subscribe payload is JSON, but must go in a *binary* frame.
-        # ltpc mode carries last price and close, which is all the sheet needs,
-        # and is a fraction of the bandwidth of full mode.
-        # Thousands of keys: send in chunks rather than one enormous frame.
+        # ltpc mode carries last price and close, which is all the sheet needs.
         for i in range(0, len(keys), 1000):
             ws.send_binary(json.dumps({
-                "guid": f"finostat-{int(time.time())}-{i // 1000}",
+                "guid": f"finostat-{n}-{int(time.time())}-{i // 1000}",
                 "method": "sub",
                 "data": {"mode": "ltpc", "instrumentKeys": keys[i:i + 1000]},
             }).encode("utf-8"))
-        self._ws = ws
-        log.info("subscribed to %d instruments in ltpc mode", len(keys))
+        log.info("socket %d: subscribed to %d instruments in ltpc mode", n, len(keys))
+        return ws
 
-    def _read_forever(self) -> None:
-        assert self._ws is not None
-        while not self._stop.is_set():
-            kind, payload = self._ws.recv()
+    def _read_loop(self, ws: wsclient.WebSocket, n: int, stop_extra=None) -> None:
+        while not self._stop.is_set() and not (stop_extra is not None and stop_extra.is_set()):
+            kind, payload = ws.recv()
             if kind == "text":
-                log.debug("upstox text frame: %s", payload[:200])
+                log.debug("socket %d text frame: %s", n, payload[:200])
                 continue
             try:
                 self._ingest(payload)
             except mp.ProtoError as exc:
-                log.warning("undecodable feed frame: %s", exc)
+                log.warning("socket %d: undecodable frame: %s", n, exc)
 
     @staticmethod
     def _ltp_and_close(feed: dict) -> tuple[float | None, float | None]:
@@ -323,11 +385,14 @@ class UpstoxFeed(Feed):
         if not feeds:
             return
         for key, feed in feeds.items():
-            if key not in self._meta:
+            meta = self._meta.get(key)
+            if meta is None:
                 continue
             ltp, close = self._ltp_and_close(feed)
             if ltp is not None and ltp > 0:
                 self._prices[key] = ltp
+                if meta["kind"] == "stock":
+                    self._uni_dirty = True
             if close:
                 self._closes[key] = close
         self._ticks += len(feeds)
@@ -374,21 +439,27 @@ class UpstoxFeed(Feed):
         order = {label: i for i, (label, _spec) in enumerate(TAPE)}
         quotes.sort(key=lambda q: order.get(q["symbol"], 99))
 
-        # A fresh dict each time: readers on other threads iterate the
-        # published one, so it must never be mutated after publish.
-        universe = {}
-        for key, meta in self._meta.items():
-            if meta["kind"] != "stock":
-                continue
-            price = self._prices.get(key)
-            if price is None:
-                continue
-            close = self._closes.get(key)
-            universe[meta["label"]] = {
-                "symbol": meta["symbol"], "exchange": meta["exchange"], "name": meta["name"],
-                "fo": meta["fo"], "price": round(price, 2),
-                "change": round((price - close) / close * 100.0, 2) if close else 0.0,
-            }
+        # A fresh dict each time something moved: readers on other threads
+        # iterate the published one, so it must never be mutated after
+        # publish. With ~7,000 names, rebuilding at 8 Hz when nothing changed
+        # would be the single biggest CPU cost, hence the dirty flag.
+        if self._uni_dirty:
+            universe = {}
+            for key, meta in self._meta.items():
+                if meta["kind"] != "stock":
+                    continue
+                price = self._prices.get(key)
+                if price is None:
+                    continue
+                close = self._closes.get(key)
+                universe[meta["label"]] = {
+                    "symbol": meta["symbol"], "exchange": meta["exchange"], "name": meta["name"],
+                    "fo": meta["fo"], "price": round(price, 2),
+                    "change": round((price - close) / close * 100.0, 2) if close else 0.0,
+                }
+            self._universe_cache = universe
+            self._uni_dirty = False
+        universe = self._universe_cache
 
         self._publish(
             quotes=quotes,

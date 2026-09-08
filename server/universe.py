@@ -26,6 +26,8 @@ def search(universe: dict, quotes: list, q: str, limit: int = 20) -> list[dict]:
             continue
         if not e.get("fo"):
             rank += 0.5
+        if e.get("exchange") == "BSE":
+            rank += 0.25      # the NSE listing is the liquid one; show it first
         hits.append((rank, sym, dict(e, key=key)))
     hits.sort(key=lambda h: (h[0], len(h[1]), h[1]))
     return [h[2] for h in hits[:limit]]

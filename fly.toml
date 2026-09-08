@@ -13,6 +13,10 @@ primary_region = "sin"   # Singapore: Fly deprecated bom (Mumbai); sin is the ne
   # Pins the host used in emailed sign-in links, so a spoofed Host header can
   # never redirect a magic link somewhere else.
   FINOSTAT_PUBLIC_URL = "https://finostat.com"
+  # All NSE equities plus BSE equity groups A/B/T/X/XT: ~7,100 instruments on
+  # two Upstox sockets. The 512 MB machine measured ~310 MB peak locally; the
+  # market-open load check decides whether it needs 1 GB.
+  FINOSTAT_UNIVERSE = "nse+bse"
 
 # The tick recorder's home. History cannot be backfilled, so this volume is
 # the only copy of every session recorded so far.

@@ -189,7 +189,14 @@ index tape and option chain -- Upstox allows 5,000 LTPC instruments per socket. 
 entry is flagged `fo` when a futures contract exists on it (~210 names). Keys look
 like `NSE:RELIANCE`; they work in the watchlist and as `spot:NSE:RELIANCE` alert metrics.
 
+With `FINOSTAT_UNIVERSE=nse+bse` (production) the BSE equity groups A/B/T/X/XT
+(~4,300 names; the F and G groups are debt and are skipped) are added as `BSE:<SYMBOL>`,
+F&O-flagged by ISIN. The feed opens as many sockets as the key count needs (4,500 per
+socket, leaving headroom under Upstox's 5,000), each with its own reconnect loop;
+helper sockets follow the primary down so every reconnect re-resolves the universe.
+Search ranks an NSE listing above its BSE twin.
+
 Deliberately, the universe is **never** part of the SSE push or the tick recorder:
 the 8 Hz stream stays index-only (~650 bytes an event) and stock quotes are polled
-through `/api/quote`. BSE is planned as a second socket once CPU on the 512 MB
-machine has been measured with the NSE set live.
+through `/api/quote`. The universe dict is only rebuilt when a stock actually ticked,
+and the ~90 MB instrument masters are freed once instruments are resolved.
