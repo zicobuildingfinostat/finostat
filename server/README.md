@@ -181,6 +181,17 @@ then wait to be re-armed. Rules are also checked at creation and on re-arm again
 live snapshot, so a condition that is already true fires immediately even after hours.
 Simulator snapshots are never evaluated. Signed-out users keep the browser-side engine.
 
+## Databases, backups, self-healing
+
+`finostat.db` (accounts, sessions, prefs, alerts) and `ticks.db` (recorder) live in
+`FINOSTAT_DATA_DIR` (the Fly volume). If either is unreadable at startup it is
+**quarantined** -- renamed `<name>.corrupt-<stamp>` alongside its -wal/-shm, never
+deleted -- and recreated, so a bad file cannot take the site down. `finostat.db` is
+backed up daily to `<data dir>/backups/` (7 kept) with SQLite's online backup API;
+`/api/status.backup` reports the last one. Shutdown checkpoints the WAL, and fly.toml
+gives SIGTERM 20 s to finish. To restore: stop the app, copy a backup over
+`finostat.db`, remove `finostat.db-wal`/`-shm`, start.
+
 ## Stock universe
 
 With `FINOSTAT_UNIVERSE=nse` (the default) the Upstox feed also subscribes every NSE

@@ -29,6 +29,7 @@ import feeds
 import news
 import alerts as alertsmod
 import auth as authmod
+import backup
 import mailer
 import pages
 import recorder
@@ -48,6 +49,7 @@ RECORDER = recorder.Recorder()
 AUTH = authmod.Auth()
 ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
                                user_email=AUTH.email_for)
+BACKUP = backup.DailyBackup(AUTH.path, AUTH.path.parent / "backups")
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 
 # Routes the marketing page links to that are not built yet. They get an
@@ -355,6 +357,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
+                                   "backup": BACKUP.stats(),
                                    "time": time.time()})
             if route == "/api/symbols":
                 qs = parse_qs(parsed.query)
@@ -596,6 +599,7 @@ def main() -> int:
     FEED.add_listener(ALERTS.on_snapshot)
     RECORDER.start()
     ALERTS.start()
+    BACKUP.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -606,6 +610,8 @@ def main() -> int:
         NEWS.stop()
         RECORDER.stop()
         ALERTS.stop()
+        BACKUP.stop()
+        AUTH.checkpoint()
         threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, shutdown)

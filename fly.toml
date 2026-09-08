@@ -2,6 +2,11 @@
 app = "finostat"
 primary_region = "sin"   # Singapore: Fly deprecated bom (Mumbai); sin is the nearest region
 
+# Give shutdown time to checkpoint SQLite before the VM is stopped: a torn
+# database header on 2026-09-08 came from a stop that landed mid-write.
+kill_signal = "SIGTERM"
+kill_timeout = "20s"
+
 [build]
   dockerfile = "deploy/Dockerfile"
 

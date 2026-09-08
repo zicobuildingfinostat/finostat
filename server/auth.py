@@ -202,6 +202,15 @@ class Auth:
         with self._lock, self._conn() as c:
             c.execute("DELETE FROM sessions WHERE sid_hash=?", (_h(sid),))
 
+    def checkpoint(self) -> None:
+        """Fold the WAL into the main file. Called on shutdown so a machine
+        stop lands on a quiescent database rather than mid-checkpoint."""
+        try:
+            with self._conn() as c:
+                c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error as exc:
+            log.warning("checkpoint failed: %s", exc)
+
     def email_for(self, user_id: int) -> str | None:
         with self._conn() as c:
             row = c.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
