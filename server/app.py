@@ -28,6 +28,7 @@ import config
 import feeds
 import finch
 import founder
+import legal
 import news
 import alerts as alertsmod
 import assessment
@@ -88,12 +89,13 @@ _VERIFY_FILE_RE = re.compile(r"^google[0-9a-f]{8,32}\.html$")
 
 # Routes the marketing page links to that are not built yet. They get an
 # on-brand 404 instead of a stack trace, so a stray click never looks broken.
-KNOWN_ROUTES = {
-    "/analysis": "Analysis tools", "/live-session": "Book a live session",
-    "/blog": "Blog",
-    "/contact": "Contact", "/terms": "Terms of service", "/privacy": "Privacy policy",
-}
-KNOWN_PREFIXES = ("/tools/", "/strategies/")
+KNOWN_ROUTES: dict = {}
+KNOWN_PREFIXES = ("/strategies/",)
+
+# URLs the original marketing page advertised that were never built. Anything
+# that already crawled or bookmarked them lands somewhere real.
+RETIRED = {"/analysis": "/dashboard", "/live-session": "/contact", "/blog": "/finch",
+           "/tools/gift-nifty": "/dashboard", "/tools": "/dashboard"}
 
 # The old /learn URLs (linked from the homepage since launch) map onto Finch chapters.
 LEARN_REDIRECTS = {
@@ -351,6 +353,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
             if route == "/about":
                 return self._redirect("/founders")
+            if route in RETIRED or route.startswith("/tools/"):
+                return self._redirect(RETIRED.get(route, "/dashboard#p-builder"))
+            if route in legal.PAGES:
+                return self._send(legal.render(route), "text/html; charset=utf-8", cache="public, max-age=600")
             if route in ("/founders", "/founder"):
                 return self._send(founder.render(), "text/html; charset=utf-8", cache="public, max-age=600")
             if route == "/assessment":

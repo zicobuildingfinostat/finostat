@@ -16,23 +16,14 @@
   <url><loc>https://finostat.com/finch/strategies</loc><priority>0.8</priority></url>
   <url><loc>https://finostat.com/finch/risk-and-position-sizing</loc><priority>0.8</priority></url>
   <url><loc>https://finostat.com/finch/mistakes-and-glossary</loc><priority>0.8</priority></url>
-  <url><loc>https://finostat.com/blog</loc><priority>0.7</priority></url>
   <url><loc>https://finostat.com/founders</loc><lastmod>2026-09-08</lastmod><priority>0.9</priority></url>
-  <url><loc>https://finostat.com/contact</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/terms</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/privacy</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/butterfly-spread-scanner</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/ratio-spread-scanner</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/cross-butterfly-scanner</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/mcx-options-arbitrage</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/gamma-exposure</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/volatility-surface</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/tools/gift-nifty</loc><priority>0.7</priority></url>
+  <url><loc>https://finostat.com/contact</loc><lastmod>2026-09-08</lastmod><priority>0.5</priority></url>
+  <url><loc>https://finostat.com/terms</loc><lastmod>2026-09-08</lastmod><priority>0.5</priority></url>
+  <url><loc>https://finostat.com/privacy</loc><lastmod>2026-09-08</lastmod><priority>0.5</priority></url>
   <url><loc>https://finostat.com/strategies/short-straddle</loc><priority>0.7</priority></url>
   <url><loc>https://finostat.com/strategies/iron-condor</loc><priority>0.7</priority></url>
   <url><loc>https://finostat.com/strategies/butterfly-spread</loc><priority>0.7</priority></url>
   <url><loc>https://finostat.com/strategies/ratio-spread</loc><priority>0.7</priority></url>
   <url><loc>https://finostat.com/strategies/calendar-spread</loc><priority>0.7</priority></url>
   <url><loc>https://finostat.com/strategies/cross-butterfly</loc><priority>0.7</priority></url>
-  <url><loc>https://finostat.com/live-session</loc><priority>0.7</priority></url>
 </urlset>
