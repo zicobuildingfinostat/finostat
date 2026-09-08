@@ -22,6 +22,7 @@ self-consistent simulator, so the site works immediately.
 |---|---|
 | `index.html` | The whole front end — one file, no build step |
 | `server/` | Market data server. Python 3 standard library only, no dependencies |
+| `server/finch*.py` | **Finch by Finostat** — the twelve-chapter F&O course served at `/finch`, with live NIFTY examples (chain, straddle, Greeks, IV smile, strategies) pulled from the same feed as the terminal |
 | `server/tests/` | Protocol tests. No network or credentials needed |
 | `deploy/` | Dockerfile, Caddy and systemd units, deployment guides |
 
