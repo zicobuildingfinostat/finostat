@@ -6,6 +6,7 @@
   python3 admin.py handled 3           # mark request #3 done
   python3 admin.py assessments [N]     # latest N trader assessments (default 50)
   python3 admin.py assessments-csv > leads.csv
+  python3 admin.py assessment-delete 7   # remove one submission
 
 On Fly:  fly ssh console --app finostat -C "python3 /app/server/admin.py users"
 """
@@ -52,6 +53,10 @@ def main(argv: list[str]) -> int:
             print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['ts']))}  {r['name'][:22]:<22} {r['email']:<32} {r['phone']}  {r['profile']:<12} {r['score']}/7  "
                   f"{assessment.describe('years', a.get('years'))} · {assessment.describe('goal', a.get('goal'))}")
         return 0
+    if cmd == "assessment-delete" and len(argv) == 3:
+        import assessment
+        ok = assessment.Assessments(au.path).delete(int(argv[2]))
+        print(f"  {'deleted' if ok else 'NO SUCH SUBMISSION'}: #{argv[2]}"); return 0 if ok else 1
     if cmd == "handled" and len(argv) == 3:
         au.mark_handled(int(argv[2])); print(f"  request #{argv[2]} marked handled"); return 0
     print(__doc__); return 2

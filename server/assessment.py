@@ -282,6 +282,10 @@ class Assessments:
                              (limit,)).fetchall()
         return [dict(r) for r in rows]
 
+    def delete(self, aid: int) -> bool:
+        with self._lock, self._conn() as c:
+            return c.execute("DELETE FROM assessments WHERE id=?", (aid,)).rowcount == 1
+
     def count(self) -> int:
         with self._conn() as c:
             return c.execute("SELECT COUNT(*) FROM assessments").fetchone()[0]
