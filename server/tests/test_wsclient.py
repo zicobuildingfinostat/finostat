@@ -114,7 +114,7 @@ s2 = socket.socket(); s2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1); s
 threading.Thread(target=quiet, args=(s2,), daemon=True).start()
 ws2 = WebSocket(f"ws://127.0.0.1:{s2.getsockname()[1]}/stream")
 fd = ws2.sock.fileno()
-woke = {}
+woke = {}; woken=threading.Event(); may_close=threading.Event()
 def reader():
     t0=time.time()
     try: ws2.recv(); woke["how"]="returned"
@@ -122,11 +122,13 @@ def reader():
     except Exception as e: woke["how"]="error:"+type(e).__name__
     woke["after"]=time.time()-t0
     woke["fd_still_ours"]=ws2.sock.fileno()==fd       # nobody closed it under us
+    woken.set(); may_close.wait(3.0)                  # hold the fd so the probe below runs while we still own it
     ws2.close()                                       # the reader owns the close
 rt=threading.Thread(target=reader, daemon=True); rt.start(); time.sleep(0.3)
 ws2.interrupt()                                       # from THIS thread, like stop() does
-probe=open(os.devnull,"rb"); probe_fd=probe.fileno(); probe.close()
-rt.join(3.0)
+woken.wait(3.0)
+probe=open(os.devnull,"rb"); probe_fd=probe.fileno(); probe.close()   # opened while the reader still holds fd
+may_close.set(); rt.join(3.0)
 check("reader wakes promptly", not rt.is_alive() and woke.get("after",9)<2, woke)
 check("reader sees a closed socket, not a timeout", str(woke.get("how","")).startswith("closed"), woke)
 check("fd stays reserved until the reader closes it", woke.get("fd_still_ours") is True and probe_fd!=fd, (probe_fd, fd, woke))
