@@ -18,6 +18,8 @@ kill_timeout = "20s"
   # Pins the host used in emailed sign-in links, so a spoofed Host header can
   # never redirect a magic link somewhere else.
   FINOSTAT_PUBLIC_URL = "https://finostat.com"
+  # Google Search Console ownership proof (public token): serves /google<hex>.html
+  GOOGLE_VERIFY_FILE = "google7372f85ebc3d419e.html"
   # All NSE equities plus BSE equity groups A/B/T/X/XT: ~7,100 instruments on
   # two Upstox sockets. The 512 MB machine measured ~310 MB peak locally; the
   # market-open load check decides whether it needs 1 GB.

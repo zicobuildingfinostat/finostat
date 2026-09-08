@@ -79,6 +79,12 @@ def _gate(user, ukey: str):
     return False, {"error": "plan required", "need": need, "plan": plan,
                    "signed_in": user is not None, "feature": feature}
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
+# Search-engine ownership proofs. Both are public tokens, set as plain env in fly.toml.
+#   GOOGLE_SITE_VERIFICATION  -> <meta name="google-site-verification"> on the homepage
+#   BING_SITE_VERIFICATION    -> <meta name="msvalidate.01">
+#   GOOGLE_VERIFY_FILE        -> serves /google<hex>.html (the "HTML file" method)
+SITE_VERIFY = {k: os.environ.get(k, "").strip() for k in ("GOOGLE_SITE_VERIFICATION", "BING_SITE_VERIFICATION", "GOOGLE_VERIFY_FILE")}
+_VERIFY_FILE_RE = re.compile(r"^google[0-9a-f]{8,32}\.html$")
 
 # Routes the marketing page links to that are not built yet. They get an
 # on-brand 404 instead of a stack trace, so a stray click never looks broken.
@@ -241,6 +247,13 @@ class Page:
                 lambda m: m.group(1) + self._wire(items) + m.group(2),
                 doc, count=1, flags=re.S,
             )
+        metas = ""
+        if SITE_VERIFY["GOOGLE_SITE_VERIFICATION"]:
+            metas += f'<meta name="google-site-verification" content="{html.escape(SITE_VERIFY["GOOGLE_SITE_VERIFICATION"], quote=True)}">\n'
+        if SITE_VERIFY["BING_SITE_VERIFICATION"]:
+            metas += f'<meta name="msvalidate.01" content="{html.escape(SITE_VERIFY["BING_SITE_VERIFICATION"], quote=True)}">\n'
+        if metas:
+            doc = doc.replace("</head>", metas + "</head>", 1)
         # First-visit trader assessment (the page's own JS decides whether to pop it).
         doc = doc.replace("</body>", assessment.widget_html() + "\n</body>", 1)
         return doc.encode("utf-8")
@@ -334,6 +347,8 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/dashboard":
                 return self._send(pages.render_dashboard(FEED.snapshot()),
                                   "text/html; charset=utf-8")
+            if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
+                return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
             if route == "/about":
                 return self._redirect("/founders")
             if route in ("/founders", "/founder"):
