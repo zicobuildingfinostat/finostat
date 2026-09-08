@@ -22,6 +22,7 @@ import urllib.request
 from datetime import date, datetime
 
 import config
+from contracts import ContractIndex
 import miniproto as mp
 import sheets
 import wsclient
@@ -100,6 +101,13 @@ class UpstoxFeed(Feed):
         self._uni_dirty = True
         self._universe_cache: dict = {}
         self._members_seen: set | None = None
+        self.contracts = ContractIndex()
+        # Dynamic socket: option chains subscribed on demand by ChainManager.
+        self._dyn_lock = threading.Lock()
+        self._dyn_keys: set[str] = set()
+        self._dyn_ws: wsclient.WebSocket | None = None
+        self._dyn_wake = threading.Event()
+        self._dyn_started = False
 
     # -- lifecycle ----------------------------------------------------------
     def start(self) -> None:
@@ -155,9 +163,15 @@ class UpstoxFeed(Feed):
             raise UpstoxError(f"unsupported FINOSTAT_SYMBOL={sym}")
         spot_key, opt_name, exchange, step = UNDERLYINGS[sym]
 
+        chain_meta = {k: m for k, m in self._meta.items() if m.get("kind") == "chain"}
+        chain_prices = {k: self._prices[k] for k in chain_meta if k in self._prices}
+        chain_closes = {k: self._closes[k] for k in chain_meta if k in self._closes}
         self._meta.clear()
         self._prices.clear()
         self._closes.clear()
+        self._meta.update(chain_meta)
+        self._prices.update(chain_prices)
+        self._closes.update(chain_closes)
 
         for label, key in TAPE_KEYS.items():
             self._meta[key] = {"kind": "tape", "label": label}
@@ -196,7 +210,7 @@ class UpstoxFeed(Feed):
         stocks = self._resolve_universe()
         log.info("ticker: subscribing to %d instruments (%d options, %d stocks)",
                  len(self._meta), count, stocks)
-        return list(self._meta)
+        return [k for k, m in self._meta.items() if m.get("kind") != "chain"]
 
     BSE_GROUPS = {"A", "B", "T", "X", "XT", "EQ"}   # tradable equity groups; F/G are debt
 
@@ -235,6 +249,13 @@ class UpstoxFeed(Feed):
                                    "exchange": "BSE", "name": r.get("name", ""),
                                    "fo": r.get("isin") in fo_isin}
                 n += 1
+        # Compact per-underlying contract index for on-demand chains, built while
+        # the masters are in memory.
+        try:
+            built = self.contracts.build({ex: self._master[ex] for ex in ("NSE", "BSE") if ex in self._master})
+            log.info("contract index: %d option contracts across %d underlyings", built, len(self.contracts.names()))
+        except Exception:
+            log.exception("contract index build failed")
         # The masters are ~90 MB of parsed JSON; on a 512 MB machine that is
         # the single biggest resident. They are re-downloaded on the next
         # resolve, which only happens on reconnect.
@@ -329,6 +350,85 @@ class UpstoxFeed(Feed):
                 if ws is not None:
                     ws.close()
             if self._stop.is_set() or stop_extra.is_set():
+                break
+            self._stop.wait(backoff)
+            backoff = min(self.BACKOFF_MAX, backoff * 2)
+
+    # -- dynamic socket: on-demand option chains -----------------------------
+    def price_of(self, key: str):
+        return (self._prices.get(key), self._closes.get(key))
+
+    def subscribe_dynamic(self, metas: dict) -> None:
+        with self._dyn_lock:
+            new = [k for k in metas if k not in self._dyn_keys]
+            self._meta.update(metas)
+            self._dyn_keys.update(metas)
+            ws = self._dyn_ws
+            if not self._dyn_started:
+                self._dyn_started = True
+                threading.Thread(target=self._dyn_loop, name="upstox-dyn", daemon=True).start()
+        if ws is not None and new:
+            try:
+                self._send_sub(ws, "sub", new, tag="dyn")
+            except (wsclient.WebSocketError, OSError) as exc:
+                log.warning("dynamic subscribe failed (%s); the socket will resubscribe", exc)
+        self._dyn_wake.set()
+
+    def unsubscribe_dynamic(self, keys) -> None:
+        keys = list(keys)
+        with self._dyn_lock:
+            self._dyn_keys.difference_update(keys)
+            ws = self._dyn_ws
+            for k in keys:
+                self._meta.pop(k, None)
+                self._prices.pop(k, None)
+                self._closes.pop(k, None)
+        if ws is not None and keys:
+            try:
+                self._send_sub(ws, "unsub", keys, tag="dyn")
+            except (wsclient.WebSocketError, OSError):
+                pass
+
+    def _send_sub(self, ws, method: str, keys: list[str], tag: str = "s") -> None:
+        for i in range(0, len(keys), 1000):
+            ws.send_binary(json.dumps({
+                "guid": f"finostat-{tag}-{int(time.time())}-{i // 1000}",
+                "method": method,
+                "data": {"mode": "ltpc", "instrumentKeys": keys[i:i + 1000]},
+            }).encode("utf-8"))
+
+    def _dyn_loop(self) -> None:
+        """Persistent reconnect loop for the dynamic socket. Idles with no keys."""
+        backoff = 1.0
+        while not self._stop.is_set():
+            with self._dyn_lock:
+                keys = sorted(self._dyn_keys)
+            if not keys:
+                self._dyn_wake.wait(5.0); self._dyn_wake.clear()
+                continue
+            ws = None
+            try:
+                url = self._authorized_url()
+                ws = wsclient.connect(url, headers={
+                    "Authorization": f"Bearer {config.UPSTOX_ACCESS_TOKEN}",
+                    "Accept": "*/*", "User-Agent": USER_AGENT}, timeout=20.0)
+                ws.settimeout(60.0)
+                self._send_sub(ws, "sub", keys, tag="dyn")
+                with self._dyn_lock:
+                    self._dyn_ws = ws
+                log.info("dynamic socket: subscribed to %d chain contracts", len(keys))
+                backoff = 1.0
+                self._read_loop(ws, 9)
+            except (UpstoxError, wsclient.WebSocketError, OSError) as exc:
+                log.warning("dynamic socket: %s", exc)
+            except Exception:
+                log.exception("dynamic socket: unexpected failure")
+            finally:
+                with self._dyn_lock:
+                    self._dyn_ws = None
+                if ws is not None:
+                    ws.close()
+            if self._stop.is_set():
                 break
             self._stop.wait(backoff)
             backoff = min(self.BACKOFF_MAX, backoff * 2)

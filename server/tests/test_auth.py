@@ -61,6 +61,25 @@ check("5 per address then blocked", all(got[:5]) and got[5] is None, [bool(g) fo
 got_ip = [au2.create_link(f"u{i}@x.com", ip="7.7.7.7") for i in range(21)]
 check("20 per IP then blocked", all(got_ip[:20]) and got_ip[20] is None)
 
+print("\n=== plans ===")
+check("new users start on starter", au.user_for_session(au.create_session(uid))["plan"] == "starter")
+check("entitlements ladder", A.entitled("starter","builder_index") and not A.entitled("starter","builder_stocks") and A.entitled("desk","builder_stocks") and not A.entitled("desk","history") and A.entitled("pro","history"))
+check("set_plan by email", au.set_plan("zico@finostat.com", "desk") and au.plan_of(uid) == "desk")
+check("session reflects the new plan", au.user_for_session(au.create_session(uid))["plan"] == "desk")
+check("unknown user -> False", au.set_plan("nobody@x.com", "pro") is False)
+try: au.set_plan("zico@finostat.com", "platinum"); bad = False
+except ValueError: bad = True
+check("invalid plan rejected", bad)
+rid = au.request_upgrade(uid, "pro", "please")
+check("upgrade request recorded", rid and au.pending_requests()[0]["plan"] == "pro" and au.pending_requests()[0]["email"] == "zico@finostat.com")
+check("request rate limited (3/hour)", au.request_upgrade(uid, "pro") and au.request_upgrade(uid, "pro") and au.request_upgrade(uid, "pro") is None)
+au.mark_handled(rid); check("handled requests drop off the list", all(r["id"] != rid for r in au.pending_requests()))
+# migration: a pre-plan database gains the column
+old_db = tmp / "old.db"; import sqlite3
+c = sqlite3.connect(old_db); c.execute("CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, created REAL NOT NULL, last_seen REAL)"); c.execute("INSERT INTO users(email,created) VALUES('old@x.com',1)"); c.commit(); c.close()
+au_old = A.Auth(old_db)
+check("pre-plan database migrated, existing user is starter", au_old.list_users()[0]["plan"] == "starter", au_old.list_users())
+
 print("\n=== corrupt database self-heals ===")
 bad = tmp / "corrupt.db"
 bad.write_bytes(b"this is not a sqlite file at all, just garbage bytes\n" * 20)

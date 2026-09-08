@@ -93,6 +93,10 @@ layer do not change — they never learn where the prices came from.
 | `GET /api/symbols?q=` | Search the stock universe + indices (`limit` ≤ 50); Nifty 50 and F&O names rank first |
 | `GET /api/symbols?group=nifty50` | The 50 Nifty 50 constituents with live quotes (NSE's official list, refreshed daily) |
 | `GET /api/quote?s=A,B` | Quotes for explicit keys, e.g. `NSE:RELIANCE,NIFTY 50` (≤ 50) |
+| `GET /api/underlyings` | Everything a strategy can be built on: the four indices + every F&O stock, with the caller's plan |
+| `GET /api/chain?u=NIFTY 50` | On-demand option chain (ATM ± 10 strikes, `expiry=` optional) with IV and greeks; 403 with `need` when the plan doesn't cover it |
+| `POST /api/strategy` | `{u, expiry?, preset}` or `{u, legs:[{right,strike,qty}]}` → priced legs, net premium, max P&L, breakevens, payoff curve, greeks |
+| `POST /auth/upgrade` | Signed-in: `{plan, note}` records an upgrade request and emails the owner |
 | `GET /api/alerts` | Signed-in user's alert rules and recent firings |
 | `POST /api/alerts` | Create a rule `{metric, strike?, cmp, value, email}`; evaluated immediately and on every live tick |
 | `POST /api/alerts/<id>/rearm`, `.../delete` | Re-arm a fired rule / remove a rule |
@@ -221,3 +225,30 @@ which is in effect). Each NSE stock in the universe carries an `n50` flag that f
 that list, the terminal's **N50** panel shows all 50 live sorted by % change, and a row
 click adds the stock to the watchlist. Index membership changes twice a year, which is
 why this is fetched rather than hard-coded.
+
+## Strategy builder and on-demand chains
+
+Streaming every F&O chain would need ~17,000 contracts, so chains are subscribed
+**on demand**: `chains.ChainManager` resolves an underlying's near-expiry strikes (ATM ± 10)
+from `contracts.ContractIndex` -- a compact index of every option contract, built once from
+the instrument masters -- and subscribes them on the feed's dynamic socket (`upstoxfeed`,
+a third persistent socket that idles when empty). A chain stays warm while looked at and is
+dropped after 10 idle minutes; at most 40 are warm at once (~1,700 contracts, one socket).
+
+IV and greeks are computed server-side (`bs.py`, Black-Scholes, 6.5% flat rate) from the
+streamed prices, because Upstox's greeks mode would shrink the LTPC budget to 2,000.
+`builder.py` holds the presets and the payoff maths; breakevens and max P&L are exact
+(payoff at expiry is piecewise-linear, evaluated at the kinks).
+
+## Plans
+
+`users.plan` is `starter` (default), `desk` or `pro`; `auth.ENTITLEMENTS` maps features to
+the minimum plan (`builder_index` → starter, `builder_stocks` → desk, `history` → pro).
+Anonymous visitors get Starter's entitlements. **Payment collection is not wired**: users
+click *Request upgrade* in the terminal, the owner gets an email, and grants the plan:
+
+```bash
+fly ssh console --app finostat -C "python3 /app/server/admin.py users"
+fly ssh console --app finostat -C "python3 /app/server/admin.py set-plan someone@example.com desk"
+fly ssh console --app finostat -C "python3 /app/server/admin.py requests"
+```

@@ -114,6 +114,26 @@ class Feed:
     def refresh(self) -> None:  # pragma: no cover - overridden
         raise NotImplementedError
 
+    # -- hooks for on-demand option chains (chains.ChainManager) ------------
+    def spot_of(self, key: str):
+        """Last price for an index label or a universe key, from the snapshot."""
+        snap = self.snapshot()
+        for q in snap.get("quotes") or []:
+            if q.get("symbol") == key:
+                return q.get("price")
+        e = (snap.get("universe") or {}).get(key)
+        return e.get("price") if e else None
+
+    def price_of(self, key: str):
+        """(ltp, close) for a subscribed contract key; feeds that stream override."""
+        return (None, None)
+
+    def subscribe_dynamic(self, metas: dict) -> None:
+        """Start streaming extra contract keys (meta per key). Overridden by live feeds."""
+
+    def unsubscribe_dynamic(self, keys) -> None:
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Simulator

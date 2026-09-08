@@ -104,3 +104,18 @@ def send_alert_email(to: str, subject: str, lines) -> bool:
         log.info("alert email sent to %s (%d rule%s)", to, len(lines), "" if len(lines) == 1 else "s")
         return True
     return False
+
+
+def send_owner_note(subject: str, lines) -> bool:
+    """A plain note to the site owner (upgrade requests and the like)."""
+    lines = list(lines)
+    to = os.environ.get("OWNER_EMAIL") or os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or ""
+    if not configured() or not to:
+        log.warning("owner note not sent (SMTP/OWNER_EMAIL unset): %s -- %s", subject, " | ".join(lines))
+        return True
+    msg = EmailMessage()
+    msg["Subject"] = subject[:160]
+    msg["From"] = f"Finostat <{os.environ.get('SMTP_FROM') or os.environ.get('SMTP_USER')}>"
+    msg["To"] = to
+    msg.set_content("\n".join(lines) + "\n")
+    return _deliver(msg)

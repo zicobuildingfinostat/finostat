@@ -201,3 +201,20 @@ always use `FINOSTAT_PUBLIC_URL`, never the request's Host header.
 What an account unlocks today: the terminal's **watchlist** and **layout**
 (which panels are shown) sync to the account across devices. Signed-out users
 keep the same features in browser storage only.
+
+---
+
+## 7. Plans and upgrades (manual until payments are wired)
+
+Accounts start on **Starter** (free: index strategy builder). **Desk** unlocks strategy
+building on every F&O stock; **Pro** is reserved for historical replay. When a user
+clicks *Request upgrade* in the terminal you get an email; take payment however you like
+(UPI, bank transfer), then grant the plan:
+
+```bash
+~/.fly/bin/flyctl ssh console --app finostat -C "python3 /app/server/admin.py set-plan THEIR@EMAIL desk"
+```
+
+`admin.py users` lists everyone with their plan; `admin.py requests` lists pending
+requests. Wiring Razorpay/Stripe to grant plans automatically is the natural next step and
+needs your merchant account keys.

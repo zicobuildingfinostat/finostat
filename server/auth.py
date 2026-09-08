@@ -33,7 +33,16 @@ CREATE TABLE IF NOT EXISTS users(
   id        INTEGER PRIMARY KEY,
   email     TEXT NOT NULL UNIQUE,
   created   REAL NOT NULL,
-  last_seen REAL
+  last_seen REAL,
+  plan      TEXT NOT NULL DEFAULT 'starter'
+);
+CREATE TABLE IF NOT EXISTS upgrade_requests(
+  id      INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  plan    TEXT NOT NULL,
+  note    TEXT,
+  ts      REAL NOT NULL,
+  handled INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS magic_links(
   token_hash TEXT PRIMARY KEY,
@@ -67,6 +76,42 @@ def _h(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+# Plan tiers and what they unlock. Rank order matters: a higher plan has every
+# lower plan's entitlements. Payment collection is not wired yet -- plans are
+# granted with admin.py after payment is received out of band.
+PLANS = ("starter", "desk", "pro")
+ENTITLEMENTS = {
+    "builder_index":  "starter",   # strategy builder on the four indices
+    "builder_stocks": "desk",      # ...and every F&O stock
+    "history":        "pro",       # historical replay / backtesting (future)
+}
+
+
+def plan_rank(plan: str) -> int:
+    return PLANS.index(plan) if plan in PLANS else 0
+
+
+def entitled(plan: str, feature: str) -> bool:
+    need = ENTITLEMENTS.get(feature)
+    return need is not None and plan_rank(plan) >= plan_rank(need)
+
+
+def entitlements(plan: str) -> dict:
+    return {f: entitled(plan, f) for f in ENTITLEMENTS}
+
+
+def _migrate(path: pathlib.Path) -> None:
+    """Add columns introduced after a database was first created."""
+    c = sqlite3.connect(path, timeout=10)
+    try:
+        cols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
+        if "plan" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'starter'")
+            c.commit()
+    finally:
+        c.close()
+
+
 def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
     """Apply the schema; if the file is unreadable, set it aside and start clean.
 
@@ -83,6 +128,7 @@ def open_or_quarantine(path: pathlib.Path, schema: str) -> None:
             c.close()
     try:
         apply()
+        _migrate(path)
     except sqlite3.DatabaseError as exc:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         for suffix in ("", "-wal", "-shm", "-journal"):
@@ -190,11 +236,11 @@ class Auth:
             return None
         with self._conn() as c:
             row = c.execute(
-                "SELECT u.id,u.email,s.expires FROM sessions s JOIN users u ON u.id=s.user_id "
+                "SELECT u.id,u.email,u.plan,s.expires FROM sessions s JOIN users u ON u.id=s.user_id "
                 "WHERE s.sid_hash=?", (_h(sid),)).fetchone()
         if row is None or row["expires"] < time.time():
             return None
-        return {"id": row["id"], "email": row["email"]}
+        return {"id": row["id"], "email": row["email"], "plan": row["plan"] or "starter"}
 
     def destroy_session(self, sid: str | None) -> None:
         if not sid:
@@ -210,6 +256,46 @@ class Auth:
                 c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except sqlite3.Error as exc:
             log.warning("checkpoint failed: %s", exc)
+
+    # -- plans --------------------------------------------------------------
+    def set_plan(self, email: str, plan: str) -> bool:
+        if plan not in PLANS:
+            raise ValueError(f"plan must be one of {PLANS}")
+        with self._lock, self._conn() as c:
+            cur = c.execute("UPDATE users SET plan=? WHERE email=?", (plan, email))
+        return cur.rowcount > 0
+
+    def plan_of(self, user_id: int) -> str:
+        with self._conn() as c:
+            row = c.execute("SELECT plan FROM users WHERE id=?", (user_id,)).fetchone()
+        return (row["plan"] if row and row["plan"] else "starter")
+
+    def request_upgrade(self, user_id: int, plan: str, note: str = "") -> int | None:
+        if plan not in PLANS:
+            return None
+        with self._lock, self._conn() as c:
+            recent = c.execute("SELECT COUNT(*) FROM upgrade_requests WHERE user_id=? AND ts>?",
+                               (user_id, time.time() - 3600)).fetchone()[0]
+            if recent >= 3:
+                return None
+            cur = c.execute("INSERT INTO upgrade_requests(user_id,plan,note,ts) VALUES(?,?,?,?)",
+                            (user_id, plan, (note or "")[:500], time.time()))
+        return cur.lastrowid
+
+    def list_users(self) -> list[dict]:
+        with self._conn() as c:
+            rows = c.execute("SELECT id,email,plan,created,last_seen FROM users ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    def pending_requests(self) -> list[dict]:
+        with self._conn() as c:
+            rows = c.execute("SELECT r.id,u.email,r.plan,r.note,r.ts FROM upgrade_requests r JOIN users u ON u.id=r.user_id "
+                             "WHERE r.handled=0 ORDER BY r.id").fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_handled(self, request_id: int) -> None:
+        with self._lock, self._conn() as c:
+            c.execute("UPDATE upgrade_requests SET handled=1 WHERE id=?", (request_id,))
 
     def email_for(self, user_id: int) -> str | None:
         with self._conn() as c:

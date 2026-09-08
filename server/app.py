@@ -30,6 +30,9 @@ import news
 import alerts as alertsmod
 import auth as authmod
 import backup
+import builder
+import chains
+import contracts
 import indices
 import mailer
 import pages
@@ -53,6 +56,24 @@ ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
 BACKUP = backup.DailyBackup(AUTH.path, AUTH.path.parent / "backups")
 CONSTITUENTS = indices.Constituents("NIFTY50")
 FEED.index_members = CONSTITUENTS.members
+CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts.ContractIndex())
+
+
+def _plan_of(user) -> str:
+    """Anonymous visitors get the free tier's entitlements; the point of Starter
+    being free is that people can try the index builder before signing in."""
+    return (user or {}).get("plan") or "starter"
+
+
+def _gate(user, ukey: str):
+    """(ok, error payload). Index chains are Starter; stock chains need Desk."""
+    feature = "builder_index" if ukey in contracts.INDEX_UNDERLYINGS else "builder_stocks"
+    plan = _plan_of(user)
+    if authmod.entitled(plan, feature):
+        return True, None
+    need = authmod.ENTITLEMENTS[feature]
+    return False, {"error": "plan required", "need": need, "plan": plan,
+                   "signed_in": user is not None, "feature": feature}
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 
 # Routes the marketing page links to that are not built yet. They get an
@@ -314,7 +335,9 @@ class Handler(BaseHTTPRequestHandler):
                 user = self._current_user()
                 if user is None:
                     return self._json({"error": "not signed in"}, 401)
-                return self._json({"email": user["email"], "prefs": AUTH.get_prefs(user["id"])})
+                return self._json({"email": user["email"], "plan": user.get("plan", "starter"),
+                                   "entitlements": authmod.entitlements(user.get("plan", "starter")),
+                                   "prefs": AUTH.get_prefs(user["id"])})
             if route == "/api/alerts":
                 user = self._current_user()
                 if user is None:
@@ -362,6 +385,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "load": _load(),
                                    "backup": BACKUP.stats(),
                                    "indices": {"nifty50": CONSTITUENTS.stats()},
+                                   "chains": CHAINS.stats(),
                                    "time": time.time()})
             if route == "/api/symbols":
                 qs = parse_qs(parsed.query)
@@ -378,6 +402,24 @@ class Handler(BaseHTTPRequestHandler):
                 keys = [k for k in parse_qs(parsed.query).get("s", [""])[0].split(",") if k]
                 snap = FEED.snapshot()
                 return self._json(universe.lookup(snap.get("universe") or {}, snap.get("quotes") or [], keys))
+            if route == "/api/underlyings":
+                user = self._current_user()
+                plan = _plan_of(user)
+                return self._json({"underlyings": CHAINS.underlyings(), "plan": plan,
+                                   "signed_in": user is not None,
+                                   "entitlements": authmod.entitlements(plan)})
+            if route == "/api/chain":
+                qs = parse_qs(parsed.query)
+                ukey = qs.get("u", [""])[0]
+                ok, err = _gate(self._current_user(), ukey)
+                if not ok:
+                    return self._json(err, 403)
+                try:
+                    expiry = int(qs.get("expiry", ["0"])[0]) or None
+                except ValueError:
+                    expiry = None
+                out = CHAINS.chain(ukey, expiry)
+                return self._json(out, 404 if "error" in out and "rows" not in out else 200)
             if route == "/api/history":
                 qs = parse_qs(parsed.query)
                 since = None
@@ -458,6 +500,78 @@ class Handler(BaseHTTPRequestHandler):
                     fn = ALERTS.rearm if parts[4] == "rearm" else ALERTS.delete
                     return self._json({"ok": fn(user["id"], int(parts[3]))})
                 return self._json({"error": "not found"}, 404)
+            if route == "/api/strategy":
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if not isinstance(body, dict):
+                    return self._json({"error": "expected an object"}, 400)
+                ukey = str(body.get("u", ""))
+                ok, err = _gate(self._current_user(), ukey)
+                if not ok:
+                    return self._json(err, 403)
+                expiry = body.get("expiry")
+                expiry = int(expiry) if isinstance(expiry, (int, float)) and expiry else None
+                chain = CHAINS.chain(ukey, expiry)
+                if "rows" not in chain:
+                    return self._json(chain, 404)
+                strikes = [r["strike"] for r in chain["rows"]]
+                preset = body.get("preset")
+                if preset:
+                    legs = builder.preset_legs(str(preset), chain["atm"], chain["step"], strikes)
+                    if legs is None:
+                        return self._json({"error": "preset needs strikes outside the loaded chain"}, 400)
+                else:
+                    raw = body.get("legs")
+                    if not isinstance(raw, list) or not raw or len(raw) > 8:
+                        return self._json({"error": "1-8 legs required"}, 400)
+                    legs = []
+                    for l in raw:
+                        try:
+                            right, strike, qty = str(l["right"]).upper(), int(l["strike"]), int(l["qty"])
+                        except (KeyError, TypeError, ValueError):
+                            return self._json({"error": "each leg needs right, strike, qty"}, 400)
+                        if right not in ("CE", "PE") or strike not in strikes or not (-10 <= qty <= 10) or qty == 0:
+                            return self._json({"error": f"bad leg {l}"}, 400)
+                        legs.append({"right": right, "strike": strike, "qty": qty})
+                by_strike = {r["strike"]: r for r in chain["rows"]}
+                ivs = {}
+                for l in legs:
+                    side = by_strike[l["strike"]].get(l["right"].lower())
+                    if not side:
+                        return self._json({"error": "chain still warming; try again in a moment", "warming": True}, 409)
+                    l["price"] = side["ltp"]
+                    l["iv"] = side.get("iv")
+                    l["delta"] = side.get("delta")
+                    if side.get("iv"):
+                        ivs[(l["right"], l["strike"])] = side["iv"] / 100.0
+                metrics = builder.evaluate(chain["spot"], legs, chain["lot"], chain["t_years"], ivs)
+                return self._json({"underlying": ukey, "name": chain["name"], "kind": chain["kind"],
+                                   "spot": chain["spot"], "expiry": chain["expiry"], "expiries": chain["expiries"],
+                                   "lot": chain["lot"], "atm": chain["atm"], "step": chain["step"],
+                                   "strikes": strikes, "legs": legs, "metrics": metrics,
+                                   "live": chain["live"], "warming": chain["warming"]})
+            if route == "/auth/upgrade":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    body = {}
+                plan = str(body.get("plan", "desk")).lower()
+                rid = AUTH.request_upgrade(user["id"], plan, str(body.get("note", ""))[:500])
+                if rid is None:
+                    return self._json({"error": "invalid plan or too many requests"}, 429)
+                mailer.send_owner_note(
+                    f"Finostat upgrade request: {user['email']} -> {plan}",
+                    [f"{user['email']} (currently {user.get('plan','starter')}) requested the {plan} plan.",
+                     f"Note: {body.get('note') or '-'}",
+                     f"Grant it with:  fly ssh console --app finostat -C \"python3 /app/server/admin.py set-plan {user['email']} {plan}\""])
+                return self._json({"ok": True, "request": rid})
             if route == "/api/me/prefs":
                 user = self._current_user()
                 if user is None:
@@ -607,6 +721,7 @@ def main() -> int:
     ALERTS.start()
     BACKUP.start()
     CONSTITUENTS.start()
+    CHAINS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -619,6 +734,7 @@ def main() -> int:
         ALERTS.stop()
         BACKUP.stop()
         CONSTITUENTS.stop()
+        CHAINS.stop()
         AUTH.checkpoint()
         threading.Thread(target=server.shutdown, daemon=True).start()
 
