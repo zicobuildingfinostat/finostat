@@ -95,6 +95,9 @@ class UpstoxFeed(Feed):
         self._meta: dict[str, dict] = {}
         self._spot_key: str | None = None
         self._ws: wsclient.WebSocket | None = None
+        self._sockets: set = set()                     # every open socket, closed only by its reader
+        self._sockets_lock = threading.Lock()
+        self._threads: list = []
         self._dirty = threading.Event()
         self._ticks = 0
         self._stop_extra = threading.Event()
@@ -113,13 +116,45 @@ class UpstoxFeed(Feed):
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="upstox", daemon=True)
         self._thread.start()
+        self._threads.append(self._thread)
         threading.Thread(target=self._publisher, name="upstox-publish", daemon=True).start()
 
-    def stop(self) -> None:
+    def _track(self, thread: threading.Thread) -> threading.Thread:
+        thread.start()
+        self._threads.append(thread)
+        return thread
+
+    def _register(self, ws) -> None:
+        with self._sockets_lock:
+            self._sockets.add(ws)
+
+    def _release(self, ws) -> None:
+        """The reader is done with ws: forget it and close it (this thread owns it)."""
+        with self._sockets_lock:
+            self._sockets.discard(ws)
+        ws.close()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Signal every reader, wake it, and WAIT for it to exit.
+
+        Sockets are closed by their reading threads, never here: see
+        wsclient.WebSocket.interrupt for the descriptor-reuse bug this avoids.
+        The wait matters too -- the caller is about to back up and checkpoint
+        the database, and no feed thread may still be inside a socket call.
+        """
         super().stop()
         self._dirty.set()
-        if self._ws is not None:
-            self._ws.close()
+        self._dyn_wake.set()
+        with self._sockets_lock:
+            live = list(self._sockets)
+        for ws in live:
+            ws.interrupt()
+        deadline = time.monotonic() + timeout
+        for t in list(self._threads):
+            t.join(max(0.0, deadline - time.monotonic()))
+        stuck = [t.name for t in self._threads if t.is_alive()]
+        if stuck:
+            log.warning("feed threads still running after %.0fs: %s", timeout, ", ".join(stuck))
 
     def refresh(self) -> None:
         """Pushed, not polled."""
@@ -306,8 +341,8 @@ class UpstoxFeed(Feed):
                 groups = [keys[i:i + self.SOCKET_CAP] for i in range(0, len(keys), self.SOCKET_CAP)]
                 log.info("%d instruments across %d socket(s)", len(keys), len(groups))
                 for n, group in enumerate(groups[1:], start=2):
-                    threading.Thread(target=self._socket_loop, args=(n, group),
-                                     name=f"upstox-{n}", daemon=True).start()
+                    self._track(threading.Thread(target=self._socket_loop, args=(n, group),
+                                                 name=f"upstox-{n}", daemon=True))
                 ws = self._open(1, groups[0])
                 self._ws = ws
                 backoff = 1.0
@@ -324,7 +359,7 @@ class UpstoxFeed(Feed):
             finally:
                 self._stop_extra.set()
                 if self._ws is not None:
-                    self._ws.close()
+                    self._release(self._ws)
                     self._ws = None
             if self._stop.is_set():
                 break
@@ -348,7 +383,7 @@ class UpstoxFeed(Feed):
                 log.exception("socket %d: unexpected failure", n)
             finally:
                 if ws is not None:
-                    ws.close()
+                    self._release(ws)
             if self._stop.is_set() or stop_extra.is_set():
                 break
             self._stop.wait(backoff)
@@ -366,7 +401,7 @@ class UpstoxFeed(Feed):
             ws = self._dyn_ws
             if not self._dyn_started:
                 self._dyn_started = True
-                threading.Thread(target=self._dyn_loop, name="upstox-dyn", daemon=True).start()
+                self._track(threading.Thread(target=self._dyn_loop, name="upstox-dyn", daemon=True))
         if ws is not None and new:
             try:
                 self._send_sub(ws, "sub", new, tag="dyn")
@@ -412,6 +447,7 @@ class UpstoxFeed(Feed):
                 ws = wsclient.connect(url, headers={
                     "Authorization": f"Bearer {config.UPSTOX_ACCESS_TOKEN}",
                     "Accept": "*/*", "User-Agent": USER_AGENT}, timeout=20.0)
+                self._register(ws)
                 ws.settimeout(60.0)
                 self._send_sub(ws, "sub", keys, tag="dyn")
                 with self._dyn_lock:
@@ -427,7 +463,7 @@ class UpstoxFeed(Feed):
                 with self._dyn_lock:
                     self._dyn_ws = None
                 if ws is not None:
-                    ws.close()
+                    self._release(ws)
             if self._stop.is_set():
                 break
             self._stop.wait(backoff)
@@ -441,6 +477,7 @@ class UpstoxFeed(Feed):
             "Accept": "*/*",
             "User-Agent": USER_AGENT,
         }, timeout=20.0)
+        self._register(ws)
         # Read timeout must exceed Upstox's quiet gaps, or an idle market tears
         # down a healthy socket.
         ws.settimeout(60.0)

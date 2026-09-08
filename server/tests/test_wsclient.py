@@ -100,5 +100,39 @@ check("fragmented message reassembled", (k1,m1)==("binary",b"AAABBBCCC"), (k1,m1
 check("70KB frame intact", k2=="binary" and hashlib.sha256(m2).hexdigest()==RESULT["big_sha"], len(m2) if m2 else None)
 check("text message decoded", (k3,m3)==("text",b'{"type":"order"}'), (k3,m3))
 check("close frame raises WebSocketClosed", "1000" in closed and "bye" in closed, closed)
+print("\n=== interrupt(): wake a reader from another thread without freeing its fd ===")
+# A silent server: accepts, completes the handshake, then says nothing.
+def quiet(srv):
+    conn,_ = srv.accept()
+    req=b""
+    while b"\r\n\r\n" not in req: req += conn.recv(4096)
+    key = [l.split(b":",1)[1].strip() for l in req.split(b"\r\n") if l.lower().startswith(b"sec-websocket-key")][0]
+    acc = base64.b64encode(hashlib.sha1(key+b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+    conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+acc+b"\r\n\r\n")
+    RESULT["quiet_conn"] = conn            # keep it open; the client will shut down its side
+s2 = socket.socket(); s2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1); s2.bind(("127.0.0.1",0)); s2.listen(1)
+threading.Thread(target=quiet, args=(s2,), daemon=True).start()
+ws2 = WebSocket(f"ws://127.0.0.1:{s2.getsockname()[1]}/stream")
+fd = ws2.sock.fileno()
+woke = {}
+def reader():
+    t0=time.time()
+    try: ws2.recv(); woke["how"]="returned"
+    except WebSocketClosed as e: woke["how"]="closed:"+str(e)
+    except Exception as e: woke["how"]="error:"+type(e).__name__
+    woke["after"]=time.time()-t0
+    woke["fd_still_ours"]=ws2.sock.fileno()==fd       # nobody closed it under us
+    ws2.close()                                       # the reader owns the close
+rt=threading.Thread(target=reader, daemon=True); rt.start(); time.sleep(0.3)
+ws2.interrupt()                                       # from THIS thread, like stop() does
+probe=open(os.devnull,"rb"); probe_fd=probe.fileno(); probe.close()
+rt.join(3.0)
+check("reader wakes promptly", not rt.is_alive() and woke.get("after",9)<2, woke)
+check("reader sees a closed socket, not a timeout", str(woke.get("how","")).startswith("closed"), woke)
+check("fd stays reserved until the reader closes it", woke.get("fd_still_ours") is True and probe_fd!=fd, (probe_fd, fd, woke))
+try: ws2.send_text("late"); late="sent"
+except WebSocketClosed: late="refused"
+check("send after interrupt raises WebSocketClosed", late=="refused", late)
+
 print("\nRESULT:", "ALL PASS" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

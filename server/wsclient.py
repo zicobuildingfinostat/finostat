@@ -246,6 +246,22 @@ class WebSocket:
     def settimeout(self, seconds: float | None) -> None:
         self.sock.settimeout(seconds)
 
+    def interrupt(self) -> None:
+        """Wake a reader blocked in recv() from ANOTHER thread, without closing.
+
+        Only the thread that reads a socket may close() it. close() releases
+        the descriptor number, and the OpenSSL BIO the reader is still inside
+        keeps that number as a plain int -- so its next read or write lands
+        on whatever file the process opened next. In production that was the
+        accounts database (a TLS record header inside page 1 of finostat.db).
+        shutdown() makes recv() return immediately and keeps the number ours.
+        """
+        self._closed = True
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
     def close(self, send_close: bool = True) -> None:
         if send_close and not self._closed:
             try:
