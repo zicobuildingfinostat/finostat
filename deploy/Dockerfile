@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
     FINOSTAT_HOST=0.0.0.0
 
 WORKDIR /app
-COPY index.html og.jpg robots.txt sitemap.xml /app/
+COPY index.html og.jpg founder.jpg robots.txt sitemap.xml /app/
 COPY server/ /app/server/
 
 # Run unprivileged.
