@@ -46,7 +46,7 @@ DASHBOARD = r"""<!DOCTYPE html>
   --display:"Barlow Condensed",Impact,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html,body{min-height:100%}
 html{background:var(--bg)}
 body{color:var(--text);font-family:var(--mono);font-size:12.5px;line-height:1.45;
   display:flex;flex-direction:column;min-height:100vh;-webkit-font-smoothing:antialiased}
@@ -58,7 +58,7 @@ button{cursor:pointer;background:none;border:0}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
 /* top bar */
-.top{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;
+.top{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;flex-shrink:0;
   background:rgba(12,6,38,.95);border-bottom:1px solid var(--line-strong);position:relative;z-index:2}
 .top .logo{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;
   background:linear-gradient(180deg,#fff 20%,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -73,7 +73,7 @@ button{cursor:pointer;background:none;border:0}
 .mkt{color:var(--up)}.mkt.closed{color:var(--down)}
 
 /* tape */
-.tape{background:#06031a;border-bottom:1px solid var(--line);overflow:hidden;font-size:11.5px;position:relative;z-index:1;white-space:nowrap}
+.tape{background:#06031a;border-bottom:1px solid var(--line);overflow:hidden;font-size:11.5px;position:relative;z-index:1;white-space:nowrap;flex-shrink:0}
 .tape-inner{display:inline-flex;width:max-content;animation:tape 60s linear infinite}
 .tape:hover .tape-inner{animation-play-state:paused}
 .tape span{padding:6px 18px;border-right:1px solid var(--line);display:inline-flex;gap:9px}
@@ -85,11 +85,37 @@ button{cursor:pointer;background:none;border:0}
 /* grid */
 .desk{flex:1;display:grid;gap:10px;padding:10px;position:relative;z-index:1;
   grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);
-  grid-template-rows:minmax(300px,1.25fr) minmax(220px,1fr);
-  grid-template-areas:"sheet side" "wire side2";
+  grid-auto-rows:minmax(220px,auto);grid-auto-flow:dense;
   max-width:1500px;margin:0 auto;width:100%}
-.a-sheet{grid-area:sheet}.a-side{grid-area:side;display:flex;flex-direction:column;gap:10px;min-height:0}
-.a-wire{grid-area:wire}.a-side2{grid-area:side2}
+[hidden]{display:none!important}
+.a-sheet{grid-row:span 2;min-height:340px}
+.a-side{grid-row:span 2;display:flex;flex-direction:column;gap:10px;min-height:0}
+.a-wire{min-height:260px}
+/* layout menu */
+.layout{position:relative}
+.layout summary{list-style:none;cursor:pointer;letter-spacing:.06em}
+.layout summary::-webkit-details-marker{display:none}
+.layout summary:hover{color:var(--gold)}
+.layout-menu{position:absolute;right:0;top:22px;background:var(--panel);border:1px solid var(--line-strong);
+  padding:8px 10px;display:grid;gap:6px;min-width:150px;z-index:20;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+.layout-menu label{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:11px;letter-spacing:.06em;cursor:pointer}
+.layout-menu input{accent-color:#f5c842}
+#who form{display:inline}
+#who button{color:var(--faint);letter-spacing:.06em;font-size:11px}
+#who button:hover{color:var(--down)}
+#who .me{color:var(--cyan);margin-right:8px}
+/* watchlist */
+.watch{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1px;background:var(--line);flex:1;align-content:start}
+.watch .w{background:var(--panel);padding:10px 12px;position:relative}
+.watch .w .sym{font-size:10.5px;letter-spacing:.1em;color:var(--cyan)}
+.watch .w .px{font-family:var(--display);font-size:26px;line-height:1;margin:4px 0 2px;letter-spacing:.02em}
+.watch .w .ch{font-size:11px}
+.watch .w button{position:absolute;top:6px;right:8px;color:var(--faint);font-size:11px}
+.watch .w button:hover{color:var(--down)}
+.watch-add{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}
+.watch-add select{flex:1;background:#06031a;border:1px solid var(--line-strong);color:var(--text);font-size:11px;padding:5px 6px;min-width:0}
+.watch-add button{background:var(--gold);color:#2a1a02;font-weight:600;font-size:10.5px;letter-spacing:.08em;padding:5px 10px}
+.watch-empty{padding:12px;color:var(--faint);font-size:11px}
 .panel{background:var(--panel);border:1px solid var(--line-strong);display:flex;flex-direction:column;min-width:0;min-height:0;box-shadow:0 14px 40px rgba(0,0,0,.35)}
 .panel-hd{display:flex;align-items:center;gap:12px;padding:6px 11px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);font-size:11px;letter-spacing:.06em;flex-shrink:0}
 .panel-hd .k{color:var(--gold);font-weight:600}
@@ -156,8 +182,8 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
   .top .r{gap:10px;flex-wrap:wrap}
 }
 @media (max-width:980px){
-  .desk{grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"sheet" "side" "side2" "wire"}
-  .a-sheet{min-height:340px}
+  .desk{grid-template-columns:1fr;grid-auto-flow:row}
+  .a-sheet,.a-side{grid-row:auto}
   .al-form{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
   .al-form button{grid-column:1/-1}
 }
@@ -173,6 +199,10 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <span class="live off" id="conn">CONNECTING</span>
     <span id="clock">--:--:-- IST</span>
     <span class="mkt" id="mkt">NSE —</span>
+    <details class="layout"><summary>LAYOUT</summary>
+      <div class="layout-menu" id="layout-menu"></div>
+    </details>
+    <span id="who"><a href="/login">SIGN IN</a></span>
     <a href="/">← SITE</a>
   </div>
 </header>
@@ -181,7 +211,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 
 <main class="desk">
 
-  <section class="panel a-sheet" aria-label="Butterfly sheet">
+  <section class="panel a-sheet" id="p-sheet" aria-label="Butterfly sheet">
     <div class="panel-hd"><span class="k">BFLY</span><span class="s" id="sheet-sym">NIFTY</span><span>1:2:1</span>
       <span class="r"><span id="sheet-note">seeded</span></span></div>
     <div class="scroll"><table>
@@ -191,7 +221,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
   </section>
 
   <div class="a-side">
-    <section class="panel" style="flex:1" aria-label="ATM straddle">
+    <section class="panel" style="flex:1" id="p-straddle" aria-label="ATM straddle">
       <div class="panel-hd"><span class="k">STRD</span><span class="s">ATM STRADDLE</span>
         <span class="r"><b id="strd-last" style="color:var(--gold)">—</b></span></div>
       <div class="chart">
@@ -203,7 +233,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
       </div>
     </section>
 
-    <section class="panel" style="flex:1.25" aria-label="Alerts">
+    <section class="panel" style="flex:1.25" id="p-alerts" aria-label="Alerts">
       <div class="panel-hd"><span class="k">ALRT</span><span class="s">MY ALERTS</span>
         <span class="r"><span id="al-count">0 ARMED</span></span></div>
       <form class="al-form" id="al-form">
@@ -222,13 +252,20 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
   </div>
 
-  <section class="panel a-wire" aria-label="News wire">
+  <section class="panel" id="p-watch" aria-label="Watchlist">
+    <div class="panel-hd"><span class="k">WATCH</span><span class="s">MY WATCHLIST</span>
+      <span class="r"><span id="watch-sync">local</span></span></div>
+    <div class="watch scroll" id="watch"></div>
+    <form class="watch-add" id="watch-add"><select id="watch-pick"></select><button type="submit">ADD</button></form>
+  </section>
+
+  <section class="panel a-wire" id="p-wire" aria-label="News wire">
     <div class="panel-hd"><span class="k">WIRE</span><span class="s">FIN · GEO</span>
       <span class="r"><span class="live off" id="wire-live">RSS</span></span></div>
     <ul class="wire-list scroll" id="wire-list"></ul>
   </section>
 
-  <section class="panel a-side2" aria-label="Mini sheet">
+  <section class="panel" id="p-mini" aria-label="Mini sheet">
     <div class="panel-hd"><span class="k">MINI</span><span class="s" id="mini-sym">BANKNIFTY · BUY/SELL</span></div>
     <div class="scroll"><table>
       <thead><tr><th>STRIKE</th><th>BUY</th><th>SELL</th><th>Δ</th></tr></thead>
@@ -470,10 +507,93 @@ function ingestNews(items){
   while(wireList.children.length>80) wireList.lastElementChild.remove();
 }
 
+/* ---------- account, prefs, watchlist, layout ---------- */
+var PANELS=[['sheet','BFLY sheet'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['wire','News wire'],['mini','Mini sheet']];
+var prefs={watchlist:['NIFTY 50','BANKNIFTY','INDIA VIX'],layout:{hide:[]}};
+try{ var lp=JSON.parse(localStorage.getItem('fino_prefs_v1')||'null'); if(lp&&lp.watchlist) prefs=lp; }catch(e){}
+var signedIn=false, saveTimer=null;
+var whoEl=document.getElementById('who'), syncEl=document.getElementById('watch-sync');
+
+function savePrefs(){
+  try{ localStorage.setItem('fino_prefs_v1',JSON.stringify(prefs)); }catch(e){}
+  if(!signedIn) return;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){
+    syncEl.textContent='saving…';
+    fetch('/api/me/prefs',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},
+      body:JSON.stringify(prefs)})
+    .then(function(r){ syncEl.textContent=r.ok?'synced':'sync failed'; })
+    .catch(function(){ syncEl.textContent='sync failed'; });
+  },400);
+}
+function renderWho(user){
+  if(user){
+    whoEl.innerHTML='<span class="me">'+esc(user.email)+'</span><form method="post" action="/auth/logout"><button type="submit">SIGN OUT</button></form>';
+  } else {
+    whoEl.innerHTML='<a href="/login">SIGN IN</a>';
+  }
+}
+fetch('/api/me',{credentials:'same-origin'}).then(function(r){ return r.ok?r.json():null; }).then(function(me){
+  if(me&&me.email){
+    signedIn=true; renderWho(me);
+    if(me.prefs&&me.prefs.watchlist){ prefs=me.prefs; if(!prefs.layout) prefs.layout={hide:[]}; }
+    syncEl.textContent='synced';
+    try{ localStorage.setItem('fino_prefs_v1',JSON.stringify(prefs)); }catch(e){}
+    applyLayout(); renderWatch();
+  } else { renderWho(null); syncEl.textContent='local · sign in to sync'; }
+}).catch(function(){ renderWho(null); });
+
+/* layout */
+var menu=document.getElementById('layout-menu');
+menu.innerHTML=PANELS.map(function(p){ return '<label><input type="checkbox" data-p="'+p[0]+'"> '+p[1]+'</label>'; }).join('');
+function applyLayout(){
+  var hide=(prefs.layout&&prefs.layout.hide)||[];
+  PANELS.forEach(function(p){
+    var el=document.getElementById('p-'+p[0]); if(el) el.hidden=hide.indexOf(p[0])>=0;
+    var cb=menu.querySelector('input[data-p="'+p[0]+'"]'); if(cb) cb.checked=hide.indexOf(p[0])<0;
+  });
+  var side=document.querySelector('.a-side');
+  if(side) side.hidden=(hide.indexOf('straddle')>=0&&hide.indexOf('alerts')>=0);
+}
+menu.addEventListener('change',function(e){
+  var cb=e.target; if(!cb.matches('input[data-p]')) return;
+  var id=cb.getAttribute('data-p'); var hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[];
+  var i=hide.indexOf(id);
+  if(cb.checked&&i>=0) hide.splice(i,1); else if(!cb.checked&&i<0) hide.push(id);
+  applyLayout(); savePrefs();
+});
+applyLayout();
+
+/* watchlist */
+var watchEl=document.getElementById('watch'), pickEl=document.getElementById('watch-pick');
+function renderWatch(){
+  var qs=state.quotes||[];
+  var list=prefs.watchlist||[];
+  if(!list.length){ watchEl.innerHTML='<div class="watch-empty">Nothing watched yet. Pick a symbol below.</div>'; }
+  else watchEl.innerHTML=list.map(function(sym){
+    var q=qs.filter(function(x){ return x.symbol===sym; })[0];
+    var px=q?fmt(q.price):'—', ch=q?((q.change>=0?'▲ ':'▼ ')+Math.abs(q.change).toFixed(2)+'%'):'waiting';
+    return '<div class="w"><div class="sym">'+esc(sym)+'</div><div class="px">'+px+'</div><div class="ch '+(q&&q.change<0?'down':'up')+'">'+ch+'</div><button data-sym="'+esc(sym)+'" title="remove">✕</button></div>';
+  }).join('');
+  var avail=qs.map(function(q){ return q.symbol; }).filter(function(s){ return list.indexOf(s)<0; });
+  pickEl.innerHTML=avail.length?avail.map(function(s){ return '<option>'+esc(s)+'</option>'; }).join(''):'<option value="">all watched</option>';
+}
+watchEl.addEventListener('click',function(e){
+  var b=e.target.closest('button[data-sym]'); if(!b) return;
+  prefs.watchlist=(prefs.watchlist||[]).filter(function(s){ return s!==b.getAttribute('data-sym'); });
+  renderWatch(); savePrefs();
+});
+document.getElementById('watch-add').addEventListener('submit',function(e){
+  e.preventDefault(); var s=pickEl.value; if(!s) return;
+  prefs.watchlist=(prefs.watchlist||[]); if(prefs.watchlist.indexOf(s)<0) prefs.watchlist.push(s);
+  renderWatch(); savePrefs();
+});
+
 /* ---------- ingest a sheet payload ---------- */
 function ingest(d){
   state.lastEvent=Date.now();
-  if(d.quotes && d.quotes.length){ state.quotes=d.quotes; renderTape(d.quotes); }
+  if(d.quotes && d.quotes.length){ state.quotes=d.quotes; renderTape(d.quotes); renderWatch(); }
   if(d.rows && d.rows.length){ applySheet(d.rows, d.atm!=null?d.atm:state.atm); refreshStrikes(); }
   if(d.mini && d.mini.length){ state.mini=d.mini; renderMini(d.mini); }
   if(d.straddle!=null){ state.straddle=d.straddle; pushStraddle(d.straddle); }
@@ -734,3 +854,108 @@ def render_strategy(slug: str, snapshot: dict, computed: dict) -> bytes | None:
     ):
         doc = doc.replace(token, value)
     return doc.encode("utf-8")
+
+
+LOGIN = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Finostat</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0c0626">
+<link rel="icon" href="/og.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0626;--panel:#120a33;--panel-hd:#1c1052;--line:#2c1c66;--line-strong:#4a34a0;
+  --gold:#f5c842;--gold-2:#ffe27a;--cyan:#7fe0f0;--up:#3dd68c;--down:#ff5c6c;
+  --text:#f1edff;--muted:#a89ccf;--faint:#6d609e;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;--body:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Barlow Condensed",Impact,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+html::after{content:"";position:fixed;inset:0;z-index:-1;
+  background:radial-gradient(ellipse 70% 45% at 50% 0%,rgba(122,60,245,.5),transparent 70%),var(--bg)}
+body{min-height:100vh;display:grid;place-items:center;padding:24px;color:var(--text);
+  font-family:var(--body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:repeating-linear-gradient(0deg,rgba(200,180,255,.03) 0 1px,transparent 1px 3px)}
+a{color:inherit;text-decoration:none}
+.card{position:relative;z-index:1;width:min(440px,100%);background:var(--panel);border:1px solid var(--line-strong);
+  box-shadow:0 22px 60px rgba(0,0,0,.45)}
+.hd{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.hd .k{color:var(--gold);font-weight:600}.hd .s{color:var(--cyan)}
+.hd a{margin-left:auto;color:var(--faint)}.hd a:hover{color:var(--gold)}
+.body{padding:26px 24px 24px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+h1{font-family:var(--display);font-weight:600;font-size:38px;line-height:.95;text-transform:uppercase;margin:8px 0 10px}
+p{color:var(--muted)}
+form{margin-top:18px}
+label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+input[type=email]{width:100%;background:#06031a;border:1px solid var(--line-strong);color:var(--text);
+  font:inherit;font-family:var(--mono);font-size:14px;padding:12px 13px;outline:0}
+input[type=email]:focus{border-color:var(--gold)}
+button{width:100%;margin-top:12px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  padding:13px 16px;border:1px solid var(--gold);cursor:pointer;font-weight:600;
+  background:linear-gradient(180deg,var(--gold-2),#f2b830);color:#2a1a02}
+button:hover{filter:brightness(1.08)}
+.note{margin-top:16px;font-size:13px;color:var(--faint);line-height:1.5}
+.msg{padding:12px 14px;border:1px solid var(--line-strong);font-size:14px;margin-top:4px}
+.msg.ok{border-color:var(--up);color:var(--text)}.msg.ok b{color:var(--up)}
+.msg.warn{border-color:var(--gold);color:var(--text)}.msg.warn b{color:var(--gold)}
+.msg.err{border-color:var(--down);color:var(--text)}.msg.err b{color:var(--down)}
+.msg code{font-family:var(--mono);font-size:12px;color:var(--cyan)}
+.foot{padding:12px 14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="hd"><span class="k">AUTH</span><span class="s">SIGN IN · PASSWORDLESS</span><a href="/">← SITE</a></div>
+  <div class="body">
+    <span class="eyebrow">Finostat account</span>
+    <h1>__TITLE__</h1>
+    __MESSAGE__
+    __FORM__
+    <p class="note">No password. We email you a one-time link; it signs you in on the device where you open it, and expires in 15 minutes. First time here? The same link creates your account.</p>
+  </div>
+  <div class="foot">Sessions last 30 days · sign out any time from the terminal</div>
+</div>
+</body>
+</html>
+"""
+
+_LOGIN_FORM = """<form method="post" action="/auth/request">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required autofocus>
+      <button type="submit">Email me a sign-in link →</button>
+    </form>"""
+
+
+def render_login(state: str = "form", smtp_ok: bool = True) -> bytes:
+    states = {
+        "form":    ("Sign in", "", _LOGIN_FORM),
+        "sent":    ("Check your inbox",
+                    '<div class="msg ok"><b>Link sent.</b> Open the email on this device and click the button. '
+                    'Nothing arrives within a minute? Check spam, then request another below.</div>', _LOGIN_FORM),
+        "expired": ("Link expired",
+                    '<div class="msg warn"><b>That link has expired or was already used.</b> '
+                    'Links work once and last 15 minutes. Request a fresh one.</div>', _LOGIN_FORM),
+        "invalid": ("Sign in",
+                    '<div class="msg err"><b>That doesn\'t look like an email address.</b></div>', _LOGIN_FORM),
+        "limited": ("Slow down",
+                    '<div class="msg warn"><b>Too many requests.</b> Wait a few minutes, then try again — '
+                    'and check your inbox, a link is probably already there.</div>', ""),
+        "failed":  ("Couldn't send",
+                    '<div class="msg err"><b>The sign-in email could not be sent.</b> This is on our side, '
+                    'not yours — try again in a moment.</div>', _LOGIN_FORM),
+    }
+    title, message, form = states.get(state, states["form"])
+    if not smtp_ok and state in ("form", "sent"):
+        message += ('<div class="msg warn" style="margin-top:8px"><b>Email delivery isn\'t configured on this '
+                    'server yet.</b> Links are being logged instead of sent — sign-in works only for the operator.</div>')
+    return (LOGIN.replace("__TITLE__", title)
+                 .replace("__MESSAGE__", message)
+                 .replace("__FORM__", form)).encode("utf-8")

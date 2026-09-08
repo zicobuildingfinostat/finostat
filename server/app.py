@@ -22,11 +22,13 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 import config
 import feeds
 import news
+import auth as authmod
+import mailer
 import pages
 import recorder
 import strategies
@@ -41,11 +43,12 @@ log = logging.getLogger("finostat")
 FEED = feeds.build_feed()
 NEWS = news.NewsHub()
 RECORDER = recorder.Recorder()
+AUTH = authmod.Auth()
+PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
 
 # Routes the marketing page links to that are not built yet. They get an
 # on-brand 404 instead of a stack trace, so a stray click never looks broken.
 KNOWN_ROUTES = {
-    "/login": "Sign in", "/signup": "Create your account",
     "/analysis": "Analysis tools", "/live-session": "Book a live session",
     "/learn": "Learn", "/blog": "Blog", "/about": "About", "/founders": "Founders",
     "/contact": "Contact", "/terms": "Terms of service", "/privacy": "Privacy policy",
@@ -220,6 +223,42 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, payload, status: int = 200):
         self._send(_json_safe(payload), "application/json; charset=utf-8", status)
 
+    def _redirect(self, location: str, extra_headers=()):
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        for name, value in extra_headers:
+            self.send_header(name, value)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _secure(self) -> bool:
+        return (self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+                or PUBLIC_URL.startswith("https://"))
+
+    def _client_ip(self) -> str:
+        fwd = self.headers.get("X-Forwarded-For", "")
+        return fwd.split(",")[0].strip() if fwd else (self.client_address[0] if self.client_address else "")
+
+    def _base_url(self) -> str:
+        if PUBLIC_URL:
+            return PUBLIC_URL
+        host = self.headers.get("Host", "localhost")
+        return ("https://" if self._secure() else "http://") + host
+
+    def _current_user(self):
+        sid = authmod.Auth.sid_from_cookie_header(self.headers.get("Cookie"))
+        return AUTH.user_for_session(sid)
+
+    def _read_body(self, limit: int = 64 * 1024) -> bytes:
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            return b""
+        if length <= 0 or length > limit:
+            return b""
+        return self.rfile.read(length)
+
     # -- routing ------------------------------------------------------------
     def do_HEAD(self):
         self.do_GET()
@@ -233,6 +272,23 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/dashboard":
                 return self._send(pages.render_dashboard(FEED.snapshot()),
                                   "text/html; charset=utf-8")
+            if route in ("/login", "/signup"):
+                state = parse_qs(parsed.query).get("state", ["form"])[0]
+                return self._send(pages.render_login(state, mailer.configured()),
+                                  "text/html; charset=utf-8", cache="no-store")
+            if route == "/auth/verify":
+                token = parse_qs(parsed.query).get("token", [""])[0]
+                uid = AUTH.redeem_link(token)
+                if uid is None:
+                    return self._redirect("/login?state=expired")
+                sid = AUTH.create_session(uid)
+                return self._redirect("/dashboard",
+                                      [("Set-Cookie", authmod.Auth.cookie_header(sid, self._secure()))])
+            if route == "/api/me":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                return self._json({"email": user["email"], "prefs": AUTH.get_prefs(user["id"])})
             if route.startswith("/strategies/"):
                 slug = route[len("/strategies/"):]
                 snap = FEED.snapshot()
@@ -268,6 +324,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "ticks": snap.get("ticks"), "sheet_subscribers": SHEETS.count(),
                                    "interval": getattr(FEED, "interval", None),
                                    "recorder": RECORDER.stats(),
+                                   "auth": {"smtp_configured": mailer.configured()},
                                    "time": time.time()})
             if route == "/api/history":
                 qs = parse_qs(parsed.query)
@@ -297,6 +354,52 @@ class Handler(BaseHTTPRequestHandler):
             pass  # the browser went away mid-response
         except Exception:
             log.exception("error handling %s", self.path)
+            try:
+                self._json({"error": "internal"}, 500)
+            except OSError:
+                pass
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        route = parsed.path.rstrip("/") or "/"
+        try:
+            if route == "/auth/request":
+                body = self._read_body().decode("utf-8", "replace")
+                email = authmod.normalize_email(parse_qs(body).get("email", [""])[0])
+                if email is None:
+                    return self._redirect("/login?state=invalid")
+                token = AUTH.create_link(email, ip=self._client_ip())
+                if token is None:
+                    return self._redirect("/login?state=limited")
+                link = f"{self._base_url()}/auth/verify?token={quote(token, safe='')}"
+                if not mailer.send_magic_link(email, link):
+                    return self._redirect("/login?state=failed")
+                return self._redirect("/login?state=sent")
+            if route == "/auth/logout":
+                sid = authmod.Auth.sid_from_cookie_header(self.headers.get("Cookie"))
+                AUTH.destroy_session(sid)
+                return self._redirect("/", [("Set-Cookie", authmod.Auth.clear_cookie_header(self._secure()))])
+            if route == "/api/me/prefs":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                # A custom header is not sendable by a plain HTML form, which is
+                # what makes this a CSRF gate on top of SameSite cookies.
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    updates = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if not isinstance(updates, dict):
+                    return self._json({"error": "expected an object"}, 400)
+                AUTH.set_prefs(user["id"], updates)
+                return self._json({"ok": True})
+            return self._json({"error": "not found"}, 404)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:
+            log.exception("error handling POST %s", self.path)
             try:
                 self._json({"error": "internal"}, 500)
             except OSError:

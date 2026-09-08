@@ -165,3 +165,39 @@ recorder as a separate, self-contained piece.
 
 Railway, Render and Fly all provision Postgres in a couple of clicks when the
 time comes, and inject `DATABASE_URL` automatically.
+
+---
+
+## 6. Sign-in emails (magic links)
+
+Accounts are passwordless: `/login` emails a one-time link that signs the user
+in and creates the account on first use. Sending needs SMTP credentials; until
+they're set, the server **logs** links instead of sending them and the login
+page says so.
+
+Use the GoDaddy mailbox you already have:
+
+1. `open -e server/.env` and fill in:
+   ```
+   SMTP_HOST=smtpout.secureserver.net
+   SMTP_PORT=465
+   SMTP_USER=zico@finostat.com
+   SMTP_PASS=<that mailbox's password>
+   SMTP_FROM=zico@finostat.com
+   ```
+   Save, close the editor.
+2. Say "SMTP is in .env" — Claude reads the values from the file and pushes them
+   to Fly as secrets (`flyctl secrets set ...`). They never appear in chat.
+3. Confirm with `curl -s https://finostat.com/api/status` →
+   `"auth":{"smtp_configured":true}`, then request a link at
+   [finostat.com/login](https://finostat.com/login) and check the inbox.
+
+Security properties, for the record: tokens and session ids are random 256-bit
+values stored only as SHA-256 hashes; links expire in 15 minutes and burn on
+first use; sessions are `HttpOnly; Secure; SameSite=Lax`, 30 days; link
+requests are rate-limited (5 per address, 20 per IP, per 15 min); emailed links
+always use `FINOSTAT_PUBLIC_URL`, never the request's Host header.
+
+What an account unlocks today: the terminal's **watchlist** and **layout**
+(which panels are shown) sync to the account across devices. Signed-out users
+keep the same features in browser storage only.

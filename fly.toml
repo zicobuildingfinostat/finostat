@@ -10,6 +10,9 @@ primary_region = "sin"   # Singapore: Fly deprecated bom (Mumbai); sin is the ne
   FINOSTAT_PORT = "8080"
   FINOSTAT_FEED = "upstox"
   FINOSTAT_DATA_DIR = "/data"
+  # Pins the host used in emailed sign-in links, so a spoofed Host header can
+  # never redirect a magic link somewhere else.
+  FINOSTAT_PUBLIC_URL = "https://finostat.com"
 
 # The tick recorder's home. History cannot be backfilled, so this volume is
 # the only copy of every session recorded so far.
