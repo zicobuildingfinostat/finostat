@@ -94,6 +94,18 @@ button{cursor:pointer;background:none;border:0}
 .a-wire{min-height:260px}
 .a-chart{grid-column:span 2;min-height:480px}
 .a-cas{grid-column:span 2;min-height:420px}
+.a-book{grid-column:span 2;min-height:360px}
+.bk-tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.bk-tot div{background:var(--panel);padding:6px 10px}.bk-tot small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.bk-tot b{font-family:var(--display);font-size:20px;font-weight:600}
+.bk-body{padding:6px 10px 8px;flex:1;font-size:11px}
+.bk-h{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:8px 0 4px}
+.bk-table{width:100%;border-collapse:collapse;font-size:10.5px}.bk-table th{text-align:right;font-weight:500;color:var(--faint);font-size:9.5px;letter-spacing:.08em;padding:3px 6px;border-bottom:1px solid var(--line-strong)}
+.bk-table td{padding:4px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid rgba(190,150,255,.07)}.bk-table th:first-child,.bk-table td:first-child,.bk-table th:nth-child(2),.bk-table td:nth-child(2){text-align:left}
+.bk-table td:first-child{color:var(--cyan)}.bk-table .src{font-size:9px;letter-spacing:.1em;color:var(--gold);border:1px solid var(--gold);padding:0 4px;margin-left:5px}
+.bk-table button{font-size:9.5px;letter-spacing:.06em;padding:2px 6px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.bk-table button:hover{border-color:var(--gold);color:var(--gold)}
+.bk-sc{border-collapse:collapse;font-size:10.5px}.bk-sc th,.bk-sc td{padding:3px 8px;text-align:right;border:1px solid rgba(190,150,255,.08)}.bk-sc th{color:var(--faint);font-weight:500;font-size:9.5px}.bk-sc td.pos{color:var(--up)}.bk-sc td.neg{color:var(--down)}.bk-sc td.now{outline:1px solid var(--gold)}
+.bk-empty{color:var(--faint);line-height:1.5;padding:6px 0}
+.bk-attr{display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--muted);margin:2px 0 4px}.bk-attr b{color:var(--text)}
 .cas-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 10px;border-bottom:1px solid var(--line);font-size:10.5px}
 .cas-top select{background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;font-size:11px;padding:3px 6px}
 .cas-top .seg button{font-size:10px;letter-spacing:.08em;padding:4px 9px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.cas-top .seg button.on{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
@@ -366,6 +378,11 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
   </div>
 
+  <section class="panel a-book" id="p-book" aria-label="Positions book">
+    <div class="panel-hd"><span class="k">BOOK</span><span class="s">POSITIONS · NET GREEKS · WHAT-IF</span><span class="r"><span id="bk-state">—</span></span></div>
+    <div class="bk-tot" id="bk-tot"></div>
+    <div class="bk-body" id="bk-body"><div class="bk-empty">loading…</div></div>
+  </section>
   <section class="panel a-cas" id="p-cas" aria-label="Closing auction session">
     <div class="panel-hd"><span class="k">CAS</span><span class="s" id="cas-title">CLOSING AUCTION · IEP vs SYNTHETIC FUTURE</span><span class="r"><span id="cas-state">—</span></span></div>
     <div class="cas-top"><span class="seg" id="cas-u"><button type="button" data-u="NIFTY 50" class="on">NIFTY</button><button type="button" data-u="BANKNIFTY">BANKNIFTY</button><button type="button" data-u="SENSEX">SENSEX</button></span>
@@ -397,7 +414,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <div class="bl-body" id="bl-body" hidden>
       <div class="bl-scroll"><table class="bl-legs"><thead><tr><th>SIDE</th><th>QTY</th><th>TYPE</th><th>STRIKE</th><th>LTP</th><th>IV</th><th>Δ</th><th></th></tr></thead>
         <tbody id="bl-legs"></tbody></table></div>
-      <div class="bl-tools"><button type="button" id="bl-add">+ LEG</button><button type="button" id="bl-chain-btn" title="Option chain with open interest">CHAIN</button><button type="button" id="bl-trade" title="Send these legs to your connected broker">TRADE</button><span id="bl-lot"></span></div>
+      <div class="bl-tools"><button type="button" id="bl-add">+ LEG</button><button type="button" id="bl-chain-btn" title="Option chain with open interest">CHAIN</button><button type="button" id="bl-paper" title="Save these legs as a paper position in the BOOK">PAPER</button><button type="button" id="bl-trade" title="Send these legs to your connected broker">TRADE</button><span id="bl-lot"></span></div>
       <div class="bl-oi" id="bl-oi" hidden></div>
       <div class="bl-chain" id="bl-chain" hidden><div class="bl-scroll"><table><thead><tr><th>OI</th><th>ΔOI</th><th>IV</th><th>CE</th><th>STRIKE</th><th>PE</th><th>IV</th><th>ΔOI</th><th>OI</th></tr></thead><tbody id="bl-chain-rows"></tbody></table></div><div class="note" id="bl-chain-note"></div></div>
       <div class="bl-metrics" id="bl-metrics"></div>
@@ -727,7 +744,44 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+var PANELS=[['sheet','BFLY sheet'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+/* ---------- BOOK: positions, net greeks, what-if ---------- */
+var bkTot=document.getElementById('bk-tot'), bkBody=document.getElementById('bk-body'), bkState=document.getElementById('bk-state'), bkPanel=document.getElementById('p-book');
+function rupee(v,d){ if(v==null) return '—'; return (v<0?'−':'')+'₹'+fmt(Math.abs(v),d==null?0:d); }
+function renderBook(d){
+  var t=d.totals||{}, g=t.greeks||{}, a=t.attribution||{};
+  bkTot.innerHTML=[['open P&L',rupee(t.pnl),t.pnl],['today',rupee(t.day_pnl),t.day_pnl],['net delta (₹/pt)',g.delta!=null?fmt(g.delta,1):'—',null],['gamma',g.gamma!=null?fmt(g.gamma,2):'—',null],['theta /day',rupee(g.theta),g.theta],['vega /1% IV',rupee(g.vega),g.vega],['positions',(t.open||0)+(t.unpriced?' ('+t.unpriced+' unpriced)':''),null]]
+    .map(function(x){ return '<div><small>'+x[0]+'</small><b'+(x[2]!=null?' class="'+(x[2]>=0?'up':'down')+'"':'')+'>'+x[1]+'</b></div>'; }).join('');
+  bkState.textContent=(d.positions||[]).length?((d.positions.length)+' open'+(d.broker?' · broker linked':'')):'empty';
+  var h='';
+  if(!(d.positions||[]).length){ h+='<div class="bk-empty">No open positions. Build a strategy and press <b>PAPER</b> to journal it at today\'s prices — the book marks it live, nets the Greeks and shows what a move would do. Positions at a connected broker appear here automatically.</div>'; }
+  else {
+    h+='<div class="bk-attr">today\'s P&L ≈ <b>delta '+rupee(a.delta)+'</b> + <b>theta '+rupee(a.theta)+'</b> + <b>gamma/vega/other '+rupee(a.other)+'</b></div>';
+    h+='<div class="bl-scroll"><table class="bk-table"><thead><tr><th>UNDERLYING</th><th>LEGS</th><th>LOTS</th><th>P&L</th><th>TODAY</th><th>Δ</th><th>Θ/day</th><th>V</th><th></th></tr></thead><tbody>'+d.positions.map(function(p){
+      var exp=new Date(p.expiry).toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+      return '<tr><td>'+esc(p.u)+' <small style="color:var(--faint)">'+exp+'</small>'+(p.source==='upstox'?'<span class="src">UPSTOX</span>':'')+'</td><td title="'+esc(p.note||'')+'">'+esc(p.label)+(p.priced?'':' <small style="color:var(--down)">unpriced</small>')+'</td><td>'+p.lots+'</td><td class="'+(p.pnl>=0?'up':'down')+'">'+rupee(p.pnl)+'</td><td class="'+(p.day_pnl>=0?'up':'down')+'">'+rupee(p.day_pnl)+'</td><td>'+fmt(p.greeks.delta,1)+'</td><td>'+rupee(p.greeks.theta)+'</td><td>'+rupee(p.greeks.vega)+'</td><td>'+(p.source==='paper'?'<button type="button" data-close="'+p.id+'">close</button> <button type="button" data-del="'+p.id+'" title="delete without recording">✕</button>':'')+'</td></tr>'; }).join('')+'</tbody></table></div>';
+    var sc=d.scenarios; if(sc){ h+='<div class="bk-h">What-if · book P&L vs now (spot shift × IV shift)</div><div class="bl-scroll" style="display:flex;gap:18px;flex-wrap:wrap">';
+      ['0','1'].forEach(function(day){ h+='<table class="bk-sc"><thead><tr><th>'+(day==='0'?'today':'tomorrow')+'</th>'+sc.spot_shifts.map(function(s){ return '<th>'+(s>0?'+':'')+s+'%</th>'; }).join('')+'</tr></thead><tbody>'+sc.iv_shifts.map(function(iv,i){ return '<tr><th>IV '+(iv>0?'+':'')+iv+'</th>'+sc.grid[day][i].map(function(v,j){ return '<td class="'+(v>0?'pos':v<0?'neg':'')+((iv===0&&sc.spot_shifts[j]===0&&day==='0')?' now':'')+'">'+rupee(v)+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table>'; });
+      h+='</div>'; }
+  }
+  if((d.closed||[]).length){ h+='<div class="bk-h">Closed (paper journal)</div><div class="bl-scroll"><table class="bk-table"><thead><tr><th>UNDERLYING</th><th>LEGS</th><th>LOTS</th><th>OPENED</th><th>CLOSED</th><th>REALISED</th></tr></thead><tbody>'+d.closed.map(function(p){
+      var real=0, ok=true; p.legs.forEach(function(l,i){ var e=p.entries[i], x=p.exits?p.exits[i]:null; if(e==null||x==null){ ok=false; return; } real+=(x-e)*l.qty*p.lots*p.lot; });
+      return '<tr><td>'+esc(p.u)+'</td><td>'+p.legs.map(function(l){ return (l.qty>0?'+':'−')+Math.abs(l.qty)+' '+l.strike+' '+l.right; }).join(' · ')+'</td><td>'+p.lots+'</td><td>'+new Date(p.opened*1000).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+'</td><td>'+new Date(p.closed*1000).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+'</td><td class="'+(real>=0?'up':'down')+'">'+(ok?rupee(real):'—')+'</td></tr>'; }).join('')+'</tbody></table></div>'; }
+  bkBody.innerHTML=h;
+}
+function pollBook(){
+  if(window.FINO_LOCKED||bkPanel.hidden) return;
+  fetch('/api/book',{credentials:'same-origin'}).then(function(r){ return r.json().then(function(d){ d._st=r.status; return d; }); }).then(function(d){
+    if(d._st===401){ bkState.textContent='sign in'; bkBody.innerHTML='<div class="bk-empty">Sign in to keep a book.</div>'; return; }
+    if(d._st!==200) return; renderBook(d);
+  }).catch(function(){});
+}
+bkBody.addEventListener('click',function(e){
+  var c=e.target.closest('button[data-close]'); if(c){ if(!confirm('Close this paper position at the current marks?')) return; srvPost('/api/book/close',{id:Number(c.getAttribute('data-close'))}).then(pollBook); return; }
+  var x=e.target.closest('button[data-del]'); if(x){ if(!confirm('Delete this paper position without recording it?')) return; srvPost('/api/book/delete',{id:Number(x.getAttribute('data-del'))}).then(pollBook); }
+});
+setTimeout(pollBook,1100); setInterval(pollBook,5000);
+window.finoBookPoll=pollBook;
 /* ---------- CAS: index IEP vs synthetic future ---------- */
 var casState={u:'NIFTY 50',date:'',data:null,timer:null};
 var casSvg=document.getElementById('cas-svg'), casKpi=document.getElementById('cas-kpi'), casDate=document.getElementById('cas-date'), casTip=document.getElementById('cas-tip'), casPanel=document.getElementById('p-cas'), casStateEl=document.getElementById('cas-state');
@@ -1079,6 +1133,14 @@ function openTicket(){
   document.getElementById('tk-confirm').checked=false; tkMsg.textContent=''; tkRes.innerHTML=''; document.getElementById('tk-send').disabled=false; tk.hidden=false;
 }
 document.getElementById('bl-trade').addEventListener('click',openTicket);
+document.getElementById('bl-paper').addEventListener('click',function(){
+  if(!bl.u||!bl.legs.length||!bl.lastData){ alert('Price a strategy first.'); return; }
+  var lots=parseInt(prompt('Paper-trade '+bl.u+' · '+bl.legs.length+' leg(s) at current prices. Lots?','1')||'0',10); if(!(lots>0)) return;
+  var note=prompt('Note for the journal (optional)','')||'';
+  srvPost('/api/book/open',{u:bl.u,expiry:bl.lastData.expiry,lots:lots,note:note,legs:bl.lastData.legs.map(function(l){ return {right:l.right,strike:l.strike,qty:l.qty,price:l.price}; })}).then(function(r){
+    if(r.error){ alert(r.error); return; } blStatus.textContent='paper position #'+r.id+' saved'; if(window.finoBookPoll) window.finoBookPoll(); var p=document.getElementById('p-book'); if(p) p.scrollIntoView({behavior:'smooth',block:'nearest'});
+  });
+});
 document.getElementById('tk-x').addEventListener('click',function(){ tk.hidden=true; });
 document.getElementById('tk-cancel').addEventListener('click',function(){ tk.hidden=true; });
 document.getElementById('tk-send').addEventListener('click',function(){

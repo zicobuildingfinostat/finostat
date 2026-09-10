@@ -35,6 +35,7 @@ import account
 import assessment
 import auth as authmod
 import backup
+import book
 import brief
 import broker
 import builder
@@ -105,6 +106,30 @@ FEED.index_members = CONSTITUENTS.members
 CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts.ContractIndex())
 BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger")
 CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
+BOOK = book.Store(AUTH.path)
+
+
+def _book_payload(user) -> dict:
+    """Every open position (paper + broker) marked off the live chains."""
+    positions = BOOK.open_positions(user["id"])
+    client, _acc = _broker_client(user)
+    if client is not None:
+        try:
+            positions += book.broker_positions(client.positions(), CONTRACTS_OF(FEED))
+        except broker.BrokerError as exc:
+            log.debug("book: broker positions unavailable: %s", exc)
+    marked = []
+    for p in positions:
+        try:
+            chain = CHAINS.chain(p["u"], int(p["expiry"]))
+        except Exception:
+            chain = {}
+        if "rows" not in chain:
+            chain = {}
+        marked.append(book.mark(p, chain))
+    quotes = FEED.snapshot().get("quotes") or []
+    return {"positions": marked, "totals": book.totals(marked, quotes), "scenarios": book.scenarios(marked),
+            "closed": BOOK.closed_positions(user["id"], 15), "broker": client is not None}
 
 
 def _plan_of(user) -> str:
@@ -482,6 +507,13 @@ class Handler(BaseHTTPRequestHandler):
                 out["recent"] = BROKERS.recent_orders(user["id"], 10)
                 out["can_trade"] = broker.trade_allowed(user["email"])
                 return self._json(out)
+            if route == "/api/book":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk", "feature": "terminal"}, 402)
+                return self._json(_book_payload(user))
             if route == "/api/cas":
                 if not _paid(self._current_user()):
                     return self._json({"error": "plan required", "need": "desk", "feature": "terminal"}, 402)
@@ -776,6 +808,62 @@ class Handler(BaseHTTPRequestHandler):
                                    "lot": chain["lot"], "atm": chain["atm"], "step": chain["step"],
                                    "strikes": strikes, "legs": legs, "metrics": metrics,
                                    "live": chain["live"], "warming": chain["warming"]})
+            if route in ("/api/book/open", "/api/book/close", "/api/book/delete"):
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk"}, 402)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8") or "{}")
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if route == "/api/book/open":
+                    ukey = str(body.get("u", ""))
+                    ok, err = _gate(user, ukey)
+                    if not ok:
+                        return self._json(err, 403)
+                    try:
+                        expiry = int(body.get("expiry") or 0)
+                        lots = max(1, min(50, int(body.get("lots") or 1)))
+                    except (TypeError, ValueError):
+                        return self._json({"error": "bad expiry or lots"}, 400)
+                    chain = CHAINS.chain(ukey, expiry)
+                    if "rows" not in chain:
+                        return self._json(chain, 404)
+                    legs, entries = [], []
+                    for l in list(body.get("legs") or [])[:8]:
+                        try:
+                            right, strike, qty = str(l["right"]).upper(), int(l["strike"]), int(l["qty"])
+                        except (KeyError, TypeError, ValueError):
+                            return self._json({"error": "each leg needs right, strike, qty"}, 400)
+                        side = book._side(chain, strike, right)
+                        if right not in ("CE", "PE") or qty == 0 or not side or side.get("ltp") is None:
+                            return self._json({"error": f"{strike} {right} is not priced on the chain yet"}, 400)
+                        legs.append({"right": right, "strike": strike, "qty": qty})
+                        entries.append(float(l.get("price") or side["ltp"]))
+                    if not legs:
+                        return self._json({"error": "no legs"}, 400)
+                    try:
+                        pid = BOOK.open(user["id"], ukey, chain["expiry"], legs, lots, entries, chain["lot"], str(body.get("note", "")))
+                    except ValueError as exc:
+                        return self._json({"error": str(exc)}, 400)
+                    return self._json({"ok": True, "id": pid})
+                try:
+                    pid = int(body.get("id"))
+                except (TypeError, ValueError):
+                    return self._json({"error": "bad id"}, 400)
+                if route == "/api/book/delete":
+                    return self._json({"ok": BOOK.delete(user["id"], pid)})
+                pos = next((p for p in BOOK.open_positions(user["id"]) if p["id"] == pid), None)
+                if pos is None:
+                    return self._json({"error": "not found"}, 404)
+                chain = CHAINS.chain(pos["u"], int(pos["expiry"]))
+                m = book.mark(pos, chain if "rows" in chain else {})
+                exits = [l["mark"] for l in m["legs"]]
+                return self._json({"ok": BOOK.close(user["id"], pid, exits), "pnl": m["pnl"] if m["priced"] else None})
             if route in ("/api/broker/disconnect", "/api/broker/order", "/api/broker/cancel"):
                 user = self._current_user()
                 if user is None:

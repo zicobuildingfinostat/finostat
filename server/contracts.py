@@ -22,10 +22,12 @@ class ContractIndex:
     def __init__(self) -> None:
         # name -> {expiry_ms: {(strike, right): (instrument_key, lot_size)}}
         self._by_name: dict[str, dict[int, dict[tuple, tuple]]] = {}
+        self._by_key: dict[str, tuple] = {}          # instrument_key -> (name, expiry_ms, strike, right, lot)
         self.built_at: float | None = None
 
     def build(self, rows_by_exchange: dict[str, list[dict]]) -> int:
         idx: dict[str, dict[int, dict]] = {}
+        by_key: dict[str, tuple] = {}
         n = 0
         for exch, rows in rows_by_exchange.items():
             seg = "NSE_FO" if exch == "NSE" else "BSE_FO"
@@ -43,8 +45,10 @@ class ContractIndex:
                 except (TypeError, ValueError):
                     continue
                 idx.setdefault(name, {}).setdefault(int(exp), {})[(strike_i, r["instrument_type"])] = (key, int(r.get("lot_size") or 0))
+                by_key[key] = (name, int(exp), strike_i, r["instrument_type"], int(r.get("lot_size") or 0))
                 n += 1
         self._by_name = idx
+        self._by_key = by_key
         self.built_at = time.time()
         return n
 
@@ -70,6 +74,10 @@ class ContractIndex:
         s = self.strikes(name, expiry_ms)
         diffs = sorted({b - a for a, b in zip(s, s[1:]) if b > a})
         return diffs[0] if diffs else None
+
+    def lookup(self, key: str) -> tuple | None:
+        """instrument_key -> (name, expiry_ms, strike, right, lot); the broker speaks in keys."""
+        return self._by_key.get(key)
 
     def key_for(self, name: str, expiry_ms: int, strike: int, right: str) -> tuple[str, int] | None:
         """(instrument_key, lot) for one contract, or None if it is not listed."""
