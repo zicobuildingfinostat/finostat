@@ -258,6 +258,11 @@ def order_payload(instrument_key: str, side: str, quantity: int, product: str = 
         raise BrokerError("bad order")
     if product not in PRODUCTS or order_type not in ("MARKET", "LIMIT"):
         raise BrokerError("bad product or order type")
+    if order_type == "MARKET":
+        # Upstox stopped accepting MARKET orders over the API (SEBI algo framework, Apr 2026).
+        raise BrokerError("Upstox does not accept market orders over the API any more — use a limit price")
+    if price <= 0:
+        raise BrokerError("a limit price is required")
     return {"quantity": int(quantity), "product": product, "validity": "DAY",
             "price": float(price) if order_type == "LIMIT" else 0.0, "tag": tag[:20], "instrument_token": instrument_key,
             "order_type": order_type, "transaction_type": side, "disclosed_quantity": 0, "trigger_price": 0.0, "is_amo": False}

@@ -55,14 +55,18 @@ exp = 1789000000000
 ci._by_name = {"NIFTY": {exp: {(23650, "CE"): ("NSE_FO|1", 65), (23650, "PE"): ("NSE_FO|2", 65), (23700, "CE"): ("NSE_FO|3", 65)}}}
 check("contracts.key_for", ci.key_for("NIFTY", exp, 23650, "ce") == ("NSE_FO|1", 65) and ci.key_for("NIFTY", exp, 99999, "CE") is None)
 resolve = lambda r, k: ci.key_for("NIFTY", exp, k, r)
-plan = B.plan_orders([{"right": "CE", "strike": 23650, "qty": -1, "price": 150}, {"right": "CE", "strike": 23700, "qty": 1, "price": 120}], resolve, 2, "D", "MARKET", "fino-9")
-check("buys first, quantity = lots x lot size, market price 0", plan[0]["side"] == "BUY" and plan[0]["payload"]["quantity"] == 130 and plan[0]["payload"]["price"] == 0.0 and plan[1]["payload"]["transaction_type"] == "SELL" and plan[1]["payload"]["instrument_token"] == "NSE_FO|1", plan)
+plan = B.plan_orders([{"right": "CE", "strike": 23650, "qty": -1, "price": 150}, {"right": "CE", "strike": 23700, "qty": 1, "price": 120}], resolve, 2, "D", "LIMIT", "fino-9")
+check("buys first, quantity = lots x lot size, limit prices carried", plan[0]["side"] == "BUY" and plan[0]["payload"]["quantity"] == 130 and plan[0]["payload"]["price"] == 120.0 and plan[1]["payload"]["transaction_type"] == "SELL" and plan[1]["payload"]["price"] == 150.0 and plan[1]["payload"]["instrument_token"] == "NSE_FO|1", plan)
+try: B.plan_orders([{"right": "CE", "strike": 23650, "qty": 1, "price": 150}], resolve, 1, "D", "MARKET", "t"); check("market orders refused (Upstox API rule)", False)
+except B.BrokerError: check("market orders refused (Upstox API rule)", True)
+try: B.plan_orders([{"right": "CE", "strike": 23650, "qty": 1}], resolve, 1, "D", "LIMIT", "t"); check("limit without a price refused", False)
+except B.BrokerError: check("limit without a price refused", True)
 lim = B.plan_orders([{"right": "CE", "strike": 23650, "qty": 1, "price": 150.5}], resolve, 1, "I", "LIMIT", "t")
 check("limit order carries the price and product", lim[0]["payload"]["price"] == 150.5 and lim[0]["payload"]["product"] == "I" and lim[0]["payload"]["order_type"] == "LIMIT")
-for bad, why in [([{"right": "CE", "strike": 1, "qty": 1}], "unlisted strike"), ([], "no legs"), ([{"right": "XX", "strike": 23650, "qty": 1}], "bad right")]:
-    try: B.plan_orders(bad, resolve, 1, "D", "MARKET", "t"); check(f"rejects {why}", False)
+for bad, why in [([{"right": "CE", "strike": 1, "qty": 1, "price": 1}], "unlisted strike"), ([], "no legs"), ([{"right": "XX", "strike": 23650, "qty": 1, "price": 1}], "bad right")]:
+    try: B.plan_orders(bad, resolve, 1, "D", "LIMIT", "t"); check(f"rejects {why}", False)
     except B.BrokerError: check(f"rejects {why}", True)
-try: B.plan_orders([{"right": "CE", "strike": 23650, "qty": 1}], resolve, 99, "D", "MARKET", "t"); check("rejects 99 lots", False)
+try: B.plan_orders([{"right": "CE", "strike": 23650, "qty": 1, "price": 1}], resolve, 99, "D", "LIMIT", "t"); check("rejects 99 lots", False)
 except B.BrokerError: check("rejects 99 lots", True)
 class FakeClient:
     def __init__(self, fail_on=None): self.sent = []; self.fail_on = fail_on
