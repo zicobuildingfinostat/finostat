@@ -46,6 +46,7 @@ import payments
 import recorder
 import strategies
 import universe
+import videos
 
 logging.basicConfig(
     level=os.environ.get("FINOSTAT_LOG", "INFO").upper(),
@@ -65,6 +66,7 @@ ASSESS = assessment.Assessments(AUTH.path)
 BRIEFS = brief.Briefs(AUTH.path)
 PAYMENTS = payments.Payments(AUTH.path)
 RENEWALS = payments.RenewalReminder(AUTH, mailer.send_plain)
+VIDEOS = videos.YouTubeFeed(cache=AUTH.path.parent / "videos.json")
 
 
 def _safe_next(raw: str) -> str:
@@ -288,6 +290,10 @@ class Page:
                 lambda m: m.group(1) + self._wire(items) + m.group(2),
                 doc, count=1, flags=re.S,
             )
+        # Latest YouTube uploads: section markup, its CSS, and the click-to-play script.
+        doc = doc.replace("<!--VIDEOS-->", videos.render_section(VIDEOS.latest(6)), 1)
+        doc = doc.replace("/*VIDEOS_CSS*/", videos.CSS, 1)
+        doc = doc.replace("</body>", "<script>" + videos.JS + "</script>\n</body>", 1)
         metas = ""
         if SITE_VERIFY["GOOGLE_SITE_VERIFICATION"]:
             metas += f'<meta name="google-site-verification" content="{html.escape(SITE_VERIFY["GOOGLE_SITE_VERIFICATION"], quote=True)}">\n'
@@ -404,6 +410,8 @@ class Handler(BaseHTTPRequestHandler):
                     body = brief.render_day(BRIEFS, date)
                     if body is not None:
                         return self._send(body, "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/api/videos":
+                return self._json({"channel": videos.CHANNEL_URL, "videos": VIDEOS.latest(15), **VIDEOS.status()})
             if route == "/api/brief":
                 rec = BRIEFS.latest()
                 return self._json(rec or {"error": "no brief yet"}, 200 if rec else 404)
@@ -506,6 +514,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "recorder": RECORDER.stats(),
                                    "auth": {"smtp_configured": mailer.configured(), "payments": payments.configured(), "payments_test": payments.test_mode()},
             "brief": {"last": BRIEF.last, "dates": BRIEFS.dates(3)},
+            "videos": VIDEOS.status(),
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -940,6 +949,7 @@ def main() -> int:
     CHAINS.start()
     BRIEF.start()
     RENEWALS.start()
+    VIDEOS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -955,6 +965,7 @@ def main() -> int:
         CHAINS.stop()
         BRIEF.stop()
         RENEWALS.stop()
+        VIDEOS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()
