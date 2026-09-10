@@ -216,7 +216,8 @@ def expiry_rows(contracts, today: date, hol: set = frozenset()) -> list[dict]:
     out = []
     if contracts is None:
         return out
-    now_ms = datetime(today.year, today.month, today.day, tzinfo=IST).timestamp() * 1000
+    # real "now" when rendering for today, so a series that closed at 15:30 drops off; midnight for fixed dates (tests)
+    now_ms = (datetime.now(IST) if today == datetime.now(IST).date() else datetime(today.year, today.month, today.day, tzinfo=IST)).timestamp() * 1000
     series = [(n, label, exch) for n, label, exch in INDICES if contracts.has(n)]
     stock = next((n for n in contracts.names() if n not in {i[0] for i in INDICES} and contracts.expiries(n, now_ms)), None)
     if stock:
