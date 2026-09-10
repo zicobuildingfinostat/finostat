@@ -46,7 +46,7 @@ def main(argv: list[str]) -> int:
         if not rows:
             print("  no orders yet")
         for r in rows:
-            print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created']))}  {r['email']:<32} {r['plan']:<5} {r['period']:<8} ₹{r['amount'] / 100:>10,.2f}  {r['status']:<8} {r['payment_id'] or '-'}")
+            print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created']))}  {r['email']:<32} {r['plan']:<5} {r['period']:<8} ₹{r['amount'] / 100:>10,.2f}  {r['status']:<8} {r.get('provider', 'razorpay'):<9} {r['payment_id'] or '-'}")
         return 0
     if cmd == "requests":
         rows = au.pending_requests()

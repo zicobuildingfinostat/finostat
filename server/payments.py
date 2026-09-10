@@ -1,4 +1,4 @@
-"""Razorpay Standard Checkout for the Desk and Pro plans. Standard library only.
+"""Payments for the Desk and Pro plans: Razorpay and Cashfree, standard library only.
 
 Flow: the account page asks the server for an order (POST /api/pay/order);
 Razorpay's hosted checkout collects the payment; the browser posts the
@@ -25,11 +25,15 @@ import sqlite3
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 log = logging.getLogger("finostat.payments")
 
 API = "https://api.razorpay.com/v1"
+CF_API = {"sandbox": "https://sandbox.cashfree.com/pg", "production": "https://api.cashfree.com/pg"}
+CF_VERSION = "2023-08-01"
+PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "https://finostat.com").rstrip("/") or "https://finostat.com"
 PRICES = {"desk": {"monthly": 2199, "yearly": 21990}, "pro": {"monthly": 5599, "yearly": 55990}}   # rupees, exclusive of GST
 DAYS = {"monthly": 30, "yearly": 365}
 LABEL = {"desk": "Desk", "pro": "Pro desk"}
@@ -37,6 +41,8 @@ LABEL = {"desk": "Desk", "pro": "Pro desk"}
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS payments(
   id          INTEGER PRIMARY KEY,
+  provider    TEXT NOT NULL DEFAULT 'razorpay',
+  session_id  TEXT,
   user_id     INTEGER NOT NULL,
   plan        TEXT NOT NULL,
   period      TEXT NOT NULL,
@@ -76,6 +82,87 @@ def test_mode() -> bool:
     return key_id().startswith("rzp_test_")
 
 
+# -- Cashfree ---------------------------------------------------------------
+def cf_app_id() -> str:
+    return os.environ.get("CASHFREE_APP_ID", "").strip()
+
+
+def cf_secret() -> str:
+    return os.environ.get("CASHFREE_SECRET_KEY", "").strip()
+
+
+def cf_env() -> str:
+    e = os.environ.get("CASHFREE_ENV", "").strip().lower()
+    if e in ("sandbox", "production"):
+        return e
+    return "sandbox" if cf_app_id().upper().startswith("TEST") else "production"
+
+
+def cf_configured() -> bool:
+    return bool(cf_app_id() and cf_secret())
+
+
+def providers() -> list[dict]:
+    """Every gateway, in the order the account page offers them."""
+    return [{"id": "razorpay", "name": "Razorpay", "configured": configured(), "test": test_mode(), "needs_phone": False},
+            {"id": "cashfree", "name": "Cashfree", "configured": cf_configured(), "test": cf_env() == "sandbox", "needs_phone": True}]
+
+
+def any_configured() -> bool:
+    return any(p["configured"] for p in providers())
+
+
+def _cf_headers() -> dict:
+    return {"x-client-id": cf_app_id(), "x-client-secret": cf_secret(), "x-api-version": CF_VERSION,
+            "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "finostat/1.0"}
+
+
+def _cf_call(path: str, body: dict | None = None) -> dict:
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(CF_API[cf_env()] + path, data=data, method="POST" if data else "GET", headers=_cf_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        log.error("cashfree %s failed: HTTP %s %s", path, exc.code, detail)
+        raise PaymentError("Cashfree refused the request" + (" (keys rejected)" if exc.code in (401, 403) else "")) from exc
+    except (urllib.error.URLError, ValueError, OSError) as exc:
+        log.error("cashfree unreachable: %s", exc)
+        raise PaymentError("Cashfree is unreachable right now; try again in a minute") from exc
+
+
+def cashfree_create_order(order_id: str, amount_paise: int, customer: dict, note: str) -> dict:
+    """POST /pg/orders. Cashfree wants rupees with paise as decimals and a phone number."""
+    body = {"order_id": order_id, "order_amount": round(amount_paise / 100.0, 2), "order_currency": "INR",
+            "customer_details": {"customer_id": f"u{customer['id']}", "customer_email": customer["email"],
+                                 "customer_phone": customer["phone"], "customer_name": customer.get("name") or customer["email"].split("@")[0]},
+            "order_meta": {"return_url": f"{PUBLIC_URL}/account?cf_order={{order_id}}", "notify_url": f"{PUBLIC_URL}/api/pay/cashfree/webhook"},
+            "order_note": note[:200]}
+    out = _cf_call("/orders", body)
+    if not out.get("payment_session_id"):
+        raise PaymentError("Cashfree returned no payment session")
+    return out
+
+
+def cashfree_fetch_order(order_id: str) -> dict:
+    return _cf_call(f"/orders/{urllib.parse.quote(order_id, safe='')}")
+
+
+def cashfree_fetch_payments(order_id: str) -> list:
+    out = _cf_call(f"/orders/{urllib.parse.quote(order_id, safe='')}/payments")
+    return out if isinstance(out, list) else []
+
+
+def verify_cashfree_webhook(body: bytes, timestamp: str, signature: str, secret: str | None = None) -> bool:
+    """Cashfree signs base64(HMAC-SHA256(secret, timestamp + raw body))."""
+    secret = cf_secret() if secret is None else secret
+    if not (secret and timestamp and signature):
+        return False
+    digest = hmac.new(secret.encode(), str(timestamp).encode() + body, hashlib.sha256).digest()
+    return hmac.compare_digest(base64.b64encode(digest).decode(), str(signature).strip())
+
+
 def gst_percent() -> float:
     try:
         return max(0.0, float(os.environ.get("FINOSTAT_GST_PERCENT", "0") or 0))
@@ -99,8 +186,9 @@ def catalogue() -> dict:
             total, base, gst = amount_paise(plan, period)
             out[plan][period] = {"rupees": PRICES[plan][period], "total_paise": total, "base_paise": base,
                                  "gst_paise": gst, "days": DAYS[period]}
-    return {"plans": out, "gst_percent": gst_percent(), "configured": configured(), "test_mode": test_mode(),
-            "key_id": key_id() if configured() else ""}
+    return {"plans": out, "gst_percent": gst_percent(), "configured": any_configured(), "test_mode": test_mode(),
+            "key_id": key_id() if configured() else "", "providers": [p for p in providers() if p["configured"]],
+            "cf_env": cf_env()}
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +247,12 @@ class Payments:
         self._lock = threading.Lock()
         from auth import open_or_quarantine
         open_or_quarantine(self.path, _SCHEMA)
+        with self._conn() as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(payments)")}
+            if "provider" not in cols:
+                c.execute("ALTER TABLE payments ADD COLUMN provider TEXT NOT NULL DEFAULT 'razorpay'")
+            if "session_id" not in cols:
+                c.execute("ALTER TABLE payments ADD COLUMN session_id TEXT")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path, timeout=10, check_same_thread=False)
@@ -176,10 +270,35 @@ class Payments:
         if not oid:
             raise PaymentError("Razorpay returned no order id")
         with self._lock, self._conn() as c:
-            c.execute("INSERT INTO payments(user_id,plan,period,amount,base,gst,currency,order_id,receipt,created) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            c.execute("INSERT INTO payments(provider,user_id,plan,period,amount,base,gst,currency,order_id,receipt,created) VALUES('razorpay',?,?,?,?,?,?,?,?,?,?)",
                       (user["id"], plan, period, total, base, gst, "INR", oid, receipt, time.time()))
-        return {"order_id": oid, "amount": total, "currency": "INR", "plan": plan, "period": period,
+        return {"provider": "razorpay", "order_id": oid, "amount": total, "currency": "INR", "plan": plan, "period": period,
                 "label": LABEL[plan], "days": DAYS[period], "key_id": key_id(), "email": user["email"]}
+
+    def create_cashfree(self, user: dict, plan: str, period: str, phone: str, create_fn=cashfree_create_order) -> dict:
+        """Our own order id, Cashfree's payment session. Returns what the SDK needs."""
+        if plan not in PRICES or period not in DAYS:
+            raise PaymentError("unknown plan or period")
+        if not phone:
+            raise PaymentError("a mobile number is needed for Cashfree")
+        total, base, gst = amount_paise(plan, period)
+        oid = f"fino{user['id']}-{int(time.time() * 1000)}"
+        out = create_fn(oid, total, {"id": user["id"], "email": user["email"], "phone": phone}, f"Finostat {LABEL[plan]} {period}")
+        with self._lock, self._conn() as c:
+            c.execute("INSERT INTO payments(provider,session_id,user_id,plan,period,amount,base,gst,currency,order_id,receipt,created) VALUES('cashfree',?,?,?,?,?,?,?,?,?,?,?)",
+                      (out["payment_session_id"], user["id"], plan, period, total, base, gst, "INR", oid, oid, time.time()))
+        return {"provider": "cashfree", "order_id": oid, "payment_session_id": out["payment_session_id"], "env": cf_env(),
+                "amount": total, "currency": "INR", "plan": plan, "period": period, "label": LABEL[plan], "days": DAYS[period], "email": user["email"]}
+
+    def confirm_cashfree(self, order_id: str, fetch_order=cashfree_fetch_order, fetch_payments=cashfree_fetch_payments) -> str | None:
+        """Ask Cashfree whether the order is PAID; return the successful payment id, else None."""
+        order = fetch_order(order_id)
+        if str(order.get("order_status", "")).upper() != "PAID":
+            return None
+        for p in fetch_payments(order_id):
+            if str(p.get("payment_status", "")).upper() == "SUCCESS":
+                return str(p.get("cf_payment_id") or p.get("payment_id") or "cf")
+        return "cf-paid"
 
     def get(self, order_id: str) -> dict | None:
         with self._conn() as c:

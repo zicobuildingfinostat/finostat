@@ -461,14 +461,14 @@ class Handler(BaseHTTPRequestHandler):
                 user = self._current_user()
                 if user is None:
                     return self._redirect("/login?next=" + quote("/account" + (("?" + parsed.query) if parsed.query else ""), safe=""))
-                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"])),
+                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"]), AUTH.get_prefs(user["id"]).get("phone") or ""),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/api/me":
                 user = self._current_user()
                 if user is None:
                     return self._json({"error": "not signed in"}, 401)
                 return self._json({"email": user["email"], "plan": user.get("plan", "starter"),
-                                   "plan_until": user.get("plan_until"), "payments": payments.configured(),
+                                   "plan_until": user.get("plan_until"), "payments": payments.any_configured(),
                                    "entitlements": authmod.entitlements(user.get("plan", "starter")),
                                    "prefs": AUTH.get_prefs(user["id"])})
             if route == "/api/alerts":
@@ -512,7 +512,8 @@ class Handler(BaseHTTPRequestHandler):
                                    "ticks": snap.get("ticks"), "sheet_subscribers": SHEETS.count(),
                                    "interval": getattr(FEED, "interval", None),
                                    "recorder": RECORDER.stats(),
-                                   "auth": {"smtp_configured": mailer.configured(), "payments": payments.configured(), "payments_test": payments.test_mode()},
+                                   "auth": {"smtp_configured": mailer.configured(), "payments": payments.any_configured(), "payments_test": payments.test_mode(),
+                     "providers": [p["id"] + ("(test)" if p["test"] else "") for p in payments.providers() if p["configured"]]},
             "brief": {"last": BRIEF.last, "dates": BRIEFS.dates(3)},
             "videos": VIDEOS.status(),
                                    "alerts": ALERTS.stats(),
@@ -696,15 +697,26 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "not signed in"}, 401)
                 if self.headers.get("X-Requested-With") != "fetch":
                     return self._json({"error": "bad request"}, 400)
-                if not payments.configured():
+                if not payments.any_configured():
                     return self._json({"error": "online payment is not switched on yet"}, 503)
                 try:
                     body = json.loads(self._read_body().decode("utf-8"))
                 except ValueError:
                     return self._json({"error": "invalid json"}, 400)
                 plan, period = str(body.get("plan", "")), str(body.get("period", "monthly"))
+                enabled = [p["id"] for p in payments.providers() if p["configured"]]
+                provider = str(body.get("provider") or (enabled[0] if enabled else ""))
+                if provider not in enabled:
+                    return self._json({"error": "that payment option is not available"}, 400)
                 try:
-                    order = PAYMENTS.create(user, plan, period)
+                    if provider == "cashfree":
+                        phone = assessment.clean_phone(str(body.get("phone", ""))) or (AUTH.get_prefs(user["id"]).get("phone") or "")
+                        if not phone:
+                            return self._json({"error": "Enter a 10-digit Indian mobile number for Cashfree", "need_phone": True}, 400)
+                        AUTH.set_prefs(user["id"], {"phone": phone})
+                        order = PAYMENTS.create_cashfree(user, plan, period, phone)
+                    else:
+                        order = PAYMENTS.create(user, plan, period)
                 except payments.PaymentError as exc:
                     return self._json({"error": str(exc)}, 502)
                 return self._json(order)
@@ -722,12 +734,36 @@ class Handler(BaseHTTPRequestHandler):
                 row = PAYMENTS.get(oid)
                 if row is None or row["user_id"] != user["id"]:
                     return self._json({"error": "unknown order"}, 404)
-                if not payments.verify_payment_signature(oid, pid, sig):
+                if row.get("provider") == "cashfree":
+                    if row["status"] != "paid":
+                        try:
+                            pid = PAYMENTS.confirm_cashfree(oid)
+                        except payments.PaymentError as exc:
+                            return self._json({"error": str(exc)}, 502)
+                        if not pid:
+                            return self._json({"error": "Cashfree has not confirmed this payment yet. If money was debited it will be activated automatically within a minute — refresh.", "pending": True}, 409)
+                    else:
+                        pid = row["payment_id"]
+                elif not payments.verify_payment_signature(oid, pid, sig):
                     log.warning("payment signature mismatch for order %s (user %s)", oid, user["id"])
                     return self._json({"error": "signature mismatch"}, 400)
                 grant = _grant_and_notify(oid, pid, "verify")
                 st = AUTH.plan_status(user["id"])
                 return self._json({"ok": True, "plan": st["plan"], "until": st["until"], "already": grant is None})
+            if route == "/api/pay/cashfree/webhook":
+                raw = self._read_body(limit=256 * 1024)
+                if not payments.verify_cashfree_webhook(raw, self.headers.get("x-webhook-timestamp", ""), self.headers.get("x-webhook-signature", "")):
+                    return self._json({"error": "bad signature"}, 400)
+                try:
+                    evt = json.loads(raw.decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                data = evt.get("data") or {}
+                oid = ((data.get("order") or {}).get("order_id"))
+                pay = data.get("payment") or {}
+                if evt.get("type") == "PAYMENT_SUCCESS_WEBHOOK" and str(pay.get("payment_status", "")).upper() == "SUCCESS" and oid and PAYMENTS.get(oid):
+                    _grant_and_notify(oid, str(pay.get("cf_payment_id") or "cf"), "webhook")
+                return self._json({"ok": True})
             if route == "/api/pay/webhook":
                 raw = self._read_body(limit=256 * 1024)
                 if not payments.verify_webhook_signature(raw, self.headers.get("X-Razorpay-Signature", "")):

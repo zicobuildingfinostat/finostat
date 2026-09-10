@@ -52,7 +52,7 @@ _PRIVACY = f"""
 <tr><td>A feedback line and whether we may quote it</td><td>You choose to write one after the assessment</td><td>Product feedback. We publish a quote on the site only if you ticked “you may quote me”, and only as first name and city.</td></tr>
 <tr><td>IP address</td><td>Every request, briefly</td><td>Rate-limiting sign-in links and assessment submissions to stop abuse. Kept with sign-in links (15 minutes) and assessment rows; not used for tracking.</td></tr>
 </tbody></table>
-<p>Payments for Desk and Pro are taken by <strong>Razorpay</strong> on its own checkout: your card, UPI or bank details go to Razorpay and never to Finostat. We keep only the order id, payment id, plan, period and amount, which is what a receipt and a refund need. We do not run advertising trackers or third-party analytics, and we never sell or rent personal data.</p>
+<p>Payments for Desk and Pro are taken by <strong>Razorpay</strong> or <strong>Cashfree</strong> on their own checkout pages: your card, UPI or bank details go to the payment gateway and never to Finostat. Cashfree requires a mobile number on every order, which we keep on your account for that purpose only. We keep the order id, payment id, plan, period and amount, which is what a receipt and a refund need. We do not run advertising trackers or third-party analytics, and we never sell or rent personal data.</p>
 
 <h2>Cookies and browser storage</h2>
 <ul>
@@ -110,8 +110,8 @@ _TERMS = f"""
 <h2>Plans and payment</h2>
 <ul>
 <li><strong>Starter</strong> is free, without a card.</li>
-<li><strong>Desk</strong> and <strong>Pro</strong> are paid plans at the prices shown on the <a href="/#plans">plans section</a>, in Indian rupees; any GST due is itemised at checkout. You pay for 30 days or 365 days at a time through Razorpay from your <a href="/account">account page</a>, and the plan is active the moment the payment is confirmed; a receipt is emailed.</li>
-<li>Plans do <strong>not</strong> renew automatically. We email you three days before a period ends; paying again extends the plan from its current end date. Cancel simply by not renewing — access continues to the end of the paid period. Refunds: within seven days of a first payment if you have not been able to use the service, otherwise pro rata at our discretion; refunds go back to the original payment method via Razorpay.</li>
+<li><strong>Desk</strong> and <strong>Pro</strong> are paid plans at the prices shown on the <a href="/#plans">plans section</a>, in Indian rupees; any GST due is itemised at checkout. You pay for 30 days or 365 days at a time through Razorpay or Cashfree from your <a href="/account">account page</a>, and the plan is active the moment the payment is confirmed; a receipt is emailed.</li>
+<li>Plans do <strong>not</strong> renew automatically. We email you three days before a period ends; paying again extends the plan from its current end date. Cancel simply by not renewing — access continues to the end of the paid period. Refunds: within seven days of a first payment if you have not been able to use the service, otherwise pro rata at our discretion; refunds go back to the original payment method via the gateway you paid through.</li>
 <li>We may change prices with 30 days' notice; changes apply from your next billing period.</li>
 </ul>
 

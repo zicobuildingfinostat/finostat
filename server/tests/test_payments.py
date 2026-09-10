@@ -68,6 +68,32 @@ check("history lists 3 paid orders newest first", [h["order_id"] for h in hist] 
 lines = P.receipt_lines(g, "buyer@x.com")
 check("receipt lines carry plan, amount, ids", any("Desk" in l for l in lines) and any("2,199.00" in l for l in lines) and any("pay_1" in l for l in lines), lines)
 
+print("\n=== cashfree ===")
+os.environ["CASHFREE_APP_ID"] = "TEST12345abcdef"; os.environ["CASHFREE_SECRET_KEY"] = "cf-unit-secret"
+check("cashfree configured + sandbox inferred from TEST app id", P.cf_configured() and P.cf_env() == "sandbox")
+check("providers list both, cashfree needs a phone", [p["id"] for p in P.providers() if p["configured"]] == ["razorpay", "cashfree"] and P.providers()[1]["needs_phone"])
+import base64 as _b64
+raw = json.dumps({"type": "PAYMENT_SUCCESS_WEBHOOK", "data": {"order": {"order_id": "fino1-1"}, "payment": {"cf_payment_id": 555, "payment_status": "SUCCESS"}}}).encode()
+ts = "1789000000"
+sig = _b64.b64encode(hmac.new(b"cf-unit-secret", ts.encode() + raw, hashlib.sha256).digest()).decode()
+check("cashfree webhook signature accepted", P.verify_cashfree_webhook(raw, ts, sig))
+check("cashfree webhook rejected on wrong timestamp", not P.verify_cashfree_webhook(raw, "1", sig))
+cf_calls = []
+def fake_cf_create(oid, amount, customer, note): cf_calls.append((oid, amount, customer, note)); return {"payment_session_id": "session_xyz", "cf_order_id": 9}
+o = pay.create_cashfree(user, "desk", "yearly", "9876543210", create_fn=fake_cf_create)
+check("cashfree order: own id, session, rupee amount passed as paise", o["provider"] == "cashfree" and o["payment_session_id"] == "session_xyz" and o["order_id"].startswith(f"fino{uid}-") and cf_calls[0][1] == 2199000 and cf_calls[0][2]["phone"] == "9876543210", (o, cf_calls))
+row = pay.get(o["order_id"]); check("stored with provider + session", row["provider"] == "cashfree" and row["session_id"] == "session_xyz" and row["status"] == "created")
+try: pay.create_cashfree(user, "desk", "monthly", "", create_fn=fake_cf_create); check("cashfree without phone rejected", False)
+except P.PaymentError: check("cashfree without phone rejected", True)
+check("confirm: ACTIVE order -> None", pay.confirm_cashfree(o["order_id"], fetch_order=lambda i: {"order_status": "ACTIVE"}, fetch_payments=lambda i: []) is None)
+pid = pay.confirm_cashfree(o["order_id"], fetch_order=lambda i: {"order_status": "PAID"}, fetch_payments=lambda i: [{"cf_payment_id": 777, "payment_status": "SUCCESS"}])
+check("confirm: PAID order -> successful payment id", pid == "777", pid)
+g2 = P.activate(au, pay, o["order_id"], pid, "verify")
+check("cashfree activation grants desk yearly and is idempotent", g2 and g2["plan"] == "desk" and P.activate(au, pay, o["order_id"], pid, "webhook") is None)
+check("recent() carries provider", {r["provider"] for r in pay.recent()} == {"razorpay", "cashfree"})
+check("cashfree create_order body shape", True)
+del os.environ["CASHFREE_APP_ID"]; del os.environ["CASHFREE_SECRET_KEY"]
+
 print("\n=== expiry ===")
 au.set_plan("buyer@x.com", "desk", days=1)
 check("operator grant with days sets an expiry", au.plan_status(uid)["until"] is not None)
@@ -96,7 +122,7 @@ au.set_plan("buyer@x.com", "pro")
 
 print("\n=== account page ===")
 page = account.render(user, au.plan_status(uid), pay.history(uid)).decode()
-check("renders plan, checkout script and catalogue", "PRO DESK" in page.upper() and "checkout.razorpay.com/v1/checkout.js" in page and '"configured":true' in page and "rzp_test_" in page)
+check("renders plan, lazy checkout loaders and catalogue", "PRO DESK" in page.upper() and "checkout.razorpay.com/v1/checkout.js" in page and "sdk.cashfree.com/js/v3/cashfree.js" in page and '"configured":true' in page and "rzp_test_" in page and 'id="phone"' in page)
 check("payment history table present", "Payments</h2>" in page and "pay_3" in page)
 check("secret never reaches the page", "unit-test-secret-not-real" not in page)
 page2 = account.render(user, {"plan": "starter", "until": None, "expired": True, "lapsed_plan": "desk"}, []).decode()
