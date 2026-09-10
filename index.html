@@ -951,7 +951,9 @@ body.menu-open{overflow:hidden}
 (function(){
   var note=document.getElementById('plan-note'),nk=document.getElementById('plan-note-k'),nt=document.getElementById('plan-note-t');
   function show(code,title){ if(!note)return; nk.textContent=code; nt.textContent=title; note.hidden=false; try{sessionStorage.setItem('fino_feat',code+'|'+title);}catch(e){} }
-  function go(card){ var code=card.getAttribute('data-feat')||''; var h=card.querySelector('h3'); show(code,h?h.textContent:code); var plans=document.getElementById('plans'); if(plans){ plans.scrollIntoView({behavior:'smooth',block:'start'}); } if(history.replaceState){ history.replaceState(null,'','#plans'); } }
+  var PANEL={MINI:'mini',SURF:'surf',RPLY:'rply',CURV:'curv',BKTS:'bkts',GEX:'gex',ALRT:'alerts'};
+  if(window.FINO_PAID){ Array.prototype.forEach.call(document.querySelectorAll('.feat[data-feat] .unlock'),function(a){ var c=a.closest('.feat').getAttribute('data-feat'); a.textContent='Open in the terminal →'; a.href='/dashboard#'+(PANEL[c]||''); }); }
+  function go(card){ var code=card.getAttribute('data-feat')||''; if(window.FINO_PAID){ location.href='/dashboard#'+(PANEL[code]||''); return; } var h=card.querySelector('h3'); show(code,h?h.textContent:code); var plans=document.getElementById('plans'); if(plans){ plans.scrollIntoView({behavior:'smooth',block:'start'}); } if(history.replaceState){ history.replaceState(null,'','#plans'); } }
   document.addEventListener('click',function(e){ var card=e.target.closest('.feat[data-feat]'); if(!card)return; e.preventDefault(); go(card); });
   document.addEventListener('keydown',function(e){ if(e.key!=='Enter'&&e.key!==' ')return; var card=e.target.closest&&e.target.closest('.feat[data-feat]'); if(!card)return; e.preventDefault(); go(card); });
   var q=new URLSearchParams(location.search).get('feature'); if(q){ var c=document.querySelector('.feat[data-feat="'+q.toUpperCase()+'"]'); if(c){ go(c); } }

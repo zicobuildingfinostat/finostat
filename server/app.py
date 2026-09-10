@@ -369,7 +369,7 @@ class Page:
                 self._mtime = mtime
             return self._raw
 
-    def render(self) -> bytes:
+    def render(self, paid: bool = False) -> bytes:
         doc = self._raw_html()
         snap = FEED.snapshot()
         live = bool(snap.get("live"))
@@ -382,7 +382,7 @@ class Page:
             "straddle": snap.get("straddle"),
             "live": live,
         })
-        tag = f"<script>window.FINO={boot};</script>"
+        tag = f"<script>window.FINO={boot};window.FINO_PAID={'true' if paid else 'false'};</script>"
         # index.html ships with a static window.FINO seed. Replace it outright --
         # injecting alongside it would let the stale seed win and quietly serve
         # yesterday's prices.
@@ -521,7 +521,7 @@ class Handler(BaseHTTPRequestHandler):
         route = parsed.path.rstrip("/") or "/"
         try:
             if route in ("/", "/index.html"):
-                return self._send(PAGE.render(), "text/html; charset=utf-8")
+                return self._send(PAGE.render(paid=_paid(self._current_user())), "text/html; charset=utf-8")
             if route == "/dashboard":
                 user = self._current_user()
                 paid = _paid(user)

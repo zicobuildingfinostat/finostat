@@ -348,6 +348,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 @media (max-width:980px){
   .desk{grid-template-columns:1fr;grid-auto-flow:row}
   .a-sheet,.a-side{grid-row:auto}
+  .a-cas,.a-book,.a-chart,.a-wide{grid-column:auto}    /* a span-2 item on a 1-column grid creates an implicit track and collapses the real one */
   .al-form{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
   .al-form button{grid-column:1/-1}
 }
