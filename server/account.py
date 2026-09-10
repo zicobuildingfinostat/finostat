@@ -37,7 +37,7 @@ _CSS = _BASE_CSS + r"""
 """
 
 _PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your account — Finostat</title><meta name="robots" content="noindex"><meta name="theme-color" content="#0c0626"><link rel="icon" href="/og.jpg">
+<title>Your account — Finostat</title><meta name="robots" content="noindex"><meta name="theme-color" content="#0c0626"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>__CSS__</style></head><body>

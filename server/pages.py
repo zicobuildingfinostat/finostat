@@ -32,7 +32,7 @@ DASHBOARD = r"""<!DOCTYPE html>
 <title>Finostat Terminal</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0c0626">
-<link rel="icon" href="/og.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
@@ -1505,7 +1505,7 @@ STRATEGY = r"""<!DOCTYPE html>
 <title>__NAME__ — Finostat</title>
 <meta name="description" content="__BLURB__">
 <meta name="theme-color" content="#0c0626">
-<link rel="icon" href="/og.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="canonical" href="https://finostat.com/strategies/__SLUG__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1694,7 +1694,7 @@ LOGIN = r"""<!DOCTYPE html>
 <title>Sign in — Finostat</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0c0626">
-<link rel="icon" href="/og.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
