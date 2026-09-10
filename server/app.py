@@ -38,6 +38,7 @@ import backup
 import brief
 import broker
 import builder
+import cas
 import chains
 import contracts
 import indices
@@ -103,6 +104,7 @@ CONSTITUENTS = indices.Constituents("NIFTY50")
 FEED.index_members = CONSTITUENTS.members
 CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts.ContractIndex())
 BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger")
+CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
 
 
 def _plan_of(user) -> str:
@@ -480,6 +482,17 @@ class Handler(BaseHTTPRequestHandler):
                 out["recent"] = BROKERS.recent_orders(user["id"], 10)
                 out["can_trade"] = broker.trade_allowed(user["email"])
                 return self._json(out)
+            if route == "/api/cas":
+                if not _paid(self._current_user()):
+                    return self._json({"error": "plan required", "need": "desk", "feature": "terminal"}, 402)
+                qs = parse_qs(parsed.query)
+                u = qs.get("u", ["NIFTY 50"])[0]
+                if u not in cas.UNDERLYINGS:
+                    return self._json({"error": "unknown index"}, 400)
+                date = qs.get("date", [""])[0]
+                if date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+                    return self._json({"error": "bad date"}, 400)
+                return self._json(CAS.get(u, date or None))
             if route == "/api/videos":
                 return self._json({"channel": videos.CHANNEL_URL, "videos": VIDEOS.latest(15), **VIDEOS.status()})
             if route == "/api/brief":
@@ -587,6 +600,7 @@ class Handler(BaseHTTPRequestHandler):
             "brief": {"last": BRIEF.last, "dates": BRIEFS.dates(3)},
             "videos": VIDEOS.status(),
             "broker": {"configured": broker.configured()},
+            "cas": {"date": CAS.date, "sessions": {u: len(s.points) for u, s in CAS.today.items()}},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -1117,6 +1131,7 @@ def main() -> int:
     BRIEF.start()
     RENEWALS.start()
     VIDEOS.start()
+    CAS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -1133,6 +1148,8 @@ def main() -> int:
         BRIEF.stop()
         RENEWALS.stop()
         VIDEOS.stop()
+        CAS.stop()
+        CAS.flush()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()

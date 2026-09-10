@@ -93,6 +93,17 @@ button{cursor:pointer;background:none;border:0}
 .a-side{grid-row:span 2;display:flex;flex-direction:column;gap:10px;min-height:0}
 .a-wire{min-height:260px}
 .a-chart{grid-column:span 2;min-height:480px}
+.a-cas{grid-column:span 2;min-height:420px}
+.cas-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 10px;border-bottom:1px solid var(--line);font-size:10.5px}
+.cas-top select{background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;font-size:11px;padding:3px 6px}
+.cas-top .seg button{font-size:10px;letter-spacing:.08em;padding:4px 9px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.cas-top .seg button.on{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.cas-top .live{color:var(--up)}.cas-top .off{color:var(--faint)}
+.cas-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.cas-kpi div{background:var(--panel);padding:6px 10px}.cas-kpi small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.cas-kpi b{font-family:var(--display);font-size:20px;font-weight:600}
+.cas-chart{flex:1;min-height:300px;padding:6px 10px 8px;position:relative}.cas-chart svg{width:100%;height:100%;min-height:290px;display:block}
+.cas-legend{display:flex;gap:16px;font-size:10px;color:var(--muted);padding:0 10px 6px}.cas-legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:6px}
+.cas-empty{padding:14px 12px;color:var(--faint);font-size:11.5px;line-height:1.5}
+.cas-tip{position:absolute;pointer-events:none;background:rgba(12,6,38,.95);border:1px solid var(--line-strong);padding:5px 8px;font-size:10.5px;white-space:nowrap;display:none}
 .br-body{padding:8px 10px;font-size:11.5px;flex:1;display:flex;flex-direction:column;gap:8px}
 .br-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .br-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--line)}
@@ -355,6 +366,14 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
   </div>
 
+  <section class="panel a-cas" id="p-cas" aria-label="Closing auction session">
+    <div class="panel-hd"><span class="k">CAS</span><span class="s" id="cas-title">CLOSING AUCTION · IEP vs SYNTHETIC FUTURE</span><span class="r"><span id="cas-state">—</span></span></div>
+    <div class="cas-top"><span class="seg" id="cas-u"><button type="button" data-u="NIFTY 50" class="on">NIFTY</button><button type="button" data-u="BANKNIFTY">BANKNIFTY</button><button type="button" data-u="SENSEX">SENSEX</button></span>
+      <select id="cas-date" aria-label="Session date"></select><span id="cas-note" style="color:var(--faint)">records 15:15–15:40 IST every trading day · ATM frozen at 15:15</span></div>
+    <div class="cas-kpi" id="cas-kpi"></div>
+    <div class="cas-chart"><svg id="cas-svg" viewBox="0 0 900 300" preserveAspectRatio="none" aria-label="IEP vs synthetic future"></svg><div class="cas-tip" id="cas-tip"></div></div>
+    <div class="cas-legend"><span><i style="background:#7fe0f0"></i>Index IEP / level</span><span><i style="background:#f5c842"></i>Synthetic future (ATM + CE − PE)</span><span><i style="background:#ff5c6c;height:1px"></i>3:15 reference</span></div>
+  </section>
   <section class="panel a-chart" id="p-chart" aria-label="Chart">
     <div class="panel-hd"><span class="k">CHRT</span><span class="s" id="ch-sym">NSE:NIFTY</span><span class="ch-note" id="ch-note">click any symbol on the desk to chart it · TradingView</span>
       <span class="r"><a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:var(--faint)">tradingview.com</a></span></div>
@@ -708,7 +727,46 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+var PANELS=[['sheet','BFLY sheet'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+/* ---------- CAS: index IEP vs synthetic future ---------- */
+var casState={u:'NIFTY 50',date:'',data:null,timer:null};
+var casSvg=document.getElementById('cas-svg'), casKpi=document.getElementById('cas-kpi'), casDate=document.getElementById('cas-date'), casTip=document.getElementById('cas-tip'), casPanel=document.getElementById('p-cas'), casStateEl=document.getElementById('cas-state');
+function hhmm(ts){ var d=new Date(ts*1000); return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'}); }
+function drawCas(d){
+  var pts=(d.points||[]).filter(function(p){ return p[1]!=null||p[2]!=null; });
+  if(!pts.length){ casSvg.innerHTML='<text x="450" y="150" text-anchor="middle" fill="#6d609e" font-size="13" font-family="IBM Plex Mono,monospace">'+(d.live?'waiting for the first ticks…':'no session recorded for '+esc(d.date)+' — the recorder runs 15:15–15:40 IST on trading days')+'</text>'; return; }
+  var t0=pts[0][0], t1=Math.max(pts[pts.length-1][0], t0+60), W=900,H=300,L=64,R=14,T=12,B=28;
+  var vals=[]; pts.forEach(function(p){ if(p[1]!=null) vals.push(p[1]); if(p[2]!=null) vals.push(p[2]); }); if(d.ref!=null) vals.push(d.ref);
+  var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals), pad=(hi-lo||10)*0.06; lo-=pad; hi+=pad;
+  var X=function(t){ return L+(t-t0)/(t1-t0)*(W-L-R); }, Y=function(v){ return T+(hi-v)/(hi-lo)*(H-T-B); };
+  var path=function(i){ var s='',pen=false; pts.forEach(function(p){ if(p[i]==null){ pen=false; return; } s+=(pen?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[i]).toFixed(1)+' '; pen=true; }); return s; };
+  var g=''; var steps=5; for(var k=0;k<=steps;k++){ var v=lo+(hi-lo)*k/steps, y=Y(v); g+='<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-R)+'" y2="'+y.toFixed(1)+'" stroke="rgba(74,52,160,.35)" stroke-dasharray="2 4"/><text x="'+(L-6)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end" fill="#6d609e" font-size="10" font-family="IBM Plex Mono,monospace">'+fmt(v,0)+'</text>'; }
+  var ticks=6; for(var j=0;j<=ticks;j++){ var tt=t0+(t1-t0)*j/ticks, x=X(tt); g+='<line x1="'+x.toFixed(1)+'" y1="'+T+'" x2="'+x.toFixed(1)+'" y2="'+(H-B)+'" stroke="rgba(74,52,160,.2)"/><text x="'+x.toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" fill="#6d609e" font-size="10" font-family="IBM Plex Mono,monospace">'+hhmm(tt).slice(0,5)+'</text>'; }
+  if(d.ref!=null) g+='<line x1="'+L+'" y1="'+Y(d.ref).toFixed(1)+'" x2="'+(W-R)+'" y2="'+Y(d.ref).toFixed(1)+'" stroke="#ff5c6c" stroke-width="1" stroke-dasharray="6 4" opacity=".8"/>';
+  g+='<path d="'+path(2)+'" fill="none" stroke="#f5c842" stroke-width="1.8" vector-effect="non-scaling-stroke"/>';
+  g+='<path d="'+path(1)+'" fill="none" stroke="#7fe0f0" stroke-width="1.8" vector-effect="non-scaling-stroke"/>';
+  casSvg.innerHTML=g; casSvg._map={pts:pts,t0:t0,t1:t1,L:L,R:R,W:W};
+}
+function renderCas(d){
+  casState.data=d; var st=d.stats||{};
+  var exp=d.expiry?new Date(d.expiry).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—';
+  casKpi.innerHTML=[['3:15 reference',d.ref!=null?fmt(d.ref,2):'—'],['fixed ATM',d.atm!=null?fmt(d.atm,0):'—'],['expiry',exp],['index now',st.index!=null?fmt(st.index,2):'—'],['synthetic now',st.synth!=null?fmt(st.synth,2):'—'],['basis (index − synth)',st.basis!=null?((st.basis>=0?'+':'')+fmt(st.basis,2)):'—'],['index range',st.index_lo!=null?fmt(st.index_lo,0)+' – '+fmt(st.index_hi,0):'—'],['iep ticks',st.iep_ticks!=null?st.iep_ticks:'—']]
+    .map(function(x){ return '<div><small>'+x[0]+'</small><b'+(x[0].indexOf('basis')===0&&st.basis!=null?' class="'+(st.basis>=0?'up':'down')+'"':'')+'>'+x[1]+'</b></div>'; }).join('');
+  casStateEl.textContent=d.live?'LIVE · recording':(d.n?d.n+' samples · '+esc(d.date):'idle · '+esc(d.date)); casStateEl.className=d.live?'live':'off';
+  var opts=(d.dates||[]); if(opts.indexOf(d.date)<0) opts=[d.date].concat(opts);
+  casDate.innerHTML=opts.map(function(x){ return '<option value="'+x+'"'+(x===d.date?' selected':'')+'>'+x+'</option>'; }).join('');
+  drawCas(d);
+}
+function pollCas(){
+  if(window.FINO_LOCKED||casPanel.hidden) return;
+  fetch('/api/cas?u='+encodeURIComponent(casState.u)+(casState.date?'&date='+casState.date:''),{credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(d){ if(d&&!d.error) renderCas(d); }).catch(function(){});
+}
+document.getElementById('cas-u').addEventListener('click',function(e){ var b=e.target.closest('button[data-u]'); if(!b) return; casState.u=b.getAttribute('data-u'); Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); pollCas(); });
+casDate.addEventListener('change',function(){ casState.date=casDate.value; pollCas(); });
+casSvg.addEventListener('mousemove',function(e){ var m=casSvg._map; if(!m) return; var r=casSvg.getBoundingClientRect(), x=(e.clientX-r.left)/r.width*m.W; var t=m.t0+(x-m.L)/(m.W-m.L-m.R)*(m.t1-m.t0); var best=null; m.pts.forEach(function(p){ if(!best||Math.abs(p[0]-t)<Math.abs(best[0]-t)) best=p; }); if(!best) return;
+  casTip.style.display='block'; casTip.style.left=Math.min(e.clientX-r.left+12, r.width-180)+'px'; casTip.style.top=(e.clientY-r.top-30)+'px'; casTip.innerHTML=hhmm(best[0])+' · <span style="color:#7fe0f0">'+(best[1]!=null?fmt(best[1],2):'—')+'</span> · <span style="color:#f5c842">'+(best[2]!=null?fmt(best[2],2):'—')+'</span>'+(best[1]!=null&&best[2]!=null?' · Δ '+fmt(best[1]-best[2],1):''); });
+casSvg.addEventListener('mouseleave',function(){ casTip.style.display='none'; });
+setTimeout(pollCas,700); setInterval(function(){ var d=casState.data; if(d&&d.live) pollCas(); },2000); setInterval(function(){ var d=casState.data; if(!d||!d.live) pollCas(); },30000);
 /* ---------- broker panel ---------- */
 var brBody=document.getElementById('br-body'), brStatus=document.getElementById('br-status'), brTitle=document.getElementById('br-title');
 var brState={data:null,timer:null};

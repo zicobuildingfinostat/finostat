@@ -62,6 +62,7 @@ UNDERLYINGS = {
 
 # Feed.ltpc = 1 ; LTPC.ltp = 1, LTPC.cp = 4 ; FeedResponse.feeds = 2
 F_FEEDS, F_LTPC, F_LTP, F_CP = 2, 1, 1, 4
+F_IEP = 5                  # ltpc.iep: indicative equilibrium price during pre-open / closing auction
 F_FULLFEED, F_MARKETFF, F_INDEXFF = 2, 1, 2
 # MarketFullFeed (mode "full"): ltpc=1 marketLevel=2 optionGreeks=3 marketOHLC=4 atp=5 vtt=6 oi=7 iv=8 tbq=9 tsq=10
 FF_LEVEL, FF_VTT, FF_OI, FF_IV = 2, 6, 7, 8
@@ -102,6 +103,7 @@ class UpstoxFeed(Feed):
         self._spot_key: str | None = None
         self._ws: wsclient.WebSocket | None = None
         self._stats: dict = {}                         # key -> {oi, vol, bid, ask, ...} from full-mode sockets
+        self._iep: dict = {}                           # key -> (iep, ts) while an auction is running
         self._oi_open: dict = {}                       # key -> (ist_date, first oi seen today, ts)
         self._logged_fields = False
         self._sockets: set = set()                     # every open socket, closed only by its reader
@@ -588,6 +590,32 @@ class UpstoxFeed(Feed):
         return mp.as_double(ltpc, F_LTP), mp.as_double(ltpc, F_CP)
 
     @staticmethod
+    def _iep_of_feed(feed: dict):
+        ltpc = mp.as_message(feed, F_LTPC)
+        if ltpc is None:
+            full = mp.as_message(feed, F_FULLFEED)
+            inner = (mp.as_message(full, F_MARKETFF) or mp.as_message(full, F_INDEXFF)) if full is not None else None
+            ltpc = mp.as_message(inner, F_LTPC) if inner is not None else None
+        if ltpc is None:
+            return None
+        v = mp.as_double(ltpc, F_IEP)
+        return v if v and v > 0 else None
+
+    def iep_of(self, label: str):
+        """Fresh (<5 s) indicative equilibrium price for an index label or universe key."""
+        key = self._spot_key_for(label)
+        if not key:
+            return None
+        v = self._iep.get(key)
+        return v[0] if v and time.time() - v[1] < 5 else None
+
+    def _spot_key_for(self, label: str):
+        for key, meta in self._meta.items():
+            if meta.get("label") == label or meta.get("symbol") == label:
+                return key
+        return None
+
+    @staticmethod
     def _extract_stats(feed: dict) -> dict | None:
         """OI, volume and top of book from a full-mode or option_greeks-mode Feed."""
         full = mp.as_message(feed, F_FULLFEED)
@@ -621,6 +649,9 @@ class UpstoxFeed(Feed):
             if meta is None:
                 continue
             ltp, close = self._ltp_and_close(feed)
+            iep = self._iep_of_feed(feed)
+            if iep:
+                self._iep[key] = (iep, time.time())
             if ltp is not None and ltp > 0:
                 self._prices[key] = ltp
                 if meta["kind"] == "stock":
