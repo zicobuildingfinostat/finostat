@@ -730,7 +730,7 @@ function renderBroker(d){
   var open=(u.orders||[]).filter(function(o){ return /open|pending|trigger|validation|put order/i.test(o.status||''); });
   h+='<div class="br-h">Orders today</div>';
   h+=(u.orders&&u.orders.length)?'<div class="bl-scroll"><table class="br-table"><thead><tr><th>SYMBOL</th><th>SIDE</th><th>QTY</th><th>TYPE</th><th>STATUS</th><th></th></tr></thead><tbody>'+u.orders.slice(0,12).map(function(o){ var isOpen=open.indexOf(o)>=0; return '<tr><td>'+esc(o.symbol)+'</td><td class="'+(o.side==='BUY'?'up':'down')+'">'+esc(o.side||'')+'</td><td>'+(o.filled||0)+'/'+(o.qty||0)+'</td><td>'+esc(o.type||'')+(o.type==='LIMIT'&&o.price?' '+fmt(o.price):'')+'</td><td title="'+esc(o.message||'')+'">'+esc(o.status||'')+'</td><td>'+(isOpen?'<button type="button" class="br-btn" data-cancel="'+esc(o.order_id)+'">cancel</button>':'')+'</td></tr>'; }).join('')+'</tbody></table></div>':'<div class="br-msg">no orders today'+(u.orders_error?' · '+esc(u.orders_error):'')+'</div>';
-  h+='<div class="br-row" style="margin-top:auto"><span class="br-msg">token ends 03:30 IST · every order is confirmed on a ticket first</span><button type="button" class="br-btn" data-act="disconnect" style="margin-left:auto">Disconnect</button></div>';
+  h+='<div class="br-row" style="margin-top:auto"><span class="br-msg">'+(d.can_trade?'token ends 03:30 IST · every order is confirmed on a ticket first':'read-only for now: order routing opens once Finostat is empanelled with Upstox')+'</span><button type="button" class="br-btn" data-act="disconnect" style="margin-left:auto">Disconnect</button></div>';
   brBody.innerHTML=h;
 }
 function pollBroker(){
@@ -748,6 +748,7 @@ brBody.addEventListener('click',function(e){
 setInterval(pollBroker,10000); setTimeout(pollBroker,900);
 if(/[?&]broker=(connected|failed)/.test(location.search)){ var m=location.search.match(/broker=(\w+)/)[1]; setTimeout(function(){ brStatus.textContent=m==='connected'?'connected ✓':'connection failed'; },1200); }
 window.finoBrokerReady=function(){ var d=brState.data; var up=d&&(d.brokers||[]).filter(function(b){ return b.id==='upstox'; })[0]; return !!(up&&up.connected&&!up.expired); };
+window.finoCanTrade=function(){ return !!(brState.data&&brState.data.can_trade); };
 window.finoBrokerPoll=pollBroker;
 /* ---------- TradingView chart: follows whatever symbol you click ---------- */
 var chart={sym:null,ready:false,loading:false,pending:'NIFTY 50'};
@@ -1014,6 +1015,7 @@ var tk=document.getElementById('tk'), tkLegs=document.getElementById('tk-legs'),
 function openTicket(){
   if(!bl.u||!bl.legs.length||!bl.lastData) return;
   if(!(window.finoBrokerReady&&window.finoBrokerReady())){ alert('Connect your Upstox account in the BROKER panel first.'); return; }
+  if(!(window.finoCanTrade&&window.finoCanTrade())){ alert('Order routing is not open to your account yet — positions and funds are. It switches on once Finostat is empanelled with Upstox.'); return; }
   var d=bl.lastData; document.getElementById('tk-title').textContent=bl.u+' · '+new Date(d.expiry).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' · lot '+d.lot;
   tkLegs.innerHTML=d.legs.map(function(l,i){ return '<tr><td>'+l.strike+' '+l.right+'</td><td class="'+(l.qty>0?'up':'down')+'">'+(l.qty>0?'BUY':'SELL')+'</td><td>'+Math.abs(l.qty)+'×'+d.lot+'</td><td>'+(l.price!=null?l.price.toFixed(2):'—')+'</td><td><input type="number" step="0.05" min="0.05" data-i="'+i+'" value="'+(l.price!=null?l.price.toFixed(2):'')+'" style="width:76px"></td></tr>'; }).join('');
   document.getElementById('tk-confirm').checked=false; tkMsg.textContent=''; tkRes.innerHTML=''; document.getElementById('tk-send').disabled=false; tk.hidden=false;

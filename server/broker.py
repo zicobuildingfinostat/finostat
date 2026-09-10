@@ -89,6 +89,14 @@ def api_secret() -> str:
     return os.environ.get("UPSTOX_API_SECRET", "").strip() or config.UPSTOX_API_SECRET
 
 
+def trade_allowed(email: str) -> bool:
+    """Order routing is limited to listed accounts (FINOSTAT_TRADE_USERS, comma-
+    separated emails) until Finostat is empanelled with the broker as an algo
+    provider. Positions and funds are open to every Desk member regardless."""
+    allowed = {e.strip().lower() for e in os.environ.get("FINOSTAT_TRADE_USERS", "").split(",") if e.strip()}
+    return bool(email) and email.lower() in allowed
+
+
 def configured(broker: str = "upstox") -> bool:
     return broker == "upstox" and bool(api_key() and api_secret())
 

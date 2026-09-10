@@ -29,6 +29,11 @@ t = datetime(2026, 9, 10, 10, 0, tzinfo=B.IST).timestamp()
 check("token expiry = next 03:30 IST (same day before 03:30, else tomorrow)", datetime.fromtimestamp(B.token_expiry(t), B.IST).strftime("%Y-%m-%d %H:%M") == "2026-09-11 03:30"
       and datetime.fromtimestamp(B.token_expiry(datetime(2026, 9, 10, 1, 0, tzinfo=B.IST).timestamp()), B.IST).strftime("%Y-%m-%d %H:%M") == "2026-09-10 03:30")
 
+os.environ["FINOSTAT_TRADE_USERS"] = "zico@finostat.com, Gicok13films@gmail.com"
+check("trade allow-list: listed emails only, case-insensitive", B.trade_allowed("gicok13films@gmail.com") and B.trade_allowed("zico@finostat.com") and not B.trade_allowed("someone@x.com") and not B.trade_allowed(""))
+del os.environ["FINOSTAT_TRADE_USERS"]
+check("empty allow-list -> nobody", not B.trade_allowed("zico@finostat.com"))
+
 print("\n=== storage ===")
 tmp = pathlib.Path(tempfile.mkdtemp())
 st = B.Brokers(tmp / "acct.db")

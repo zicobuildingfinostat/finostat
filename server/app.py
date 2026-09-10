@@ -478,6 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif acc.get("expired"):
                     out["upstox"] = {"expired": True}
                 out["recent"] = BROKERS.recent_orders(user["id"], 10)
+                out["can_trade"] = broker.trade_allowed(user["email"])
                 return self._json(out)
             if route == "/api/videos":
                 return self._json({"channel": videos.CHANNEL_URL, "videos": VIDEOS.latest(15), **VIDEOS.status()})
@@ -786,6 +787,8 @@ class Handler(BaseHTTPRequestHandler):
                     except broker.BrokerError as exc:
                         return self._json({"error": str(exc)}, 502)
                 # place a builder strategy
+                if not broker.trade_allowed(user["email"]):
+                    return self._json({"error": "Order routing is not open to your account yet (positions and funds are). It switches on once Finostat is empanelled with Upstox."}, 403)
                 if body.get("confirm") is not True:
                     return self._json({"error": "confirm the ticket first"}, 400)
                 ukey = str(body.get("u", ""))
