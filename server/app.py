@@ -43,6 +43,9 @@ import cas
 import econ
 import econ_pages
 import holidays
+import analytics
+import history
+import upstox_rest
 import events
 import chains
 import contracts
@@ -112,6 +115,63 @@ BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger"
 CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
 BOOK = book.Store(AUTH.path)
 HOLIDAYS = holidays.Holidays(AUTH.path)
+UREST = upstox_rest.Client()
+HIST = history.History(UREST, upstox_rest.CandleStore(recorder._data_dir() / "history.db"))
+_ANALYTICS_U = ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX")
+
+
+def _expiry_ts(day: str) -> float:
+    d = econ.datetime.strptime(day, "%Y-%m-%d").replace(hour=15, minute=30, tzinfo=econ.IST)
+    return d.timestamp()
+
+
+def _lot_for(u: str, day: str) -> int:
+    """Lot size from the contract index (exact), else the archive's contract master."""
+    ci = CONTRACTS_OF(FEED)
+    try:
+        name = contracts.INDEX_UNDERLYINGS[u][0]
+        target = int(_expiry_ts(day) * 1000)
+        exps = ci.expiries(name) if ci else []
+        exp = min(exps, key=lambda e: abs(e - target)) if exps else None
+        if exp is not None and abs(exp - target) < 86400 * 1000:
+            rows = ci.ladder(name, exp, 1.0, 1)
+            if rows and rows[0].get("lot"):
+                return int(rows[0]["lot"])
+    except Exception:
+        pass
+    try:
+        days = HIST.days(u)
+        if days:
+            return int(HIST.contracts(u, days[-1]).get("lot") or 0) or 1
+    except Exception:
+        pass
+    return 1
+
+
+def _analytics_chain(u: str, day: str | None = None) -> dict:
+    """Full chain with OI and Greeks for one expiry: Upstox REST first, the live socket chain as fallback."""
+    if u not in _ANALYTICS_U:
+        return {"error": "analytics cover NIFTY 50, BANKNIFTY, FINNIFTY and SENSEX"}
+    now = time.time()
+    try:
+        exps = [e for e in UREST.expiries(u) if _expiry_ts(e) > now]
+        if not exps:
+            raise upstox_rest.RestError("no live expiries")
+        day = day if day in exps else exps[0]
+        ch = UREST.option_chain(u, day)
+        if not ch.get("rows") or not ch.get("spot"):
+            raise upstox_rest.RestError("empty chain")
+        ch.update({"expiries": exps[:6], "t": max(0.0, (_expiry_ts(day) - now) / (365 * 86400)), "lot": _lot_for(u, day), "live": True})
+        return ch
+    except upstox_rest.RestError as exc:
+        log.info("analytics: REST chain unavailable (%s); using the socket chain", exc)
+    ws = CHAINS.chain(u)
+    if "rows" not in ws:
+        return {"error": ws.get("error", "chain unavailable")}
+    exp_ms = ws["expiry"]
+    return {"underlying": u, "expiry": econ.datetime.fromtimestamp(exp_ms / 1000, econ.IST).strftime("%Y-%m-%d"), "spot": ws["spot"], "rows": ws["rows"],
+            "expiries": [econ.datetime.fromtimestamp(e / 1000, econ.IST).strftime("%Y-%m-%d") for e in ws.get("expiries", [])],
+            "t": ws.get("t_years", 0.0), "lot": ws.get("lot", 1), "source": "socket", "live": ws.get("live", False)}
 ECON = econ.Econ(AUTH.path, holidays=HOLIDAYS)
 EVENTS = events.Calendar(lambda: CONTRACTS_OF(FEED), CHAINS, cache=AUTH.path.parent / "events.json", econ=ECON)
 
@@ -159,7 +219,8 @@ def _paid(user) -> bool:
 # /api/chain and /api/strategy (index only), which stay open so the free
 # course keeps its live numbers.
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
-                 "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts"}
+                 "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
+                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest"}
 
 
 def _gate(user, ukey: str):
@@ -485,6 +546,65 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError:
                         anchor = None
                 return self._send(econ.render(ECON, anchor), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route in ("/api/skew", "/api/curve", "/api/gex", "/api/surface"):
+                qs = parse_qs(parsed.query)
+                u = qs.get("u", ["NIFTY 50"])[0]
+                day = qs.get("expiry", [""])[0] or None
+                if route == "/api/surface":
+                    base = _analytics_chain(u)
+                    if "error" in base:
+                        return self._json(base, 503)
+                    chains_ = []
+                    for e in base["expiries"][:4]:
+                        ch = base if e == base["expiry"] else _analytics_chain(u, e)
+                        if "rows" in ch and ch["t"] > 0:
+                            chains_.append({"expiry": e, "label": econ.datetime.strptime(e, "%Y-%m-%d").strftime("%d %b"), "rows": ch["rows"], "spot": ch["spot"], "t": ch["t"]})
+                    out = analytics.surface(chains_)
+                    out.update({"underlying": u, "spot": base["spot"], "source": base.get("source"), "live": base.get("live")})
+                    return self._json(out)
+                ch = _analytics_chain(u, day)
+                if "error" in ch:
+                    return self._json(ch, 503)
+                meta = {"underlying": u, "expiry": ch["expiry"], "expiries": ch["expiries"], "spot": ch["spot"], "t_days": round(ch["t"] * 365, 2),
+                        "source": ch.get("source"), "live": ch.get("live"), "lot": ch.get("lot")}
+                if route == "/api/skew":
+                    out = analytics.smile(ch["rows"], ch["spot"], ch["t"])
+                elif route == "/api/curve":
+                    out = analytics.distribution(ch["rows"], ch["spot"], ch["t"]) or {"error": "not enough implied vols to build the curve"}
+                else:
+                    out = analytics.gex(ch["rows"], ch["spot"], ch.get("lot") or 1, ch["t"]) or {"error": "open interest not available for this chain"}
+                out.update(meta)
+                return self._json(out, 503 if "error" in out else 200)
+            if route == "/api/replay/days":
+                u = parse_qs(parsed.query).get("u", ["NIFTY 50"])[0]
+                try:
+                    return self._json({"underlying": u, "days": HIST.days(u)[::-1]})
+                except upstox_rest.RestError as exc:
+                    return self._json({"error": str(exc)}, 503)
+            if route == "/api/replay/day":
+                qs = parse_qs(parsed.query)
+                u, day = qs.get("u", ["NIFTY 50"])[0], qs.get("date", [""])[0]
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                    return self._json({"error": "date required"}, 400)
+                return self._json(HIST.replay(u, day))
+            if route == "/api/backtest":
+                qs = parse_qs(parsed.query)
+                u = qs.get("u", ["NIFTY 50"])[0]
+                strategy = qs.get("strategy", ["short_straddle"])[0]
+                entry, exit_ = qs.get("entry", ["10:00"])[0], qs.get("exit", ["15:15"])[0]
+                if not (re.fullmatch(r"\d{2}:\d{2}", entry) and re.fullmatch(r"\d{2}:\d{2}", exit_) and entry < exit_):
+                    return self._json({"error": "entry must be before exit (HH:MM)"}, 400)
+                try:
+                    n = max(5, min(400, int(qs.get("n", ["52"])[0])))
+                    wings = max(1, min(10, int(qs.get("wings", ["2"])[0])))
+                except ValueError:
+                    return self._json({"error": "bad parameters"}, 400)
+                try:
+                    return self._json(HIST.backtest(u, strategy, entry, exit_, n, wings))
+                except ValueError as exc:
+                    return self._json({"error": str(exc)}, 400)
+                except upstox_rest.RestError as exc:
+                    return self._json({"error": str(exc)}, 503)
             if route == "/api/expiries":
                 today = econ.datetime.now(econ.IST).date()
                 return self._json({"expiries": econ_pages.expiry_rows(CONTRACTS_OF(FEED), today, HOLIDAYS.dates())})
@@ -700,6 +820,7 @@ class Handler(BaseHTTPRequestHandler):
             "events": {"results": len(EVENTS.results), "fetched": EVENTS.fetched, "error": EVENTS.error},
             "econ": {"fetched": ECON.fetched, "error": ECON.error},
             "holidays": {"count": len(HOLIDAYS.all()), "fetched": HOLIDAYS.fetched, "error": HOLIDAYS.error},
+            "analytics": {"rest_token": bool(UREST.token), "history_candles": HIST.store.count()},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),

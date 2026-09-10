@@ -238,8 +238,8 @@ PITCH = {
     "pro": {
         "plan": "pro", "name": "Pro desk", "price": "₹5,599 / month · ₹55,990 a year",
         "head": "Your edge now is history and unlimited alerts",
-        "why": "At your level the questions are quantitative: how did this structure behave across the last four years of expiries, where did the pin actually land, what did the straddle do into events. Pro adds the recorded tick history and backtesting, unlimited alert rules, the MCX arbitrage scanner and data export, plus a live session with the desk each quarter.",
-        "points": ["Tick-by-tick replay and four years of expiry history", "Backtest any structure across past expiries", "Unlimited alert rules; data export and API access", "One live session with the desk every quarter"],
+        "why": "At your level the questions are quantitative: how did this structure behave across the last two years of expiries, where did the pin actually land, what did the straddle do into events. Pro adds the recorded tick history and backtesting, unlimited alert rules, the MCX arbitrage scanner and data export, plus a live session with the desk each quarter.",
+        "points": ["Minute-by-minute replay and two years of expiry history", "Backtest any structure across past expiries", "Unlimited alert rules; data export and API access", "One live session with the desk every quarter"],
     },
 }
 
