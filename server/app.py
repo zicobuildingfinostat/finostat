@@ -40,6 +40,7 @@ import brief
 import broker
 import builder
 import cas
+import econ
 import events
 import chains
 import contracts
@@ -108,7 +109,8 @@ CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts
 BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger")
 CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
 BOOK = book.Store(AUTH.path)
-EVENTS = events.Calendar(lambda: CONTRACTS_OF(FEED), CHAINS, cache=AUTH.path.parent / "events.json")
+ECON = econ.Econ(AUTH.path)
+EVENTS = events.Calendar(lambda: CONTRACTS_OF(FEED), CHAINS, cache=AUTH.path.parent / "events.json", econ=ECON)
 
 
 def _book_payload(user) -> dict:
@@ -448,6 +450,24 @@ class Handler(BaseHTTPRequestHandler):
                                    "signed_in": self._current_user() is not None}, 402)
             if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
+            if route == "/calendar":
+                qs = parse_qs(parsed.query)
+                d = qs.get("d", [""])[0]
+                anchor = None
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+                    try:
+                        anchor = econ.date.fromisoformat(d)
+                    except ValueError:
+                        anchor = None
+                return self._send(econ.render(ECON, anchor), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/api/calendar":
+                qs = parse_qs(parsed.query)
+                try:
+                    days = max(1, min(60, int(qs.get("days", ["14"])[0])))
+                except ValueError:
+                    days = 14
+                today = econ.datetime.now(econ.IST).date()
+                return self._json({"events": ECON.events(today, today + econ.timedelta(days=days)), "fetched": ECON.fetched})
             if route == "/brief":
                 return self._send(brief.render_index(BRIEFS), "text/html; charset=utf-8", cache="public, max-age=300")
             if route.startswith("/brief/"):
@@ -644,6 +664,7 @@ class Handler(BaseHTTPRequestHandler):
             "broker": {"configured": broker.configured()},
             "cas": {"date": CAS.date, "sessions": {u: len(s.points) for u, s in CAS.today.items()}},
             "events": {"results": len(EVENTS.results), "fetched": EVENTS.fetched, "error": EVENTS.error},
+            "econ": {"fetched": ECON.fetched, "error": ECON.error},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -1232,6 +1253,7 @@ def main() -> int:
     VIDEOS.start()
     CAS.start()
     EVENTS.start()
+    ECON.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -1251,6 +1273,7 @@ def main() -> int:
         CAS.stop()
         CAS.flush()
         EVENTS.stop()
+        ECON.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()

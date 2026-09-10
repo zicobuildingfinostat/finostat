@@ -67,8 +67,8 @@ def load_macro(path: pathlib.Path = MACRO_FILE) -> list[dict]:
 
 
 class Calendar:
-    def __init__(self, contracts_of, chains, cache: pathlib.Path | None = None, interval: float = 6 * 3600):
-        self.contracts_of, self.chains, self.cache, self.interval = contracts_of, chains, cache, interval
+    def __init__(self, contracts_of, chains, cache: pathlib.Path | None = None, interval: float = 6 * 3600, econ=None):
+        self.contracts_of, self.chains, self.cache, self.interval, self.econ = contracts_of, chains, cache, interval, econ
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self.results: list[dict] = []
@@ -193,7 +193,20 @@ class Calendar:
         horizon = (datetime.now(IST) + timedelta(days=days)).date().isoformat()
         with self._lock:
             results = [e for e in self.results if today <= e["date"] <= horizon]
-        rows = self.expiries(days) + results + [e for e in load_macro() if today <= e["date"] <= horizon]
+        macro = [e for e in load_macro() if today <= e["date"] <= horizon]
+        if self.econ is not None:
+            try:
+                for e in self.econ.high_impact(days):
+                    u = "BANKNIFTY" if "RBI" in e["title"] else "NIFTY 50"
+                    macro.append({"date": e["date"], "kind": "macro", "u": u, "title": f"{e['flag']} {e['title']}", "detail": f"{e['when']} IST" + (f" · forecast {e['forecast']}" if e.get("forecast") else "")})
+            except Exception:
+                log.exception("events: econ merge failed")
+        seen = set(); dedup = []
+        for e in macro:
+            k = (e["date"], e["title"].lower()[:24])
+            if k not in seen:
+                seen.add(k); dedup.append(e)
+        rows = self.expiries(days) + results + dedup
         rows.sort(key=lambda e: (e["date"], {"macro": 0, "expiry": 1, "results": 2}[e["kind"]], e["u"]))
         priced = 0
         for e in rows:
