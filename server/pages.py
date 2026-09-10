@@ -93,6 +93,29 @@ button{cursor:pointer;background:none;border:0}
 .a-side{grid-row:span 2;display:flex;flex-direction:column;gap:10px;min-height:0}
 .a-wire{min-height:260px}
 .a-chart{grid-column:span 2;min-height:480px}
+.br-body{padding:8px 10px;font-size:11.5px;flex:1;display:flex;flex-direction:column;gap:8px}
+.br-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.br-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--line)}
+.br-kpi div{background:var(--panel);padding:6px 10px}.br-kpi small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.br-kpi b{font-family:var(--display);font-size:19px;font-weight:600}
+.br-table{width:100%;border-collapse:collapse;font-size:10.5px}.br-table th{text-align:right;font-weight:500;color:var(--faint);font-size:9.5px;letter-spacing:.08em;padding:3px 6px;border-bottom:1px solid var(--line-strong)}.br-table td{padding:3px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid rgba(190,150,255,.07)}
+.br-table th:first-child,.br-table td:first-child{text-align:left}.br-table td:first-child{color:var(--cyan)}
+.br-h{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:4px 0 2px}
+.br-btn{font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border:1px solid var(--line-strong);color:var(--muted);cursor:pointer;background:none;text-decoration:none;display:inline-block}
+.br-btn:hover{border-color:var(--gold);color:var(--gold)}.br-btn.primary{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.br-empty{color:var(--faint);line-height:1.5}
+.br-msg{font-size:10.5px;color:var(--faint)}.br-msg.bad{color:var(--down)}.br-msg.ok{color:var(--up)}
+/* trade ticket */
+.tk{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,3,20,.7)}
+.tk[hidden]{display:none}
+.tk .card{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--gold);box-shadow:0 30px 80px rgba(0,0,0,.6);font-family:var(--mono)}
+.tk .hd{display:flex;gap:10px;padding:8px 12px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.tk .hd .k{color:var(--gold);font-weight:600}.tk .hd .x{margin-left:auto;background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px}
+.tk .bd{padding:12px 14px;font-size:11.5px}
+.tk table{width:100%;border-collapse:collapse;margin:0 0 10px}.tk td,.tk th{padding:4px 6px;text-align:right;border-bottom:1px solid rgba(190,150,255,.08)}.tk th{color:var(--faint);font-weight:500;font-size:9.5px;letter-spacing:.08em}.tk td:first-child,.tk th:first-child{text-align:left}
+.tk .opts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 10px}.tk label{display:block;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.tk select,.tk input{width:100%;background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;font-size:12px;padding:5px 6px}
+.tk .warn{font-size:10.5px;color:var(--muted);line-height:1.5;margin:0 0 10px;padding:8px 10px;border-left:3px solid var(--down);background:rgba(255,92,108,.06)}
+.tk .warn input{width:auto;margin-right:6px}
+.tk .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tk .res{font-size:10.5px;margin-top:8px;line-height:1.5}.tk .res .ok{color:var(--up)}.tk .res .bad{color:var(--down)}
 .a-chart .ch-body{flex:1;min-height:420px;background:#06031a}
 .a-chart .ch-body>div{height:100%}
 .ch-note{color:var(--faint);font-weight:400;letter-spacing:.04em}
@@ -282,6 +305,12 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div class="tape" aria-label="Market ticker"><div class="tape-inner" id="tape"></div></div>
 
 <main class="desk">
+<div class="tk" id="tk" hidden role="dialog" aria-label="Order ticket"><div class="card"><div class="hd"><span class="k">TICKET</span><span id="tk-title">ORDER</span><button class="x" type="button" id="tk-x" aria-label="Close">×</button></div>
+  <div class="bd"><table><thead><tr><th>LEG</th><th>SIDE</th><th>QTY/LOT</th><th>LTP</th><th>LIMIT</th></tr></thead><tbody id="tk-legs"></tbody></table>
+  <div class="opts"><div><label>Lots</label><input id="tk-lots" type="number" min="1" max="50" value="1"></div><div><label>Product</label><select id="tk-product"><option value="D">NRML (carry)</option><option value="I">Intraday</option></select></div><div><label>Order type</label><select id="tk-type"><option>MARKET</option><option>LIMIT</option></select></div></div>
+  <div class="warn"><label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text)"><input type="checkbox" id="tk-confirm"> I am sending these orders to my own broker account. Finostat transmits them exactly as shown; my broker executes them and its margins and charges apply.</label></div>
+  <div class="row"><button type="button" class="br-btn primary" id="tk-send">SEND TO BROKER</button><button type="button" class="br-btn" id="tk-cancel">Cancel</button><span class="br-msg" id="tk-msg"></span></div>
+  <div class="res" id="tk-res"></div></div></div></div>
 
   <section class="panel a-sheet" id="p-sheet" aria-label="Butterfly sheet">
     <div class="panel-hd"><span class="k">BFLY</span><span class="s" id="sheet-sym">NIFTY</span><span>1:2:1</span>
@@ -348,7 +377,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <div class="bl-body" id="bl-body" hidden>
       <div class="bl-scroll"><table class="bl-legs"><thead><tr><th>SIDE</th><th>QTY</th><th>TYPE</th><th>STRIKE</th><th>LTP</th><th>IV</th><th>Δ</th><th></th></tr></thead>
         <tbody id="bl-legs"></tbody></table></div>
-      <div class="bl-tools"><button type="button" id="bl-add">+ LEG</button><button type="button" id="bl-chain-btn" title="Option chain with open interest">CHAIN</button><span id="bl-lot"></span></div>
+      <div class="bl-tools"><button type="button" id="bl-add">+ LEG</button><button type="button" id="bl-chain-btn" title="Option chain with open interest">CHAIN</button><button type="button" id="bl-trade" title="Send these legs to your connected broker">TRADE</button><span id="bl-lot"></span></div>
       <div class="bl-oi" id="bl-oi" hidden></div>
       <div class="bl-chain" id="bl-chain" hidden><div class="bl-scroll"><table><thead><tr><th>OI</th><th>ΔOI</th><th>IV</th><th>CE</th><th>STRIKE</th><th>PE</th><th>IV</th><th>ΔOI</th><th>OI</th></tr></thead><tbody id="bl-chain-rows"></tbody></table></div><div class="note" id="bl-chain-note"></div></div>
       <div class="bl-metrics" id="bl-metrics"></div>
@@ -363,6 +392,10 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <div class="bl-empty" id="bl-empty">Search an index or any F&amp;O stock above, pick a preset, then edit the legs. Prices, IV and greeks are live from the chain.</div>
   </section>
 
+  <section class="panel" id="p-broker" aria-label="Broker">
+    <div class="panel-hd"><span class="k">BRKR</span><span class="s" id="br-title">BROKER</span><span class="r"><span id="br-status">—</span></span></div>
+    <div class="br-body" id="br-body"><div class="br-empty">loading…</div></div>
+  </section>
   <section class="panel" id="p-n50" aria-label="Nifty 50 constituents">
     <div class="panel-hd"><span class="k">N50</span><span class="s">NIFTY 50 · CONSTITUENTS</span>
       <span class="r"><span id="n50-note">—</span></span></div>
@@ -674,7 +707,47 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+var PANELS=[['sheet','BFLY sheet'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+/* ---------- broker panel ---------- */
+var brBody=document.getElementById('br-body'), brStatus=document.getElementById('br-status'), brTitle=document.getElementById('br-title');
+var brState={data:null,timer:null};
+function money(v){ return v==null?'—':(v<0?'-':'')+'₹'+fmt(Math.abs(v),0); }
+function renderBroker(d){
+  brState.data=d;
+  var up=(d.brokers||[]).filter(function(b){ return b.id==='upstox'; })[0]||{};
+  if(!d.configured){ brBody.innerHTML='<div class="br-empty">Broker connections are not switched on yet.</div>'; brStatus.textContent='off'; return; }
+  if(!up.connected){ brStatus.textContent='not connected'; brTitle.textContent='BROKER';
+    brBody.innerHTML='<div class="br-empty">Connect your Upstox account to see funds and positions here and to send builder strategies as orders. You log in on Upstox\'s own page; Finostat never sees your password. Zerodha Kite is next.</div><div class="br-row"><a class="br-btn primary" href="/broker/upstox/connect">CONNECT UPSTOX →</a></div>'; return; }
+  if(up.expired||(d.upstox&&d.upstox.expired)){ brStatus.textContent='session expired'; brTitle.textContent='UPSTOX · '+esc(up.user||'');
+    brBody.innerHTML='<div class="br-empty">Upstox sessions end at 03:30 every day. Reconnect to continue.</div><div class="br-row"><a class="br-btn primary" href="/broker/upstox/connect">RECONNECT →</a><button type="button" class="br-btn" data-act="disconnect">Remove</button></div>'; return; }
+  var u=d.upstox||{}, f=u.funds||{};
+  brTitle.textContent='UPSTOX · '+esc(up.user||''); brStatus.textContent='connected';
+  var h='<div class="br-kpi"><div><small>available margin</small><b>'+money(f.available)+'</b></div><div><small>used</small><b>'+money(f.used)+'</b></div><div><small>open positions</small><b>'+((u.positions||[]).length)+'</b></div><div><small>day P&L</small><b class="'+(((u.positions||[]).reduce(function(a,p){ return a+(p.pnl||0); },0))>=0?'up':'down')+'">'+money((u.positions||[]).reduce(function(a,p){ return a+(p.pnl||0); },0))+'</b></div></div>';
+  if(u.funds_error) h+='<div class="br-msg bad">'+esc(u.funds_error)+'</div>';
+  h+='<div class="br-h">Positions</div>';
+  h+=(u.positions&&u.positions.length)?'<div class="bl-scroll"><table class="br-table"><thead><tr><th>SYMBOL</th><th>QTY</th><th>AVG</th><th>LTP</th><th>P&L</th></tr></thead><tbody>'+u.positions.map(function(p){ return '<tr><td>'+esc(p.symbol)+' <small style="color:var(--faint)">'+esc(p.product||'')+'</small></td><td>'+p.qty+'</td><td>'+(p.avg!=null?fmt(p.avg):'—')+'</td><td>'+(p.ltp!=null?fmt(p.ltp):'—')+'</td><td class="'+((p.pnl||0)>=0?'up':'down')+'">'+money(p.pnl)+'</td></tr>'; }).join('')+'</tbody></table></div>':'<div class="br-msg">no open positions'+(u.positions_error?' · '+esc(u.positions_error):'')+'</div>';
+  var open=(u.orders||[]).filter(function(o){ return /open|pending|trigger|validation|put order/i.test(o.status||''); });
+  h+='<div class="br-h">Orders today</div>';
+  h+=(u.orders&&u.orders.length)?'<div class="bl-scroll"><table class="br-table"><thead><tr><th>SYMBOL</th><th>SIDE</th><th>QTY</th><th>TYPE</th><th>STATUS</th><th></th></tr></thead><tbody>'+u.orders.slice(0,12).map(function(o){ var isOpen=open.indexOf(o)>=0; return '<tr><td>'+esc(o.symbol)+'</td><td class="'+(o.side==='BUY'?'up':'down')+'">'+esc(o.side||'')+'</td><td>'+(o.filled||0)+'/'+(o.qty||0)+'</td><td>'+esc(o.type||'')+(o.type==='LIMIT'&&o.price?' '+fmt(o.price):'')+'</td><td title="'+esc(o.message||'')+'">'+esc(o.status||'')+'</td><td>'+(isOpen?'<button type="button" class="br-btn" data-cancel="'+esc(o.order_id)+'">cancel</button>':'')+'</td></tr>'; }).join('')+'</tbody></table></div>':'<div class="br-msg">no orders today'+(u.orders_error?' · '+esc(u.orders_error):'')+'</div>';
+  h+='<div class="br-row" style="margin-top:auto"><span class="br-msg">token ends 03:30 IST · every order is confirmed on a ticket first</span><button type="button" class="br-btn" data-act="disconnect" style="margin-left:auto">Disconnect</button></div>';
+  brBody.innerHTML=h;
+}
+function pollBroker(){
+  if(window.FINO_LOCKED||document.getElementById('p-broker').hidden) return;
+  fetch('/api/broker',{credentials:'same-origin'}).then(function(r){ return r.json().then(function(d){ d._st=r.status; return d; }); }).then(function(d){
+    if(d._st===401){ brStatus.textContent='sign in'; brBody.innerHTML='<div class="br-empty">Sign in to connect a broker.</div>'; return; }
+    if(d._st===402){ brStatus.textContent='desk plan'; brBody.innerHTML='<div class="br-empty">Broker connections are part of Desk.</div>'; return; }
+    renderBroker(d);
+  }).catch(function(){ brStatus.textContent='offline'; });
+}
+brBody.addEventListener('click',function(e){
+  var b=e.target.closest('button[data-act=disconnect]'); if(b){ if(!confirm('Remove the Upstox connection from Finostat?')) return; srvPost('/api/broker/disconnect',{broker:'upstox'}).then(pollBroker); return; }
+  var c=e.target.closest('button[data-cancel]'); if(c){ c.disabled=true; srvPost('/api/broker/cancel',{order_id:c.getAttribute('data-cancel')}).then(function(r){ if(r.error) alert(r.error); setTimeout(pollBroker,800); }); }
+});
+setInterval(pollBroker,10000); setTimeout(pollBroker,900);
+if(/[?&]broker=(connected|failed)/.test(location.search)){ var m=location.search.match(/broker=(\w+)/)[1]; setTimeout(function(){ brStatus.textContent=m==='connected'?'connected ✓':'connection failed'; },1200); }
+window.finoBrokerReady=function(){ var d=brState.data; var up=d&&(d.brokers||[]).filter(function(b){ return b.id==='upstox'; })[0]; return !!(up&&up.connected&&!up.expired); };
+window.finoBrokerPoll=pollBroker;
 /* ---------- TradingView chart: follows whatever symbol you click ---------- */
 var chart={sym:null,ready:false,loading:false,pending:'NIFTY 50'};
 var chSym=document.getElementById('ch-sym'), chNote=document.getElementById('ch-note'), chPanel=document.getElementById('p-chart');
@@ -883,7 +956,7 @@ function priceStrategy(first){
     if(d._status===403){ showLock(d); return; }
     if(d.warming&&!d.legs){ blStatus.textContent='chain warming…'; if(!bl.timer) bl.timer=setInterval(priceStrategy,3000); return; }
     if(d.error){ blStatus.textContent=d.error; return; }
-    bl.legs=d.legs; bl.strikes=d.strikes; bl.expiry=d.expiry;
+    bl.legs=d.legs; bl.strikes=d.strikes; bl.expiry=d.expiry; bl.lastData=d;
     blExp.disabled=false; blExp.innerHTML=(d.expiries||[]).map(function(e){ var dt=new Date(e); return '<option value="'+e+'"'+(e===d.expiry?' selected':'')+'>'+dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+'</option>'; }).join('');
     Array.prototype.forEach.call(blPresets.querySelectorAll('button'),function(b){ b.classList.toggle('on', b.getAttribute('data-p')===bl.preset); });
     renderBuilder(d); blBody.hidden=false; blLock.hidden=true; blEmpty.hidden=true;
@@ -935,6 +1008,30 @@ blLegs.addEventListener('change',function(e){
   bl.preset=null; priceStrategy();
 });
 blLegs.addEventListener('click',function(e){ var b=e.target.closest('button[data-act=del]'); if(!b) return; var i=Number(b.closest('tr').getAttribute('data-i')); bl.legs.splice(i,1); bl.preset=null; if(!bl.legs.length){ bl.preset='short-straddle'; } priceStrategy(); });
+/* order ticket: builder legs -> connected broker, confirmed by the member */
+var tk=document.getElementById('tk'), tkLegs=document.getElementById('tk-legs'), tkMsg=document.getElementById('tk-msg'), tkRes=document.getElementById('tk-res'), tkLast=null;
+function openTicket(){
+  if(!bl.u||!bl.legs.length||!bl.lastData) return;
+  if(!(window.finoBrokerReady&&window.finoBrokerReady())){ alert('Connect your Upstox account in the BROKER panel first.'); return; }
+  var d=bl.lastData; document.getElementById('tk-title').textContent=bl.u+' · '+new Date(d.expiry).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' · lot '+d.lot;
+  tkLegs.innerHTML=d.legs.map(function(l,i){ return '<tr><td>'+l.strike+' '+l.right+'</td><td class="'+(l.qty>0?'up':'down')+'">'+(l.qty>0?'BUY':'SELL')+'</td><td>'+Math.abs(l.qty)+'×'+d.lot+'</td><td>'+(l.price!=null?l.price.toFixed(2):'—')+'</td><td><input type="number" step="0.05" min="0.05" data-i="'+i+'" value="'+(l.price!=null?l.price.toFixed(2):'')+'" style="width:76px"></td></tr>'; }).join('');
+  document.getElementById('tk-confirm').checked=false; tkMsg.textContent=''; tkRes.innerHTML=''; document.getElementById('tk-send').disabled=false; tk.hidden=false;
+}
+document.getElementById('bl-trade').addEventListener('click',openTicket);
+document.getElementById('tk-x').addEventListener('click',function(){ tk.hidden=true; });
+document.getElementById('tk-cancel').addEventListener('click',function(){ tk.hidden=true; });
+document.getElementById('tk-send').addEventListener('click',function(){
+  if(!document.getElementById('tk-confirm').checked){ tkMsg.className='br-msg bad'; tkMsg.textContent='tick the confirmation first'; return; }
+  var d=bl.lastData, otype=document.getElementById('tk-type').value, lots=parseInt(document.getElementById('tk-lots').value,10)||1;
+  var legs=d.legs.map(function(l,i){ var inp=tkLegs.querySelector('input[data-i="'+i+'"]'); return {right:l.right,strike:l.strike,qty:l.qty,price:inp&&inp.value?Number(inp.value):l.price}; });
+  var btn=this; btn.disabled=true; tkMsg.className='br-msg'; tkMsg.textContent='sending…';
+  srvPost('/api/broker/order',{u:bl.u,expiry:d.expiry,legs:legs,lots:lots,product:document.getElementById('tk-product').value,order_type:otype,confirm:true}).then(function(r){
+    if(r.error){ btn.disabled=false; tkMsg.className='br-msg bad'; tkMsg.textContent=r.error; return; }
+    tkMsg.className='br-msg '+(r.ok?'ok':'bad'); tkMsg.textContent=r.ok?'all '+r.sent+' leg(s) accepted by Upstox':('stopped after '+r.sent+' of '+r.planned+' leg(s)');
+    tkRes.innerHTML=(r.results||[]).map(function(x){ return '<div class="'+(x.ok?'ok':'bad')+'">'+esc(x.leg)+' — '+(x.ok?'order '+esc(x.order_id||''):esc(x.error||'rejected'))+'</div>'; }).join('');
+    if(window.finoBrokerPoll) setTimeout(window.finoBrokerPoll,800);
+  }).catch(function(){ btn.disabled=false; tkMsg.className='br-msg bad'; tkMsg.textContent='network error — check the BROKER panel before retrying'; });
+});
 document.getElementById('bl-add').addEventListener('click',function(){ if(!bl.strikes.length) return; var atm=bl.strikes[Math.floor(bl.strikes.length/2)]; if(bl.legs.length>=8) return; bl.legs.push({right:'CE',strike:atm,qty:1}); bl.preset=null; priceStrategy(); });
 
 /* Nifty 50 constituents: the official list, live, sorted by movers */

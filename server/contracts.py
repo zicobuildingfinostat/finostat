@@ -71,6 +71,11 @@ class ContractIndex:
         diffs = sorted({b - a for a, b in zip(s, s[1:]) if b > a})
         return diffs[0] if diffs else None
 
+    def key_for(self, name: str, expiry_ms: int, strike: int, right: str) -> tuple[str, int] | None:
+        """(instrument_key, lot) for one contract, or None if it is not listed."""
+        row = self._by_name.get(name, {}).get(expiry_ms, {}).get((int(strike), right.upper()))
+        return (row[0], row[1]) if row else None
+
     def ladder(self, name: str, expiry_ms: int, spot: float, half: int = 10) -> list[dict]:
         """`2*half+1` strikes centred on spot with both rights' keys and the lot size."""
         chain = self._by_name.get(name, {}).get(expiry_ms, {})

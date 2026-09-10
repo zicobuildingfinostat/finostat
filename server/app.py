@@ -36,6 +36,7 @@ import assessment
 import auth as authmod
 import backup
 import brief
+import broker
 import builder
 import chains
 import contracts
@@ -67,6 +68,17 @@ BRIEFS = brief.Briefs(AUTH.path)
 PAYMENTS = payments.Payments(AUTH.path)
 RENEWALS = payments.RenewalReminder(AUTH, mailer.send_plain)
 VIDEOS = videos.YouTubeFeed(cache=AUTH.path.parent / "videos.json")
+BROKERS = broker.Brokers(AUTH.path)
+_BROKER_CACHE: dict = {}          # user_id -> (ts, payload) so the panel's polling does not hammer Upstox
+
+
+def _broker_client(user):
+    acc = BROKERS.get(user["id"], "upstox")
+    if acc is None:
+        return None, {"error": "no broker connected", "connected": False}
+    if acc["expired"] or not acc["token"]:
+        return None, {"error": "Upstox session expired — reconnect", "connected": True, "expired": True}
+    return broker.Upstox(acc["token"]), acc
 
 
 def _safe_next(raw: str) -> str:
@@ -97,6 +109,11 @@ def _plan_of(user) -> str:
     """Anonymous visitors get the free tier's entitlements; the point of Starter
     being free is that people can try the index builder before signing in."""
     return (user or {}).get("plan") or "starter"
+
+
+def CONTRACTS_OF(feed):
+    """The contract index the chains use (the feed builds it at resolve time)."""
+    return getattr(feed, "contracts", None) or CHAINS.contracts
 
 
 def _paid(user) -> bool:
@@ -410,6 +427,58 @@ class Handler(BaseHTTPRequestHandler):
                     body = brief.render_day(BRIEFS, date)
                     if body is not None:
                         return self._send(body, "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/broker/upstox/connect":
+                user = self._current_user()
+                if user is None:
+                    return self._redirect("/login?next=%2Fdashboard")
+                if not _paid(user):
+                    return self._redirect("/account?plan=desk")
+                if not broker.configured():
+                    return self._send(b"Broker connections are not switched on yet.", "text/plain; charset=utf-8", 503)
+                return self._redirect(broker.authorize_url(BROKERS.new_state(user["id"], "upstox")))
+            if route == "/broker/upstox/callback":
+                qs = parse_qs(parsed.query)
+                st = BROKERS.pop_state(qs.get("state", [""])[0])
+                code = qs.get("code", [""])[0]
+                user = self._current_user()
+                if st is None or user is None or st[0] != user["id"] or not code:
+                    log.warning("broker callback rejected (state ok=%s, signed in=%s)", st is not None, user is not None)
+                    return self._redirect("/dashboard?broker=failed#p-broker")
+                try:
+                    info = broker.exchange_code(code)
+                except broker.BrokerError as exc:
+                    log.warning("upstox token exchange failed: %s", exc)
+                    return self._redirect("/dashboard?broker=failed#p-broker")
+                BROKERS.connect(user["id"], "upstox", info, broker.token_expiry())
+                _BROKER_CACHE.pop(user["id"], None)
+                log.info("broker connected: user %s -> upstox %s", user["id"], info.get("uid"))
+                return self._redirect("/dashboard?broker=connected#p-broker")
+            if route == "/api/broker":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk"}, 402)
+                out = BROKERS.status(user["id"])
+                client, acc = _broker_client(user)
+                if client is not None:
+                    cached = _BROKER_CACHE.get(user["id"])
+                    if cached and time.time() - cached[0] < 5:
+                        out["upstox"] = cached[1]
+                    else:
+                        live = {}
+                        for k, fn in (("funds", client.funds), ("positions", client.positions), ("orders", client.orders)):
+                            try:
+                                live[k] = fn()
+                            except broker.BrokerError as exc:
+                                live[k + "_error"] = str(exc)
+                        _BROKER_CACHE[user["id"]] = (time.time(), live)
+                        BROKERS.touch(user["id"], "upstox")
+                        out["upstox"] = live
+                elif acc.get("expired"):
+                    out["upstox"] = {"expired": True}
+                out["recent"] = BROKERS.recent_orders(user["id"], 10)
+                return self._json(out)
             if route == "/api/videos":
                 return self._json({"channel": videos.CHANNEL_URL, "videos": VIDEOS.latest(15), **VIDEOS.status()})
             if route == "/api/brief":
@@ -516,6 +585,7 @@ class Handler(BaseHTTPRequestHandler):
                      "providers": [p["id"] + ("(test)" if p["test"] else "") for p in payments.providers() if p["configured"]]},
             "brief": {"last": BRIEF.last, "dates": BRIEFS.dates(3)},
             "videos": VIDEOS.status(),
+            "broker": {"configured": broker.configured()},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -691,6 +761,60 @@ class Handler(BaseHTTPRequestHandler):
                                    "lot": chain["lot"], "atm": chain["atm"], "step": chain["step"],
                                    "strikes": strikes, "legs": legs, "metrics": metrics,
                                    "live": chain["live"], "warming": chain["warming"]})
+            if route in ("/api/broker/disconnect", "/api/broker/order", "/api/broker/cancel"):
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk"}, 402)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8") or "{}")
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if route == "/api/broker/disconnect":
+                    BROKERS.disconnect(user["id"], str(body.get("broker", "upstox")))
+                    _BROKER_CACHE.pop(user["id"], None)
+                    return self._json({"ok": True})
+                client, acc = _broker_client(user)
+                if client is None:
+                    return self._json(acc, 409)
+                if route == "/api/broker/cancel":
+                    try:
+                        return self._json({"ok": True, "data": client.cancel(str(body.get("order_id", "")))})
+                    except broker.BrokerError as exc:
+                        return self._json({"error": str(exc)}, 502)
+                # place a builder strategy
+                if body.get("confirm") is not True:
+                    return self._json({"error": "confirm the ticket first"}, 400)
+                ukey = str(body.get("u", ""))
+                ok, err = _gate(user, ukey)
+                if not ok:
+                    return self._json(err, 403)
+                r = CHAINS.resolve(ukey)
+                if r is None:
+                    return self._json({"error": "unknown underlying"}, 400)
+                name = r[0]
+                try:
+                    expiry = int(body.get("expiry") or 0)
+                except (TypeError, ValueError):
+                    expiry = 0
+                if expiry not in CONTRACTS_OF(FEED).expiries(name):
+                    return self._json({"error": "pick a live expiry"}, 400)
+                lots = int(body.get("lots") or 1)
+                product, otype = str(body.get("product", "D")).upper(), str(body.get("order_type", "MARKET")).upper()
+                tag = f"fino{user['id']}"[:20]
+                try:
+                    plan = broker.plan_orders(list(body.get("legs") or []), lambda right, k: CONTRACTS_OF(FEED).key_for(name, expiry, k, right),
+                                              lots, product, otype, tag)
+                except (broker.BrokerError, ValueError, TypeError) as exc:
+                    return self._json({"error": str(exc)}, 400)
+                results = broker.execute(client, plan)
+                BROKERS.record_order(user["id"], "upstox", body.get("legs"), results, tag)
+                _BROKER_CACHE.pop(user["id"], None)
+                log.info("broker order: user %s %s lots=%d %s -> %s", user["id"], ukey, lots, [p["leg"] for p in plan], results)
+                return self._json({"ok": all(x["ok"] for x in results), "results": results, "sent": len(results), "planned": len(plan)})
             if route == "/api/pay/order":
                 user = self._current_user()
                 if user is None:

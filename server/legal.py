@@ -115,6 +115,9 @@ _TERMS = f"""
 <li>We may change prices with 30 days' notice; changes apply from your next billing period.</li>
 </ul>
 
+<h2>Broker connections and orders</h2>
+<p>You may connect a broker account (for example Upstox) to Finostat through the broker's own login. Finostat then reads your positions and funds and, only when you press the confirm button on an order ticket, transmits the orders you composed to your broker. <strong>Finostat is not a broker and does not execute trades</strong>: the broker executes, the broker's terms, margins and charges apply, and every order is placed under your own account and your own responsibility. Finostat shows you what it will send before it sends it; check it. Connections can be removed from the terminal at any time, and the broker's access token expires daily on its own. Finostat is not liable for orders rejected, delayed or executed by the broker, for feed or connectivity failures, or for the outcome of any trade.</p>
+
 <h2>Availability</h2>
 <p>We aim to keep the terminal up during Indian market hours but promise no particular uptime. Feeds, hosting and exchanges fail from time to time; we do not owe compensation for downtime, though we may extend paid periods when it is significant.</p>
 

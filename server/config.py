@@ -51,6 +51,12 @@ FEED = os.environ.get("FINOSTAT_FEED", "simulator").strip().lower()
 # An Analytics Token from https://account.upstox.com/developer/apps is valid for
 # a YEAR and needs no daily re-login, which is why this is the default broker.
 UPSTOX_ACCESS_TOKEN = os.environ.get("UPSTOX_ACCESS_TOKEN", "").strip()
+# The same developer app's key + secret let members connect THEIR Upstox
+# account (OAuth) for positions and order placement from the terminal.
+UPSTOX_API_KEY = os.environ.get("UPSTOX_API_KEY", "").strip()
+UPSTOX_API_SECRET = os.environ.get("UPSTOX_API_SECRET", "").strip()
+# Seals member broker tokens at rest (any long random string; a Fly secret).
+SECRET_KEY = os.environ.get("FINOSTAT_SECRET_KEY", "").strip()
 
 # --- Zerodha Kite Connect ---------------------------------------------------
 KITE_API_KEY = os.environ.get("KITE_API_KEY", "").strip()
