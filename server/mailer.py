@@ -106,6 +106,30 @@ def send_alert_email(to: str, subject: str, lines) -> bool:
     return False
 
 
+def send_plain(to: str, subject: str, intro: str, lines, cta_url: str = "https://finostat.com/account", cta: str = "Open your account →") -> bool:
+    """A short transactional email (receipts, plan notices)."""
+    lines = list(lines)
+    if not configured():
+        log.warning("SMTP not configured -- email for %s (DEV ONLY): %s -- %s", to, subject, " | ".join(lines))
+        return True
+    sender = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or "no-reply@finostat.com"
+    msg = EmailMessage()
+    msg["Subject"] = subject[:160]
+    msg["From"] = f"Finostat <{sender}>"
+    msg["To"] = to
+    msg.set_content(intro + "\n\n" + "\n".join("  " + l for l in lines) + f"\n\n{cta}: {cta_url}\n")
+    items = "".join(f'<li style="margin:5px 0">{l}</li>' for l in lines)
+    msg.add_alternative(f"""\
+<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:28px 20px;color:#1a1338">
+  <p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#6d609e;margin:0 0 10px">Finostat</p>
+  <p style="font-size:16px;line-height:1.5;margin:0 0 14px">{intro}</p>
+  <ul style="padding-left:18px;margin:0 0 22px;font-size:15px;line-height:1.4;color:#3a2f66">{items}</ul>
+  <p style="margin:0 0 20px"><a href="{cta_url}" style="display:inline-block;background:#f5c842;color:#2a1a02;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:4px">{cta}</a></p>
+  <p style="font-size:12px;color:#6d609e;margin:0">Questions: reply to this email.</p>
+</div>""", subtype="html")
+    return _deliver(msg)
+
+
 def send_owner_note(subject: str, lines) -> bool:
     """A plain note to the site owner (upgrade requests and the like)."""
     lines = list(lines)

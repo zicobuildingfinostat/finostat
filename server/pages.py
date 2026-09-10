@@ -7,6 +7,7 @@ rides the same SSE streams the homepage uses.
 """
 from __future__ import annotations
 
+import html
 import json
 
 
@@ -823,9 +824,9 @@ function showLock(err){
   document.getElementById('bl-lock-text').textContent=(err.feature==='builder_stocks'?'Strategy building on F&O stocks is part of the '+need+' plan. Index strategies stay free.':'This feature needs the '+need+' plan.');
   var btn=document.getElementById('bl-lock-btn'), note=document.getElementById('bl-lock-note');
   btn.disabled=false;
-  if(!err.signed_in){ btn.textContent='SIGN IN TO REQUEST'; btn.onclick=function(){ location.href='/login'; }; note.textContent='Starter is free — sign in with your email.'; }
-  else { btn.textContent='REQUEST '+need.toUpperCase()+' UPGRADE'; note.textContent='You are on '+(err.plan||'starter')+'. Requests are activated by hand within a day.';
-    btn.onclick=function(){ btn.disabled=true; srvPost('/auth/upgrade',{plan:need}).then(function(r){ note.textContent=r.ok?'Request sent — you will get an email when it is active.':(r.error||'could not send'); btn.textContent=r.ok?'REQUESTED':btn.textContent; }); }; }
+  if(!err.signed_in){ btn.textContent='SIGN IN TO UPGRADE'; btn.onclick=function(){ location.href='/login?next='+encodeURIComponent('/account?plan='+need); }; note.textContent='Starter is free — sign in with your email, then pay by UPI or card.'; }
+  else { btn.textContent='UPGRADE TO '+need.toUpperCase(); note.textContent='You are on '+(err.plan||'starter')+'. Pay by UPI or card; active the moment it clears.';
+    btn.onclick=function(){ location.href='/account?plan='+need; }; }
 }
 function selectUnderlying(key){
   bl.u=key; bl.expiry=null; bl.legs=[]; bl.preset='short-straddle'; blLock.hidden=true; blLock.removeAttribute('data-need'); blEmpty.hidden=true; blBody.hidden=true; blChainRows.innerHTML=''; blOi.hidden=true;
@@ -1322,13 +1323,14 @@ button:hover{filter:brightness(1.08)}
 """
 
 _LOGIN_FORM = """<form method="post" action="/auth/request">
+      <input type="hidden" name="next" value="__NEXT__">
       <label for="email">Email</label>
       <input id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required autofocus>
       <button type="submit">Email me a sign-in link →</button>
     </form>"""
 
 
-def render_login(state: str = "form", smtp_ok: bool = True) -> bytes:
+def render_login(state: str = "form", smtp_ok: bool = True, next_: str = "") -> bytes:
     states = {
         "form":    ("Sign in", "", _LOGIN_FORM),
         "sent":    ("Check your inbox",
@@ -1347,6 +1349,7 @@ def render_login(state: str = "form", smtp_ok: bool = True) -> bytes:
                     'not yours — try again in a moment.</div>', _LOGIN_FORM),
     }
     title, message, form = states.get(state, states["form"])
+    form = form.replace("__NEXT__", html.escape(next_, quote=True))
     if not smtp_ok and state in ("form", "sent"):
         message += ('<div class="msg warn" style="margin-top:8px"><b>Email delivery isn\'t configured on this '
                     'server yet.</b> Links are being logged instead of sent — sign-in works only for the operator.</div>')

@@ -1,7 +1,8 @@
 """Operator CLI for accounts and plans. Runs against FINOSTAT_DATA_DIR.
 
   python3 admin.py users
-  python3 admin.py set-plan zico@finostat.com pro
+  python3 admin.py set-plan zico@finostat.com pro [DAYS]   # DAYS omitted = no expiry
+  python3 admin.py payments [N]        # latest N Razorpay orders/payments
   python3 admin.py requests            # pending upgrade requests
   python3 admin.py handled 3           # mark request #3 done
   python3 admin.py assessments [N]     # latest N trader assessments (default 50)
@@ -27,16 +28,26 @@ def main(argv: list[str]) -> int:
     if cmd == "users":
         for u in au.list_users():
             seen = time.strftime("%Y-%m-%d %H:%M", time.localtime(u["last_seen"] or u["created"]))
-            print(f"  #{u['id']:<4} {u['email']:<36} {u['plan']:<8} last seen {seen}")
+            until = (" until " + time.strftime("%Y-%m-%d", time.localtime(u["plan_until"]))) if u.get("plan_until") else ""
+            print(f"  #{u['id']:<4} {u['email']:<36} {u['plan']:<8}{until:<18} last seen {seen}")
         return 0
-    if cmd == "set-plan" and len(argv) == 4:
+    if cmd == "set-plan" and len(argv) in (4, 5):
         email, plan = argv[2].strip().lower(), argv[3].strip().lower()
+        days = int(argv[4]) if len(argv) == 5 else None
         try:
-            ok = au.set_plan(email, plan)
+            ok = au.set_plan(email, plan, days)
         except ValueError as exc:
             print(f"  {exc}"); return 2
-        print(f"  {'updated' if ok else 'NO SUCH USER'}: {email} -> {plan}")
+        print(f"  {'updated' if ok else 'NO SUCH USER'}: {email} -> {plan}" + (f" for {days} days" if days else " (no expiry)"))
         return 0 if ok else 1
+    if cmd == "payments":
+        import payments as pm
+        rows = pm.Payments(au.path).recent(int(argv[2]) if len(argv) > 2 else 50)
+        if not rows:
+            print("  no orders yet")
+        for r in rows:
+            print(f"  #{r['id']:<4} {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created']))}  {r['email']:<32} {r['plan']:<5} {r['period']:<8} ₹{r['amount'] / 100:>10,.2f}  {r['status']:<8} {r['payment_id'] or '-'}")
+        return 0
     if cmd == "requests":
         rows = au.pending_requests()
         if not rows:

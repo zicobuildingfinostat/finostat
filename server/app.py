@@ -31,6 +31,7 @@ import founder
 import legal
 import news
 import alerts as alertsmod
+import account
 import assessment
 import auth as authmod
 import backup
@@ -41,6 +42,7 @@ import contracts
 import indices
 import mailer
 import pages
+import payments
 import recorder
 import strategies
 import universe
@@ -61,6 +63,28 @@ ALERTS = alertsmod.AlertEngine(AUTH.path, send_email=mailer.send_alert_email,
 BACKUP = backup.DailyBackup(AUTH.path, AUTH.path.parent / "backups")
 ASSESS = assessment.Assessments(AUTH.path)
 BRIEFS = brief.Briefs(AUTH.path)
+PAYMENTS = payments.Payments(AUTH.path)
+RENEWALS = payments.RenewalReminder(AUTH, mailer.send_plain)
+
+
+def _safe_next(raw: str) -> str:
+    """Only same-site paths may be a post-login destination."""
+    raw = (raw or "").strip()
+    if raw.startswith("/") and not raw.startswith("//") and "\\" not in raw and len(raw) < 200 and re.fullmatch(r"[A-Za-z0-9/_\-?=&%.#+]*", raw):
+        return raw
+    return ""
+
+
+def _grant_and_notify(order_id: str, payment_id: str, source: str):
+    """Activate an order (idempotent) and send the receipt + owner note once."""
+    grant = payments.activate(AUTH, PAYMENTS, order_id, payment_id, source)
+    if grant is None:
+        return None
+    email = AUTH.email_for(grant["user_id"]) or ""
+    lines = payments.receipt_lines(grant, email)
+    threading.Thread(target=mailer.send_plain, args=(email, f"Finostat receipt — {payments.LABEL[grant['plan']]} active", "Thank you. Your plan is active now.", lines), daemon=True).start()
+    threading.Thread(target=mailer.send_owner_note, args=(f"Finostat payment: {email} — {grant['plan']} {grant['period']} ₹{grant['amount'] / 100:,.0f}", lines + [f"via {source}"]), daemon=True).start()
+    return grant
 CONSTITUENTS = indices.Constituents("NIFTY50")
 FEED.index_members = CONSTITUENTS.members
 CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts.ContractIndex())
@@ -390,22 +414,35 @@ class Handler(BaseHTTPRequestHandler):
             if route.startswith("/learn/"):
                 return self._redirect("/finch")
             if route in ("/login", "/signup"):
-                state = parse_qs(parsed.query).get("state", ["form"])[0]
-                return self._send(pages.render_login(state, mailer.configured()),
+                qs = parse_qs(parsed.query)
+                state = qs.get("state", ["form"])[0]
+                nxt = _safe_next(qs.get("next", [""])[0])
+                plan = qs.get("plan", [""])[0]
+                if not nxt and plan in ("desk", "pro"):
+                    nxt = f"/account?plan={plan}"
+                return self._send(pages.render_login(state, mailer.configured(), nxt),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/auth/verify":
-                token = parse_qs(parsed.query).get("token", [""])[0]
+                qs = parse_qs(parsed.query)
+                token = qs.get("token", [""])[0]
+                nxt = _safe_next(qs.get("next", [""])[0]) or "/dashboard"
                 uid = AUTH.redeem_link(token)
                 if uid is None:
                     return self._redirect("/login?state=expired")
                 sid = AUTH.create_session(uid)
-                return self._redirect("/dashboard",
-                                      [("Set-Cookie", authmod.Auth.cookie_header(sid, self._secure()))])
+                return self._redirect(nxt, [("Set-Cookie", authmod.Auth.cookie_header(sid, self._secure()))])
+            if route in ("/account", "/upgrade"):
+                user = self._current_user()
+                if user is None:
+                    return self._redirect("/login?next=" + quote("/account" + (("?" + parsed.query) if parsed.query else ""), safe=""))
+                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"])),
+                                  "text/html; charset=utf-8", cache="no-store")
             if route == "/api/me":
                 user = self._current_user()
                 if user is None:
                     return self._json({"error": "not signed in"}, 401)
                 return self._json({"email": user["email"], "plan": user.get("plan", "starter"),
+                                   "plan_until": user.get("plan_until"), "payments": payments.configured(),
                                    "entitlements": authmod.entitlements(user.get("plan", "starter")),
                                    "prefs": AUTH.get_prefs(user["id"])})
             if route == "/api/alerts":
@@ -449,7 +486,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "ticks": snap.get("ticks"), "sheet_subscribers": SHEETS.count(),
                                    "interval": getattr(FEED, "interval", None),
                                    "recorder": RECORDER.stats(),
-                                   "auth": {"smtp_configured": mailer.configured()},
+                                   "auth": {"smtp_configured": mailer.configured(), "payments": payments.configured(), "payments_test": payments.test_mode()},
             "brief": {"last": BRIEF.last, "dates": BRIEFS.dates(3)},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
@@ -536,10 +573,11 @@ class Handler(BaseHTTPRequestHandler):
                 token = AUTH.create_link(email, ip=self._client_ip())
                 if token is None:
                     return self._redirect("/login?state=limited")
-                link = f"{self._base_url()}/auth/verify?token={quote(token, safe='')}"
+                nxt = _safe_next(parse_qs(body).get("next", [""])[0])
+                link = f"{self._base_url()}/auth/verify?token={quote(token, safe='')}" + (f"&next={quote(nxt, safe='')}" if nxt else "")
                 if not mailer.send_magic_link(email, link):
                     return self._redirect("/login?state=failed")
-                return self._redirect("/login?state=sent")
+                return self._redirect("/login?state=sent" + (f"&next={quote(nxt, safe='')}" if nxt else ""))
             if route == "/auth/logout":
                 sid = authmod.Auth.sid_from_cookie_header(self.headers.get("Cookie"))
                 AUTH.destroy_session(sid)
@@ -623,6 +661,58 @@ class Handler(BaseHTTPRequestHandler):
                                    "lot": chain["lot"], "atm": chain["atm"], "step": chain["step"],
                                    "strikes": strikes, "legs": legs, "metrics": metrics,
                                    "live": chain["live"], "warming": chain["warming"]})
+            if route == "/api/pay/order":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if not payments.configured():
+                    return self._json({"error": "online payment is not switched on yet"}, 503)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                plan, period = str(body.get("plan", "")), str(body.get("period", "monthly"))
+                try:
+                    order = PAYMENTS.create(user, plan, period)
+                except payments.PaymentError as exc:
+                    return self._json({"error": str(exc)}, 502)
+                return self._json(order)
+            if route == "/api/pay/verify":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                oid, pid, sig = (str(body.get(k, "")) for k in ("order_id", "payment_id", "signature"))
+                row = PAYMENTS.get(oid)
+                if row is None or row["user_id"] != user["id"]:
+                    return self._json({"error": "unknown order"}, 404)
+                if not payments.verify_payment_signature(oid, pid, sig):
+                    log.warning("payment signature mismatch for order %s (user %s)", oid, user["id"])
+                    return self._json({"error": "signature mismatch"}, 400)
+                grant = _grant_and_notify(oid, pid, "verify")
+                st = AUTH.plan_status(user["id"])
+                return self._json({"ok": True, "plan": st["plan"], "until": st["until"], "already": grant is None})
+            if route == "/api/pay/webhook":
+                raw = self._read_body(limit=256 * 1024)
+                if not payments.verify_webhook_signature(raw, self.headers.get("X-Razorpay-Signature", "")):
+                    return self._json({"error": "bad signature"}, 400)
+                try:
+                    evt = json.loads(raw.decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                kind = evt.get("event", "")
+                pay = ((evt.get("payload") or {}).get("payment") or {}).get("entity") or {}
+                oid, pid = pay.get("order_id"), pay.get("id")
+                if kind in ("payment.captured", "order.paid") and oid and pid and PAYMENTS.get(oid):
+                    _grant_and_notify(oid, pid, "webhook")
+                return self._json({"ok": True})
             if route == "/api/assessment":
                 if self.headers.get("X-Requested-With") != "fetch":
                     return self._json({"error": "bad request"}, 400)
@@ -829,6 +919,7 @@ def main() -> int:
     CONSTITUENTS.start()
     CHAINS.start()
     BRIEF.start()
+    RENEWALS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -843,6 +934,7 @@ def main() -> int:
         CONSTITUENTS.stop()
         CHAINS.stop()
         BRIEF.stop()
+        RENEWALS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()

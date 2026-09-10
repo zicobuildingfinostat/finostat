@@ -108,6 +108,9 @@ def _migrate(path: pathlib.Path) -> None:
         if cols and "plan" not in cols:            # no users table (another schema shares the helper) -> nothing to do
             c.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'starter'")
             c.commit()
+        if cols and "plan_until" not in cols:      # NULL = no expiry (manual grants); paid plans carry one
+            c.execute("ALTER TABLE users ADD COLUMN plan_until REAL")
+            c.commit()
     finally:
         c.close()
 
@@ -267,11 +270,12 @@ class Auth:
             return None
         with self._conn() as c:
             row = c.execute(
-                "SELECT u.id,u.email,u.plan,s.expires FROM sessions s JOIN users u ON u.id=s.user_id "
+                "SELECT u.id,u.email,u.plan,u.plan_until,s.expires FROM sessions s JOIN users u ON u.id=s.user_id "
                 "WHERE s.sid_hash=?", (_h(sid),)).fetchone()
         if row is None or row["expires"] < time.time():
             return None
-        return {"id": row["id"], "email": row["email"], "plan": row["plan"] or "starter"}
+        return {"id": row["id"], "email": row["email"], "plan": self.effective_plan(row["plan"], row["plan_until"]),
+                "plan_until": row["plan_until"]}
 
     def destroy_session(self, sid: str | None) -> None:
         if not sid:
@@ -289,17 +293,73 @@ class Auth:
             log.warning("checkpoint failed: %s", exc)
 
     # -- plans --------------------------------------------------------------
-    def set_plan(self, email: str, plan: str) -> bool:
+    def set_plan(self, email: str, plan: str, days: int | None = None) -> bool:
+        """Operator grant. days=None means no expiry."""
         if plan not in PLANS:
             raise ValueError(f"plan must be one of {PLANS}")
+        until = time.time() + days * 86400 if days else None
         with self._lock, self._conn() as c:
-            cur = c.execute("UPDATE users SET plan=? WHERE email=?", (plan, email))
+            cur = c.execute("UPDATE users SET plan=?, plan_until=? WHERE email=?", (plan, until, email))
         return cur.rowcount > 0
+
+    def grant(self, user_id: int, plan: str, days: int) -> float:
+        """A paid period. Extends the same plan if it is still running, otherwise
+        starts the new plan now. Returns the expiry timestamp."""
+        if plan not in PLANS:
+            raise ValueError(f"plan must be one of {PLANS}")
+        now = time.time()
+        with self._lock, self._conn() as c:
+            row = c.execute("SELECT plan, plan_until FROM users WHERE id=?", (user_id,)).fetchone()
+            if row is None:
+                raise ValueError("no such user")
+            active = row["plan"] == plan and row["plan_until"] and row["plan_until"] > now
+            until = (row["plan_until"] if active else now) + days * 86400
+            c.execute("UPDATE users SET plan=?, plan_until=? WHERE id=?", (plan, until, user_id))
+        return until
+
+    @staticmethod
+    def effective_plan(plan: str | None, until) -> str:
+        """A paid plan past its expiry is Starter again."""
+        if not plan or plan == "starter":
+            return "starter"
+        if until is not None and until < time.time():
+            return "starter"
+        return plan
 
     def plan_of(self, user_id: int) -> str:
         with self._conn() as c:
-            row = c.execute("SELECT plan FROM users WHERE id=?", (user_id,)).fetchone()
-        return (row["plan"] if row and row["plan"] else "starter")
+            row = c.execute("SELECT plan, plan_until FROM users WHERE id=?", (user_id,)).fetchone()
+        return self.effective_plan(row["plan"], row["plan_until"]) if row else "starter"
+
+    def expiring(self, within: float) -> list[dict]:
+        """Paid plans ending within `within` seconds that have not been reminded for this period."""
+        now = time.time()
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT u.id,u.email,u.plan,u.plan_until,(SELECT value FROM prefs p WHERE p.user_id=u.id AND p.key='renew_notice') AS noticed "
+                "FROM users u WHERE u.plan!='starter' AND u.plan_until IS NOT NULL AND u.plan_until>? AND u.plan_until<=?",
+                (now, now + within)).fetchall()
+        out = []
+        for r in rows:
+            if r["noticed"] and r["noticed"] == json.dumps(r["plan_until"]):
+                continue
+            out.append({"id": r["id"], "email": r["email"], "plan": r["plan"], "until": r["plan_until"]})
+        return out
+
+    def mark_reminded(self, user_id: int, until: float) -> None:
+        with self._lock, self._conn() as c:
+            c.execute("INSERT INTO prefs(user_id,key,value,updated) VALUES(?,?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value, updated=excluded.updated",
+                      (user_id, "renew_notice", json.dumps(until), time.time()))
+
+    def plan_status(self, user_id: int) -> dict:
+        with self._conn() as c:
+            row = c.execute("SELECT plan, plan_until FROM users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            return {"plan": "starter", "until": None, "expired": False}
+        eff = self.effective_plan(row["plan"], row["plan_until"])
+        return {"plan": eff, "until": row["plan_until"] if eff != "starter" else None,
+                "expired": bool(row["plan"] != "starter" and eff == "starter" and row["plan_until"]),
+                "lapsed_plan": row["plan"] if eff == "starter" and row["plan"] != "starter" else None}
 
     def request_upgrade(self, user_id: int, plan: str, note: str = "") -> int | None:
         if plan not in PLANS:
@@ -315,7 +375,7 @@ class Auth:
 
     def list_users(self) -> list[dict]:
         with self._conn() as c:
-            rows = c.execute("SELECT id,email,plan,created,last_seen FROM users ORDER BY id").fetchall()
+            rows = c.execute("SELECT id,email,plan,plan_until,created,last_seen FROM users ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
     def pending_requests(self) -> list[dict]:
