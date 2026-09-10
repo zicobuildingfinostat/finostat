@@ -80,6 +80,12 @@ button{cursor:pointer;background:none;border:0}
 @media(max-width:860px){.tcmd{max-width:none}.help .bd{grid-template-columns:1fr}.help code{min-width:0}}
 .top .r{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:11px;color:var(--faint);letter-spacing:.06em}
 .top .r a:hover{color:var(--gold)}
+.top .home-ic{flex:0 0 auto;width:34px;height:34px;border-radius:9px;overflow:hidden;margin-left:10px;box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22);animation:fino-glow 3.4s ease-in-out infinite}
+.top .home-ic img{width:100%;height:100%;display:block}
+.top .home-ic:hover{box-shadow:0 0 0 1px var(--gold),0 0 30px rgba(245,200,66,.7);animation:none}
+@keyframes fino-glow{0%,100%{box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22)}50%{box-shadow:0 0 0 1px rgba(245,200,66,.7),0 0 26px rgba(245,200,66,.5)}}
+@media (prefers-reduced-motion:reduce){.top .home-ic{animation:none}}
+
 .live{color:var(--up);display:inline-flex;align-items:center;gap:6px}
 .live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 1.6s infinite}
 .live.off{color:var(--down)}.live.off::before{background:var(--down);box-shadow:none;animation:none}
@@ -347,7 +353,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <span id="who"><a href="/login">SIGN IN</a></span>
     <a href="/">← SITE</a>
   </div>
-</header>
+<a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
 
 <div class="tape" aria-label="Market ticker"><div class="tape-inner" id="tape"></div></div>
 
@@ -1534,6 +1540,12 @@ a{color:inherit;text-decoration:none}
   background:linear-gradient(180deg,#fff 20%,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
 .top .r{margin-left:auto;display:flex;gap:14px;color:var(--faint);letter-spacing:.06em}
 .top .r a:hover{color:var(--gold)}
+.top .home-ic{flex:0 0 auto;width:34px;height:34px;border-radius:9px;overflow:hidden;margin-left:10px;box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22);animation:fino-glow 3.4s ease-in-out infinite}
+.top .home-ic img{width:100%;height:100%;display:block}
+.top .home-ic:hover{box-shadow:0 0 0 1px var(--gold),0 0 30px rgba(245,200,66,.7);animation:none}
+@keyframes fino-glow{0%,100%{box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22)}50%{box-shadow:0 0 0 1px rgba(245,200,66,.7),0 0 26px rgba(245,200,66,.5)}}
+@media (prefers-reduced-motion:reduce){.top .home-ic{animation:none}}
+
 .live{color:var(--up);display:inline-flex;align-items:center;gap:6px}
 .live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up);animation:pulse 1.6s infinite}
 .live.off{color:var(--down)}.live.off::before{background:var(--down);box-shadow:none;animation:none}
@@ -1581,7 +1593,7 @@ dd{color:var(--gold-2);text-align:right;font-size:13.5px}
 <header class="top">
   <a class="logo" href="/">FINOSTAT</a>
   <div class="r"><span class="live off" id="conn">—</span><a href="/dashboard">TERMINAL</a><a href="/#strategies">ALL STRATEGIES</a></div>
-</header>
+<a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
 <main class="wrap">
   <nav class="crumb"><a href="/">FINO</a> · <a href="/#strategies">STRATEGIES</a> · __CODE__</nav>
   <h1>__NAME__</h1>
@@ -1739,9 +1751,14 @@ button:hover{filter:brightness(1.08)}
 .msg.err{border-color:var(--down);color:var(--text)}.msg.err b{color:var(--down)}
 .msg code{font-family:var(--mono);font-size:12px;color:var(--cyan)}
 .foot{padding:12px 14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+.home-ic{position:fixed;top:14px;right:14px;width:36px;height:36px;border-radius:9px;overflow:hidden;z-index:5;box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22);animation:fino-glow 3.4s ease-in-out infinite}
+.home-ic img{width:100%;height:100%;display:block}.home-ic:hover{box-shadow:0 0 0 1px var(--gold),0 0 30px rgba(245,200,66,.7);animation:none}
+@keyframes fino-glow{0%,100%{box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22)}50%{box-shadow:0 0 0 1px rgba(245,200,66,.7),0 0 26px rgba(245,200,66,.5)}}
+@media (prefers-reduced-motion:reduce){.home-ic{animation:none}}
 </style>
 </head>
 <body>
+<a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="36" height="36"></a>
 <div class="card">
   <div class="hd"><span class="k">AUTH</span><span class="s">SIGN IN · PASSWORDLESS</span><a href="/">← SITE</a></div>
   <div class="body">

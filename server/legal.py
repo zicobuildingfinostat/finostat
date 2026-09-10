@@ -28,7 +28,7 @@ _HEAD = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>__CSS__</style></head><body>
-<header class="top"><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a><a href="/founders">FOUNDER</a><a href="/contact">CONTACT</a></div></header>
+<header class="top"><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a><a href="/founders">FOUNDER</a><a href="/contact">CONTACT</a></div><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
 <main class="wrap"><nav class="crumb"><a href="/">FINO</a> · __CRUMB__</nav>
 <h1>__TITLE__</h1><p class="meta">Last updated __UPDATED__ · Finostat, India · __EMAIL__</p>
 <article class="legal">"""
