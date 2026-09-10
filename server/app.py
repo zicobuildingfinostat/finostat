@@ -753,6 +753,7 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/pay/cashfree/webhook":
                 raw = self._read_body(limit=256 * 1024)
                 if not payments.verify_cashfree_webhook(raw, self.headers.get("x-webhook-timestamp", ""), self.headers.get("x-webhook-signature", "")):
+                    log.warning("cashfree webhook: BAD signature (%d bytes, ts=%s, ip=%s)", len(raw), self.headers.get("x-webhook-timestamp", "-"), self._client_ip())
                     return self._json({"error": "bad signature"}, 400)
                 try:
                     evt = json.loads(raw.decode("utf-8"))
@@ -761,13 +762,16 @@ class Handler(BaseHTTPRequestHandler):
                 data = evt.get("data") or {}
                 oid = ((data.get("order") or {}).get("order_id"))
                 pay = data.get("payment") or {}
+                log.info("cashfree webhook: signature ok, type=%s order=%s status=%s known=%s", evt.get("type"), oid, pay.get("payment_status"), bool(oid and PAYMENTS.get(oid)))
                 if evt.get("type") == "PAYMENT_SUCCESS_WEBHOOK" and str(pay.get("payment_status", "")).upper() == "SUCCESS" and oid and PAYMENTS.get(oid):
                     _grant_and_notify(oid, str(pay.get("cf_payment_id") or "cf"), "webhook")
                 return self._json({"ok": True})
             if route == "/api/pay/webhook":
                 raw = self._read_body(limit=256 * 1024)
                 if not payments.verify_webhook_signature(raw, self.headers.get("X-Razorpay-Signature", "")):
+                    log.warning("razorpay webhook: BAD signature (%d bytes, ip=%s)", len(raw), self._client_ip())
                     return self._json({"error": "bad signature"}, 400)
+                log.info("razorpay webhook: signature ok (%d bytes)", len(raw))
                 try:
                     evt = json.loads(raw.decode("utf-8"))
                 except ValueError:
