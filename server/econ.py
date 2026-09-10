@@ -324,6 +324,8 @@ def render(econ: Econ, anchor: date | None = None) -> bytes:
     ld_json = json.dumps(ld, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     faq_json = json.dumps(faq_ld, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     this_week = "" if monday <= today <= sunday else '<a class="nav" href="/calendar">this week</a>'
+    from econ_pages import links_html
+    schedules = links_html()
     updated = datetime.fromtimestamp(econ.fetched, IST).strftime("%d %b %H:%M") if econ.fetched else "—"
     doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_esc(title)}</title><meta name="description" content="{_esc(desc)}"><meta name="theme-color" content="#0c0626"><meta name="robots" content="index, follow, max-image-preview:large">
@@ -345,6 +347,7 @@ def render(econ: Econ, anchor: date | None = None) -> bytes:
 <div class="legend"><span><i class="imp High"></i>high impact</span><span><i class="imp Medium"></i>medium</span><span><i class="imp Low"></i>low</span><span>times in IST · updated {updated}</span></div>
 <p style="margin-top:22px"><a class="cta" href="/dashboard">See the implied move for each event on the terminal →</a> <a class="cta ghost" href="/brief">Today's expiry brief</a></p>
 {_FAQ}
+{schedules}
 <p class="disc">Global releases via Forex Factory's public calendar feed. Indian release dates follow MOSPI, DPIIT, S&amp;P Global and RBI published schedules and may shift around holidays. Nothing here is investment advice.</p>
 </main>
 <script>

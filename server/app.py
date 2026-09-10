@@ -41,6 +41,7 @@ import broker
 import builder
 import cas
 import econ
+import econ_pages
 import events
 import chains
 import contracts
@@ -450,6 +451,10 @@ class Handler(BaseHTTPRequestHandler):
                                    "signed_in": self._current_user() is not None}, 402)
             if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
+            if route.startswith("/calendar/") and route.count("/") == 2:
+                body = econ_pages.render(route[len("/calendar/"):])
+                if body is not None:
+                    return self._send(body, "text/html; charset=utf-8", cache="public, max-age=3600")
             if route == "/calendar":
                 qs = parse_qs(parsed.query)
                 d = qs.get("d", [""])[0]
