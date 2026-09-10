@@ -53,7 +53,12 @@
   --max:1320px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth;background:var(--bg)}
+html{scroll-behavior:smooth;background:
+  radial-gradient(1100px 700px at 6% -8%,rgba(120,60,255,.30),transparent 60%),
+  radial-gradient(900px 620px at 100% 0%,rgba(0,220,255,.13),transparent 60%),
+  radial-gradient(820px 700px at 62% 108%,rgba(255,80,200,.13),transparent 60%),
+  radial-gradient(640px 520px at 18% 78%,rgba(245,200,66,.07),transparent 60%),
+  var(--bg);background-attachment:fixed}
 html::before{content:"";position:fixed;inset:0;z-index:-1;
   background:radial-gradient(ellipse 70% 45% at 50% 0%,rgba(122,60,245,.55),transparent 70%),
              radial-gradient(ellipse 40% 30% at 90% 100%,rgba(255,110,199,.12),transparent 70%),var(--bg)}
@@ -324,9 +329,25 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   .session{grid-column:span 1;padding:22px 20px}
 }
 
+/* holographic floor + prism sheen: static, sits under the content */
+body::after{content:"";position:fixed;left:-25%;right:-25%;bottom:-8%;height:46vh;pointer-events:none;z-index:-1;
+  background:repeating-linear-gradient(90deg,rgba(150,120,255,.16) 0 1px,transparent 1px 72px),repeating-linear-gradient(0deg,rgba(150,120,255,.16) 0 1px,transparent 1px 72px);
+  transform:perspective(520px) rotateX(62deg);transform-origin:50% 100%;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.9) 75%);mask-image:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.9) 75%)}
+.holo{position:fixed;inset:0;pointer-events:none;z-index:-1;mix-blend-mode:screen;opacity:.9;
+  background:linear-gradient(112deg,transparent 0 30%,rgba(0,255,230,.045) 36%,rgba(255,80,220,.06) 44%,rgba(245,200,66,.05) 52%,rgba(120,180,255,.04) 58%,transparent 66% 100%)}
+@media (max-width:700px){body::after{height:30vh;opacity:.7}}
+
+/* iridescent 1px edge on every panel */
+.panel{position:relative}
+.panel::before{content:"";position:absolute;inset:-1px;pointer-events:none;z-index:2;padding:1px;border-radius:inherit;opacity:.55;
+  background:linear-gradient(135deg,rgba(0,255,230,.55),rgba(255,80,220,.35) 35%,rgba(245,200,66,.45) 65%,rgba(0,255,230,.3));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;transition:opacity .3s}
+.panel:hover::before{opacity:.95}
+
 /* guiding light */
 #spot{position:fixed;inset:0;pointer-events:none;z-index:2;mix-blend-mode:screen;opacity:0;transition:opacity .6s;
-  background:radial-gradient(540px circle at var(--sx,50%) var(--sy,30%),rgba(245,200,66,.11),rgba(245,200,66,.03) 42%,transparent 70%)}
+  background:radial-gradient(560px circle at var(--sx,50%) var(--sy,30%),rgba(0,255,230,.09),rgba(255,80,220,.05) 32%,rgba(245,200,66,.03) 52%,transparent 70%)}
 #spot.on{opacity:1}
 @media (prefers-reduced-motion:reduce){#spot{display:none}}
 
@@ -381,6 +402,7 @@ body.menu-open{overflow:hidden}
     <button class="burger" id="burger" aria-label="Open menu" aria-controls="mnav" aria-expanded="false"><span></span><span></span><span></span></button>
   </div>
 </header>
+<div class="holo" aria-hidden="true"></div>
 <div id="spot" aria-hidden="true"></div>
 <nav id="mnav" aria-label="Mobile menu"><div class="wrap">
   <div class="mcta"><a class="btn primary lg" href="/dashboard">Open the terminal →</a><a class="btn lg" href="/login">Sign in</a></div>

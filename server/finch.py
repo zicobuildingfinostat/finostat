@@ -24,10 +24,23 @@ _CSS = r"""
   --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;--body:"IBM Plex Sans",system-ui,sans-serif;
   --display:"Barlow Condensed",Impact,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
-html{background:var(--bg);scroll-behavior:smooth}
+html{scroll-behavior:smooth;background:
+  linear-gradient(112deg,transparent 0 30%,rgba(0,255,230,.04) 36%,rgba(255,80,220,.05) 44%,rgba(245,200,66,.045) 52%,rgba(120,180,255,.035) 58%,transparent 66% 100%),
+  radial-gradient(1100px 700px at 6% -8%,rgba(120,60,255,.30),transparent 60%),
+  radial-gradient(900px 620px at 100% 0%,rgba(0,220,255,.13),transparent 60%),
+  radial-gradient(820px 700px at 62% 108%,rgba(255,80,200,.13),transparent 60%),
+  radial-gradient(640px 520px at 18% 78%,rgba(245,200,66,.07),transparent 60%),
+  var(--bg);background-attachment:fixed}
 html::after{content:"";position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 70% 40% at 50% 0%,rgba(122,60,245,.42),transparent 70%),var(--bg)}
 body{color:var(--text);font-family:var(--body);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;min-height:100vh}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(0deg,rgba(200,180,255,.03) 0 1px,transparent 1px 3px)}
+/* holographic floor + prism sheen: static, sits under the content */
+body::after{content:"";position:fixed;left:-25%;right:-25%;bottom:-8%;height:46vh;pointer-events:none;z-index:-1;
+  background:repeating-linear-gradient(90deg,rgba(150,120,255,.16) 0 1px,transparent 1px 72px),repeating-linear-gradient(0deg,rgba(150,120,255,.16) 0 1px,transparent 1px 72px);
+  transform:perspective(520px) rotateX(62deg);transform-origin:50% 100%;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.9) 75%);mask-image:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.9) 75%)}
+@media (max-width:700px){body::after{height:30vh;opacity:.7}}
+
 a{color:var(--cyan);text-decoration:none}a:hover{color:var(--gold)}
 .top{display:flex;align-items:center;gap:14px;min-height:48px;padding:6px 16px;background:rgba(12,6,38,.94);border-bottom:1px solid var(--line-strong);font-family:var(--mono);font-size:11px;position:sticky;top:0;z-index:5;flex-wrap:wrap}
 .top .logo{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;background:linear-gradient(180deg,#fff 20%,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
