@@ -291,7 +291,7 @@ class Page:
                 doc, count=1, flags=re.S,
             )
         # Latest YouTube uploads: section markup, its CSS, and the click-to-play script.
-        doc = doc.replace("<!--VIDEOS-->", videos.render_section(VIDEOS.latest(6)), 1)
+        doc = doc.replace("<!--VIDEOS-->", videos.render_section(VIDEOS.latest(6), videos.load_reels()), 1)
         doc = doc.replace("/*VIDEOS_CSS*/", videos.CSS, 1)
         doc = doc.replace("</body>", "<script>" + videos.JS + "</script>\n</body>", 1)
         metas = ""
