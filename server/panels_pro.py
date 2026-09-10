@@ -16,28 +16,28 @@ MARKUP = f"""
     <div class="panel-hd"><span class="k">SURF</span><span class="s">IV SURFACE · RICH/CHEAP</span><span class="r"><span class="an-state" id="surf-state">—</span></span></div>
     <div class="an-top">{_SEG_U}<span class="seg" id="surf-mode"><button type="button" data-m="iv" class="on">IV %</button><button type="button" data-m="rich">RICH / CHEAP</button></span><span class="an-note" id="surf-note">hover a cell</span></div>
     <div class="an-kpi" id="surf-kpi"></div>
-    <canvas class="an-cv" id="surf-cv" height="260"></canvas>
+    <div class="an-cvw"><canvas class="an-cv" id="surf-cv"></canvas></div>
     <div class="an-foot">Moneyness = ln(K/S). Rich/cheap = each strike's IV against its expiry's own fitted smile, in vol points: magenta is expensive, cyan is cheap. Exchange IVs and OI via Upstox; refreshes every minute.</div>
   </section>
   <section class="panel an" id="p-skew" aria-label="Vol skew and moneyness">
     <div class="panel-hd"><span class="k">SKEW</span><span class="s">VOL SKEW · MONEYNESS</span><span class="r"><span class="an-state" id="skew-state">—</span></span></div>
     <div class="an-top">{_SEG_U}<select class="an-sel an-exp" aria-label="Expiry"></select><span class="seg" id="skew-x"><button type="button" data-x="strike" class="on">STRIKE</button><button type="button" data-x="m">MONEYNESS</button><button type="button" data-x="delta">DELTA</button></span></div>
     <div class="an-kpi" id="skew-kpi"></div>
-    <canvas class="an-cv" id="skew-cv" height="230"></canvas>
+    <div class="an-cvw"><canvas class="an-cv" id="skew-cv"></canvas></div>
     <div class="an-foot" id="skew-note">CE IV cyan · PE IV magenta · fitted smile gold. 25Δ risk reversal = put IV − call IV; butterfly = wing average − ATM.</div>
   </section>
   <section class="panel an" id="p-curv" aria-label="Implied distribution">
     <div class="panel-hd"><span class="k">CURV</span><span class="s">IMPLIED DISTRIBUTION</span><span class="r"><span class="an-state" id="curv-state">—</span></span></div>
     <div class="an-top">{_SEG_U}<select class="an-sel an-exp" aria-label="Expiry"></select></div>
     <div class="an-kpi" id="curv-kpi"></div>
-    <canvas class="an-cv" id="curv-cv" height="230"></canvas>
+    <div class="an-cvw"><canvas class="an-cv" id="curv-cv"></canvas></div>
     <div class="an-foot">Risk-neutral density from the option chain (Breeden–Litzenberger on the fitted smile). Gold = what the market prices; dashed = a no-skew lognormal at ATM vol. Shaded band = 16th–84th percentile.</div>
   </section>
   <section class="panel an" id="p-gex" aria-label="Dealer gamma exposure">
     <div class="panel-hd"><span class="k">GEX</span><span class="s">DEALER GAMMA BY STRIKE</span><span class="r"><span class="an-state" id="gex-state">—</span></span></div>
     <div class="an-top">{_SEG_U}<select class="an-sel an-exp" aria-label="Expiry"></select></div>
     <div class="an-kpi" id="gex-kpi"></div>
-    <canvas class="an-cv" id="gex-cv" height="230"></canvas>
+    <div class="an-cvw"><canvas class="an-cv" id="gex-cv"></canvas></div>
     <div class="an-foot">₹ crore of dealer gamma per 1% move. Calls sold to dealers count positive (they hedge against the move), puts negative (they hedge with it). Gold line = cumulative; the flip is where it crosses zero.</div>
   </section>
   <section class="panel a-wide an" id="p-rply" aria-label="Historical replay">
@@ -47,7 +47,7 @@ MARKUP = f"""
       <span class="an-note" id="rp-note">pick an expiry day and load it — 1-minute candles, ATM ±5 strikes</span></div>
     <div class="an-scrub"><input type="range" id="rp-t" min="0" max="0" value="0" step="1" disabled aria-label="Time"><b id="rp-time">--:--</b></div>
     <div class="an-kpi" id="rp-kpi"></div>
-    <div class="an-split"><canvas class="an-cv" id="rp-cv" height="230"></canvas>
+    <div class="an-split"><div class="an-cvw"><canvas class="an-cv" id="rp-cv"></canvas></div>
       <div class="scroll an-tbl-wrap"><table class="an-table"><thead><tr><th>STRIKE</th><th>CE</th><th>PE</th><th>CE+PE</th></tr></thead><tbody id="rp-rows"></tbody></table></div></div>
   </section>
   <section class="panel a-wide an" id="p-bkts" aria-label="Backtesting">
@@ -58,7 +58,7 @@ MARKUP = f"""
       <label class="an-lbl">EXPIRIES <select class="an-sel" id="bt-n"><option value="26">last 26</option><option value="52" selected>last 52</option><option value="104">last 104</option><option value="400">all</option></select></label>
       <button type="button" class="an-btn" id="bt-run">RUN</button><span class="an-note" id="bt-note">1-minute closes on each past expiry day since Oct 2024 · no slippage or costs</span></div>
     <div class="an-kpi" id="bt-kpi"></div>
-    <div class="an-split"><canvas class="an-cv" id="bt-cv" height="230"></canvas>
+    <div class="an-split"><div class="an-cvw"><canvas class="an-cv" id="bt-cv"></canvas></div>
       <div class="scroll an-tbl-wrap"><table class="an-table"><thead><tr><th>EXPIRY</th><th>ATM</th><th>MOVE</th><th>CREDIT</th><th>P&amp;L / LOT</th><th>MAE</th></tr></thead><tbody id="bt-rows"></tbody></table></div></div>
   </section>
 """
@@ -73,7 +73,7 @@ CSS = r"""
 .an-note{color:var(--faint);font-size:10.5px;margin-left:auto}.an-state{color:var(--faint)}.an-state.ok{color:var(--up)}.an-state.err{color:var(--down)}
 .an-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
 .an-kpi div{background:var(--panel);padding:5px 10px}.an-kpi small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.an-kpi b{font-family:var(--display);font-size:19px;font-weight:600;color:var(--gold)}.an-kpi b.c{color:var(--cyan)}.an-kpi b.up{color:var(--up)}.an-kpi b.down{color:var(--down)}.an-kpi b.m{color:var(--text)}
-.an-cv{width:100%;height:230px;flex:0 0 auto;display:block}.a-wide .an-cv{height:270px}.an-split .an-cv{height:300px}
+.an-cvw{position:relative;height:230px;flex:0 0 auto;min-width:0}.a-wide .an-cvw{height:270px}.an-split .an-cvw{height:300px}.an-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
 .an-foot{padding:6px 10px;border-top:1px solid var(--line);font-size:10px;color:var(--faint);line-height:1.45}
 .an-split{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);flex:1;min-height:0}.an-tbl-wrap{border-left:1px solid var(--line);max-height:320px}
 .an-table{width:100%;border-collapse:collapse;font-size:11px}.an-table th{position:sticky;top:0;background:var(--panel-hd);color:var(--faint);font-weight:500;font-size:9.5px;letter-spacing:.1em;padding:4px 8px;text-align:right}.an-table th:first-child{text-align:left}

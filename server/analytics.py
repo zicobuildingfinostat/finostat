@@ -107,6 +107,24 @@ def _interp(xs: list[float], ys: list[float], x: float) -> float | None:
     return ys[-1]
 
 
+def _kernel_iv(xs: list[float], ys: list[float], x: float, bw: float = 0.6) -> float | None:
+    """Gaussian-kernel smoothed IV at moneyness x (bandwidth in % moneyness). A smooth curve is what
+    the density needs: piecewise-linear IV has kinks at every strike, and d²C/dK² turns each kink
+    into a spike."""
+    if not xs:
+        return None
+    if x < xs[0] - 2 * bw:
+        x = xs[0] - 2 * bw                         # flat tails beyond the quoted range
+    if x > xs[-1] + 2 * bw:
+        x = xs[-1] + 2 * bw
+    num = den = 0.0
+    for xi, yi in zip(xs, ys):
+        w = math.exp(-0.5 * ((x - xi) / bw) ** 2)
+        num += w * yi
+        den += w
+    return num / den if den > 1e-9 else _interp(xs, ys, x)
+
+
 def surface(chains: list[dict]) -> dict:
     """chains: [{expiry, label, rows, spot, t}] -> IV grid (expiries × moneyness) with rich/cheap residuals."""
     grid, term = [], []
@@ -151,15 +169,16 @@ def distribution(rows: list[dict], spot: float, t: float, r: float = bs.RISK_FRE
     dk = ks[1] - ks[0]
 
     def vol_at(k: float) -> float:
-        v = _interp(xs, ys, math.log(k / spot) * 100.0)
+        v = _kernel_iv(xs, ys, math.log(k / spot) * 100.0)
         return max(1.0, v) / 100.0
 
     calls = [bs.price(spot, k, t, vol_at(k), "CE", r) for k in ks]
     pdf = [0.0] * n
     for i in range(1, n - 1):
         pdf[i] = max(0.0, math.exp(r * t) * (calls[i + 1] - 2 * calls[i] + calls[i - 1]) / (dk * dk))
-    # light smoothing (3-point) to take the finite-difference noise out of the picture
-    pdf = [pdf[i] if i in (0, n - 1) else (pdf[i - 1] + 2 * pdf[i] + pdf[i + 1]) / 4 for i in range(n)]
+    # light smoothing (5-point binomial) to take the finite-difference noise out of the picture
+    w5 = [1, 4, 6, 4, 1]
+    pdf = [pdf[i] if i < 2 or i > n - 3 else sum(w * pdf[i + j - 2] for j, w in enumerate(w5)) / 16 for i in range(n)]
     mass = sum(pdf) * dk
     if mass <= 0:
         return None
