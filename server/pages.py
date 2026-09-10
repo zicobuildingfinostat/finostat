@@ -108,6 +108,16 @@ button{cursor:pointer;background:none;border:0}
 .a-chart{grid-column:span 2;min-height:480px}
 .a-cas{grid-column:span 2;min-height:420px}
 .a-book{grid-column:span 2;min-height:360px}
+.ev-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 10px;border-bottom:1px solid var(--line);font-size:10.5px}
+.ev-top .seg button{font-size:10px;letter-spacing:.08em;padding:4px 9px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.ev-top .seg button.on{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.ev-body{flex:1;overflow:auto;font-size:11px}
+.ev-table{width:100%;border-collapse:collapse}.ev-table th{text-align:left;font-weight:500;color:var(--faint);font-size:9.5px;letter-spacing:.08em;padding:4px 8px;border-bottom:1px solid var(--line-strong);position:sticky;top:0;background:var(--panel)}
+.ev-table td{padding:5px 8px;border-bottom:1px solid rgba(190,150,255,.07);vertical-align:top}
+.ev-table td.d{color:var(--gold);white-space:nowrap;font-weight:600}.ev-table td.d small{display:block;color:var(--faint);font-weight:400;letter-spacing:.06em}
+.ev-table .kind{font-size:9px;letter-spacing:.1em;padding:1px 5px;border:1px solid var(--line-strong);color:var(--muted);margin-right:6px}.ev-table .kind.results{color:var(--cyan);border-color:var(--cyan)}.ev-table .kind.macro{color:var(--down);border-color:var(--down)}.ev-table .kind.expiry{color:var(--gold);border-color:var(--gold)}
+.ev-table td.mv{white-space:nowrap;text-align:right}.ev-table td.mv b{font-family:var(--display);font-size:17px;color:var(--text)}.ev-table td.mv small{display:block;color:var(--faint);font-size:9.5px}
+.ev-table tr.today td{background:rgba(245,200,66,.06)}.ev-table td a{color:var(--cyan);cursor:pointer}
+.ev-empty{padding:12px;color:var(--faint);line-height:1.5}
 .bk-tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
 .bk-tot div{background:var(--panel);padding:6px 10px}.bk-tot small{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.bk-tot b{font-family:var(--display);font-size:20px;font-weight:600}
 .bk-body{padding:6px 10px 8px;flex:1;font-size:11px}
@@ -416,6 +426,11 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
   </div>
 
+  <section class="panel" id="p-events" aria-label="Event calendar">
+    <div class="panel-hd"><span class="k">EVNT</span><span class="s">EVENTS · IMPLIED MOVE PRICED</span><span class="r"><span id="ev-state">—</span></span></div>
+    <div class="ev-top"><span class="seg" id="ev-filter"><button type="button" data-k="all" class="on">ALL</button><button type="button" data-k="expiry">EXPIRIES</button><button type="button" data-k="results">RESULTS</button><button type="button" data-k="macro">MACRO</button></span><span style="color:var(--faint)">next 21 days · move = ATM straddle of the expiry spanning the date · click a row to load it in the builder</span></div>
+    <div class="ev-body" id="ev-body"><div class="ev-empty">loading…</div></div>
+  </section>
   <section class="panel a-book" id="p-book" aria-label="Positions book">
     <div class="panel-hd"><span class="k">BOOK</span><span class="s">POSITIONS · NET GREEKS · WHAT-IF</span><span class="r"><span id="bk-state">—</span></span></div>
     <div class="bk-tot" id="bk-tot"></div>
@@ -782,11 +797,11 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+var PANELS=[['sheet','BFLY sheet'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
 /* ---------- command line ---------- */
 var tcmdIn=document.getElementById('tcmd-in'), tcmdMsg=document.getElementById('tcmd-msg'), helpEl=document.getElementById('help');
 var PRESET_ALIAS={IC:'iron-condor',CONDOR:'iron-condor',IF:'iron-fly',IRONFLY:'iron-fly',SS:'short-straddle',STRADDLE:'short-straddle',LS:'long-straddle',SG:'short-strangle',STRANGLE:'short-strangle',LSG:'long-strangle',BCS:'bull-call-spread',BPS:'bear-put-spread',FLY:'butterfly',BFLY:'butterfly',BUTTERFLY:'butterfly',RATIO:'ratio-spread'};
-var PANEL_ALIAS={BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini'};
+var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini'};
 var INDEX_ALIAS={NIFTY:'NIFTY 50','NIFTY50':'NIFTY 50','NIFTY 50':'NIFTY 50',BN:'BANKNIFTY',BANKNIFTY:'BANKNIFTY',NIFTYBANK:'BANKNIFTY',SENSEX:'SENSEX',SX:'SENSEX',FIN:'FINNIFTY',FINNIFTY:'FINNIFTY',VIX:'INDIA VIX',INDIAVIX:'INDIA VIX'};
 function say(msg,kind){ tcmdMsg.textContent=msg; tcmdMsg.className='tcmd-msg '+(kind||''); tcmdMsg.hidden=false; clearTimeout(say.t); say.t=setTimeout(function(){ tcmdMsg.hidden=true; },3500); }
 function goPanel(id){ var el=document.getElementById('p-'+id); if(!el) return false; if(el.hidden){ var hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[]; var i=hide.indexOf(id); if(i>=0) hide.splice(i,1); applyLayout(); savePrefs(); } el.scrollIntoView({behavior:'smooth',block:'start'}); return true; }
@@ -833,6 +848,22 @@ document.addEventListener('keydown',function(e){
   if(e.key==='/'){ e.preventDefault(); tcmdIn.focus(); }
   else if(e.key==='?'){ e.preventDefault(); helpEl.hidden=false; }
 });
+/* ---------- EVENTS: calendar with the premium attached ---------- */
+var evBody=document.getElementById('ev-body'), evState=document.getElementById('ev-state'), evPanel=document.getElementById('p-events'), evFilter='all', evData=null;
+function renderEvents(d){
+  evData=d; var rows=(d.events||[]).filter(function(e){ return evFilter==='all'||e.kind===evFilter; });
+  evState.textContent=(d.counts?d.counts.expiry+' exp · '+d.counts.results+' results · '+d.counts.macro+' macro':'')+(d.results_error?' · results feed down':'');
+  if(!rows.length){ evBody.innerHTML='<div class="ev-empty">Nothing in the next '+d.days+' days'+(evFilter!=='all'?' for this filter':'')+'.</div>'; return; }
+  evBody.innerHTML='<table class="ev-table"><thead><tr><th>DATE</th><th>EVENT</th><th style="text-align:right">IMPLIED MOVE</th></tr></thead><tbody>'+rows.map(function(e){
+    var dt=new Date(e.date+'T00:00:00+05:30'), day=dt.toLocaleDateString('en-IN',{weekday:'short'}), dm=dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+    var days=Math.round((dt-new Date(d.today+'T00:00:00+05:30'))/864e5), when=days===0?'today':days===1?'tomorrow':'in '+days+'d';
+    var mv=e.move, mvh=mv?(mv.warming?'<small>pricing…</small>':'<b>±'+mv.pct.toFixed(2)+'%</b><small>straddle ₹'+fmt(mv.straddle)+' · '+new Date(mv.expiry).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' expiry</small>'):(e.segment?'<small>—</small>':'<small>—</small>');
+    return '<tr'+(days===0?' class="today"':'')+' data-u="'+esc(e.u)+'" data-exp="'+(e.expiry||(mv&&mv.expiry)||'')+'"><td class="d">'+dm+'<small>'+day+' · '+when+'</small></td><td><span class="kind '+e.kind+'">'+e.kind+'</span><a>'+esc(e.title)+'</a>'+(e.detail?'<div style="color:var(--faint);font-size:10px;margin-top:2px">'+esc(e.detail)+'</div>':'')+'</td><td class="mv">'+mvh+'</td></tr>'; }).join('')+'</tbody></table>';
+}
+function pollEvents(){ if(window.FINO_LOCKED||evPanel.hidden) return; fetch('/api/events?days=21',{credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(d){ if(d&&d.events) renderEvents(d); }).catch(function(){}); }
+document.getElementById('ev-filter').addEventListener('click',function(e){ var b=e.target.closest('button[data-k]'); if(!b) return; evFilter=b.getAttribute('data-k'); Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); if(evData) renderEvents(evData); });
+evBody.addEventListener('click',function(e){ var tr=e.target.closest('tr[data-u]'); if(!tr) return; var u=tr.getAttribute('data-u'), exp=Number(tr.getAttribute('data-exp'))||null; if(/^NSE:|^BSE:/.test(u)&&!bl.unders.some(function(x){ return x.key===u; })){ chartTo(u); return; } withChain(u,function(){ if(exp){ bl.expiry=exp; bl.legs=[]; priceStrategy(); } }); goPanel('builder'); });
+setTimeout(pollEvents,1500); setInterval(pollEvents,60000);
 /* ---------- BOOK: positions, net greeks, what-if ---------- */
 var bkTot=document.getElementById('bk-tot'), bkBody=document.getElementById('bk-body'), bkState=document.getElementById('bk-state'), bkPanel=document.getElementById('p-book');
 function rupee(v,d){ if(v==null) return '—'; return (v<0?'−':'')+'₹'+fmt(Math.abs(v),d==null?0:d); }

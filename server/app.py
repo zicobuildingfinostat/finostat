@@ -40,6 +40,7 @@ import brief
 import broker
 import builder
 import cas
+import events
 import chains
 import contracts
 import indices
@@ -107,6 +108,7 @@ CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts
 BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger")
 CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
 BOOK = book.Store(AUTH.path)
+EVENTS = events.Calendar(lambda: CONTRACTS_OF(FEED), CHAINS, cache=AUTH.path.parent / "events.json")
 
 
 def _book_payload(user) -> dict:
@@ -507,6 +509,14 @@ class Handler(BaseHTTPRequestHandler):
                 out["recent"] = BROKERS.recent_orders(user["id"], 10)
                 out["can_trade"] = broker.trade_allowed(user["email"])
                 return self._json(out)
+            if route == "/api/events":
+                if not _paid(self._current_user()):
+                    return self._json({"error": "plan required", "need": "desk", "feature": "terminal"}, 402)
+                try:
+                    days = max(1, min(60, int(parse_qs(parsed.query).get("days", ["21"])[0])))
+                except ValueError:
+                    days = 21
+                return self._json(EVENTS.calendar(days))
             if route == "/api/book":
                 user = self._current_user()
                 if user is None:
@@ -633,6 +643,7 @@ class Handler(BaseHTTPRequestHandler):
             "videos": VIDEOS.status(),
             "broker": {"configured": broker.configured()},
             "cas": {"date": CAS.date, "sessions": {u: len(s.points) for u, s in CAS.today.items()}},
+            "events": {"results": len(EVENTS.results), "fetched": EVENTS.fetched, "error": EVENTS.error},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -1220,6 +1231,7 @@ def main() -> int:
     RENEWALS.start()
     VIDEOS.start()
     CAS.start()
+    EVENTS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -1238,6 +1250,7 @@ def main() -> int:
         VIDEOS.stop()
         CAS.stop()
         CAS.flush()
+        EVENTS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()
