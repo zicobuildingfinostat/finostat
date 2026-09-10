@@ -206,7 +206,82 @@ def nse_holidays(today: date, hol_rows: list[dict] | None = None) -> dict:
     }
 
 
+INDICES = [("NIFTY", "NIFTY 50", "NSE"), ("BANKNIFTY", "BANKNIFTY", "NSE"), ("FINNIFTY", "FINNIFTY", "NSE"), ("MIDCPNIFTY", "MIDCPNIFTY", "NSE"),
+           ("SENSEX", "SENSEX", "BSE"), ("BANKEX", "BANKEX", "BSE")]
+
+
+def expiry_rows(contracts, today: date, hol: set = frozenset()) -> list[dict]:
+    """Every listed expiry per index (and the stock-option monthly series), with weekly/monthly
+    classification and a holiday-shift note. Dates come from the exchange instrument masters."""
+    out = []
+    if contracts is None:
+        return out
+    now_ms = datetime(today.year, today.month, today.day, tzinfo=IST).timestamp() * 1000
+    series = [(n, label, exch) for n, label, exch in INDICES if contracts.has(n)]
+    stock = next((n for n in contracts.names() if n not in {i[0] for i in INDICES} and contracts.expiries(n, now_ms)), None)
+    if stock:
+        series.append((stock, "Stock options (monthly)", "NSE"))
+    for name, label, exch in series:
+        exps = contracts.expiries(name, now_ms)
+        dates = [datetime.fromtimestamp(e / 1000, IST).date() for e in exps]
+        if not dates:
+            continue
+        weekdays = [d.weekday() for d in dates]
+        usual = max(set(weekdays), key=weekdays.count)
+        last_in_month = {}
+        for d in dates:
+            last_in_month[(d.year, d.month)] = d
+        monthly_dates = set(last_in_month.values())
+        for d in dates:
+            kind = "monthly" if d in monthly_dates else "weekly"
+            note = ""
+            if d.weekday() != usual:
+                # shifted off the usual weekday: the day it would have expired on, and whether that is a holiday
+                u = d + timedelta(days=(usual - d.weekday()) % 7)
+                note = f"moved from {u.strftime('%a %d %b')}" + (" (holiday)" if u.isoformat() in hol else "")
+            out.append({"name": name, "label": label, "exchange": exch, "date": d.isoformat(), "kind": kind, "days": (d - today).days, "note": note,
+                        "weekday": d.strftime("%A")})
+    out.sort(key=lambda r: (r["date"], r["label"]))
+    return out
+
+
+def expiry_dates(today: date, contracts=None, hol: set = frozenset()) -> dict:
+    rows = expiry_rows(contracts, today, hol)
+    by_series: dict[str, list[dict]] = {}
+    for r in rows:
+        by_series.setdefault(r["label"], []).append(r)
+    usual_day = {label: max(set(x["weekday"] for x in rs), key=[x["weekday"] for x in rs].count) for label, rs in by_series.items()}
+    parts = []
+    for label, rs in by_series.items():
+        wk = usual_day[label]
+        head = f'<div class="day">{_esc(label)}<small>{_esc(rs[0]["exchange"])} · usually {wk}s · {len(rs)} listed</small></div>'
+        trs = "".join(
+            f'<tr class="{"past" if r["days"] < 0 else ""}"><td class="t">{_fmt(_d(r["date"]))}</td><td class="t">{"in " + str(r["days"]) + "d" if r["days"] > 0 else ("today" if r["days"] == 0 else "")}</td>'
+            f'<td class="t"><span class="imp {"High" if r["kind"] == "monthly" else "Medium"}" style="margin-right:6px"></span>{r["kind"]}</td><td class="n">{_esc(r["note"])}</td></tr>' for r in rs)
+        parts.append(head + f'<div class="scrollx"><table class="cal"><thead><tr><th style="text-align:left;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">EXPIRY</th><th style="text-align:left;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">IN</th><th style="text-align:left;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">SERIES</th><th style="text-align:left;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">NOTE</th></tr></thead><tbody>{trs}</tbody></table></div>')
+    upcoming = [r for r in rows if r["days"] >= 0 and r["label"] != "Stock options (monthly)"]
+    nxt = upcoming[0] if upcoming else None
+    schedule = " · ".join(f"{label} on {day}s" for label, day in usual_day.items() if label != "Stock options (monthly)")
+    return {
+        "title": "F&O Expiry Dates — NIFTY, BANKNIFTY, FINNIFTY, SENSEX weekly and monthly expiry calendar | Finostat",
+        "desc": "Every upcoming NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX and BANKEX expiry, weekly and monthly, plus the stock-options monthly series, taken from the exchange contract masters with holiday shifts marked.",
+        "h1": "F&O expiry dates",
+        "lede": "Every option expiry currently listed on NSE and BSE, straight from the exchange contract masters that the Finostat terminal trades from, so a holiday-shifted expiry shows the real date. Weekly expiries settle at 15:30 IST on the expiry day; the monthly series is the last expiry of each month." + (f" Current schedule: {schedule}." if schedule else ""),
+        "next": f"Next index expiry: {nxt['label']} on {_fmt(_d(nxt['date']))}" + (" (today)" if nxt["days"] == 0 else f" · in {nxt['days']} day{'s' if nxt['days'] != 1 else ''}") if nxt else "",
+        "body": ("".join(parts) if parts else '<div class="empty">expiry list loads once the market data feed connects — try again in a minute</div>') + """
+<section class="faq"><h3>When do NIFTY and BANKNIFTY options expire?</h3><p>On the weekday the exchange has set for each index — the table above shows the current day for every series — at 15:30 IST. Only the dates the exchange has actually listed appear here, so the list grows as new weeklies are added.</p>
+<h3>What happens when the expiry day is a holiday?</h3><p>The contract expires on the previous trading day. That is why a row can show a Wednesday for a Thursday series: the exchange master already carries the shifted date, and the note column names the reason when it matches the <a href="/calendar/nse-holidays">NSE holiday list</a>.</p>
+<h3>Weekly or monthly — which matters?</h3><p>Monthly expiries carry the most open interest and see the largest rollover flows in the final two sessions; weeklies are where the gamma is. Stock options only have a monthly series. The <a href="/brief">daily expiry brief</a> covers the day's expiry every morning with the implied move and max pain.</p>
+<h3>Is expiry day different for stocks?</h3><p>Yes: all stock options and futures share one monthly expiry, shown as the last series in the table. There are no weekly stock options.</p></section>""",
+        "faq": [("When do NIFTY options expire?", f"On {usual_day.get('NIFTY 50', 'the exchange-set weekday')}s at 15:30 IST; the monthly series is the last expiry of the month." if usual_day else "At 15:30 IST on the exchange-set weekday."),
+                ("What happens if expiry falls on a holiday?", "The contract expires on the previous trading day; the exchange contract master carries the shifted date."),
+                ("When is the next NIFTY expiry?", next((f"{_fmt(_d(r['date']))}." for r in upcoming if r["label"] == "NIFTY 50"), ""))],
+        "source": "Source: NSE and BSE contract masters (via the Upstox instrument files), refreshed with the market data feed; NSE holiday master for the shift reasons.",
+    }
+
+
 PAGES = {
+    "expiry-dates": ("Expiry dates", expiry_dates),
     "nse-holidays": ("NSE holidays", nse_holidays),
     "rbi-policy-dates": ("RBI policy dates", rbi),
     "india-cpi-dates": ("India CPI dates", cpi),
@@ -220,7 +295,7 @@ def links_html(current: str | None = None) -> str:
     return f'<div class="cal-top" style="margin-top:18px"><span style="color:var(--faint);letter-spacing:.14em">SCHEDULES</span>{items}</div>'
 
 
-def render(slug: str, today: date | None = None, holidays=None) -> bytes | None:
+def render(slug: str, today: date | None = None, holidays=None, contracts=None) -> bytes | None:
     if slug not in PAGES:
         return None
     today = today or datetime.now(IST).date()
@@ -233,6 +308,8 @@ def render(slug: str, today: date | None = None, holidays=None) -> bytes | None:
     fn = PAGES[slug][1]
     if slug == "nse-holidays":
         p = fn(today, hol_rows)
+    elif slug == "expiry-dates":
+        p = fn(today, contracts, hol)
     elif slug in ("india-cpi-dates", "india-data-release-dates"):
         p = fn(today, hol)
     else:

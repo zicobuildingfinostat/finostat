@@ -84,6 +84,24 @@ cpi_pg = P.render("india-cpi-dates", date(2026, 9, 10), holidays=hs).decode()
 check("cpi page uses holidays: Tue 15 Sep 2026, reason 'holiday'", "Tue 15 Sep 2026" in cpi_pg and "rolled from the 12th (holiday)" in cpi_pg)
 check("holidays page renders empty-safe without a store", "not loaded yet" in P.render("nse-holidays", date(2026, 9, 10)).decode())
 
+print("\n=== expiry dates ===")
+import contracts as C
+def _ms(y, m, d): return int(datetime(y, m, d, 23, 59, 59, tzinfo=E.IST).timestamp() * 1000)
+rows_fo = []
+for i, (y, m, d) in enumerate([(2026, 9, 15), (2026, 9, 22), (2026, 9, 29), (2026, 10, 1), (2026, 10, 6), (2026, 10, 27)]):   # Tuesdays; 1 Oct = Thu shifted (2 Oct holiday)
+    rows_fo.append({"segment": "NSE_FO", "instrument_type": "CE", "underlying_symbol": "NIFTY", "expiry": _ms(y, m, d), "strike_price": 25000, "instrument_key": f"NSE_FO|N{i}", "lot_size": 65})
+rows_fo.append({"segment": "NSE_FO", "instrument_type": "PE", "underlying_symbol": "RELIANCE", "expiry": _ms(2026, 9, 29), "strike_price": 1400, "instrument_key": "NSE_FO|R1", "lot_size": 250})
+rows_fo.append({"segment": "BSE_FO", "instrument_type": "CE", "underlying_symbol": "SENSEX", "expiry": _ms(2026, 9, 17), "strike_price": 80000, "instrument_key": "BSE_FO|S1", "lot_size": 20})
+ci = C.ContractIndex(); ci.build({"NSE": rows_fo, "BSE": [r for r in rows_fo if r["segment"] == "BSE_FO"]})
+er = P.expiry_rows(ci, date(2026, 9, 10), {"2026-10-02"})
+nifty = [r for r in er if r["label"] == "NIFTY 50"]
+check("six NIFTY expiries, weekly/monthly classified (29 Sep + 27 Oct monthly)", len(nifty) == 6 and [r["kind"] for r in nifty] == ["weekly", "weekly", "monthly", "weekly", "weekly", "monthly"], [r["kind"] for r in nifty])
+check("off-day expiry notes the usual day it moved from", nifty[3]["note"] == "moved from Tue 06 Oct", nifty[3]["note"])
+check("SENSEX + stock monthly series present, sorted by date, days-to-go right", any(r["label"] == "SENSEX" for r in er) and any(r["label"].startswith("Stock options") for r in er) and er == sorted(er, key=lambda r: (r["date"], r["label"])) and nifty[0]["days"] == 5)
+xp = P.render("expiry-dates", date(2026, 9, 10), holidays=hs, contracts=ci).decode()
+check("expiry page: next expiry banner, per-series sections, schedule sentence, FAQ", "Next index expiry: NIFTY 50 on Tue 15 Sep 2026" in xp and "usually Tuesdays" in xp and "NIFTY 50 on Tuesdays" in xp and "FAQPage" in xp and "Stock options (monthly)" in xp)
+check("expiry page renders without a contract index", "loads once the market data feed connects" in P.render("expiry-dates", date(2026, 9, 10)).decode())
+
 print("\n=== schedule pages ===")
 import econ_pages as P
 t = date(2026, 9, 10)

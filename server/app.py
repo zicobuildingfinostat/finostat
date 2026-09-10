@@ -454,7 +454,7 @@ class Handler(BaseHTTPRequestHandler):
             if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
             if route.startswith("/calendar/") and route.count("/") == 2:
-                body = econ_pages.render(route[len("/calendar/"):], holidays=HOLIDAYS)
+                body = econ_pages.render(route[len("/calendar/"):], holidays=HOLIDAYS, contracts=CONTRACTS_OF(FEED))
                 if body is not None:
                     return self._send(body, "text/html; charset=utf-8", cache="public, max-age=3600")
             if route == "/calendar":
@@ -467,6 +467,9 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError:
                         anchor = None
                 return self._send(econ.render(ECON, anchor), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/api/expiries":
+                today = econ.datetime.now(econ.IST).date()
+                return self._json({"expiries": econ_pages.expiry_rows(CONTRACTS_OF(FEED), today, HOLIDAYS.dates())})
             if route == "/api/holidays":
                 return self._json({"holidays": HOLIDAYS.all(), "fetched": HOLIDAYS.fetched})
             if route == "/api/calendar":
