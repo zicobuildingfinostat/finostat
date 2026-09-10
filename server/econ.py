@@ -384,3 +384,78 @@ def render(econ: Econ, anchor: date | None = None) -> bytes:
 }})();
 </script></body></html>"""
     return doc.encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Embeds: the homepage strip and the "scheduled today" block on each daily brief
+# ---------------------------------------------------------------------------
+_HOME_CSS = """
+#events{padding:72px 0}#events .ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#events .ev-day{border:1px solid var(--line-strong);background:var(--panel);padding:14px 16px}
+#events .ev-day h4{font-family:var(--display);font-size:19px;text-transform:uppercase;letter-spacing:.02em;color:var(--gold-2);margin:0 0 8px}#events .ev-day h4 small{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;margin-left:8px;text-transform:none}
+#events .ev-day h4.today{color:var(--gold)}
+#events .ev{display:grid;grid-template-columns:52px 24px 12px 1fr auto;gap:8px;align-items:center;font-family:var(--mono);font-size:12px;padding:5px 0;border-top:1px solid rgba(190,150,255,.1)}
+#events .ev .t{color:var(--muted)}#events .ev .n{font-family:var(--body);font-size:14px;color:var(--text)}#events .ev .f{color:var(--muted);white-space:nowrap}
+#events .imp{display:inline-block;width:9px;height:9px;border-radius:2px}#events .imp.High{background:var(--down)}#events .imp.Medium{background:var(--gold)}#events .imp.Holiday{border:1px solid var(--faint)}
+#events .ev-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;font-family:var(--mono);font-size:11px}#events .ev-links a{border:1px solid var(--line-strong);padding:6px 12px;color:var(--muted);letter-spacing:.06em}#events .ev-links a:hover{border-color:var(--gold);color:var(--gold)}#events .ev-links a.main{border-color:var(--gold);color:var(--gold)}
+@media (max-width:760px){#events .ev-grid{grid-template-columns:1fr}#events .ev{grid-template-columns:48px 22px 10px 1fr}#events .ev .f{display:none}}
+"""
+
+_SCHEDULE_LINKS = [("/calendar", "Full calendar", True), ("/calendar/expiry-dates", "Expiry dates", False), ("/calendar/nse-holidays", "NSE holidays", False),
+                   ("/calendar/rbi-policy-dates", "RBI policy dates", False), ("/calendar/india-cpi-dates", "India CPI dates", False),
+                   ("/calendar/fomc-meeting-dates", "FOMC dates in IST", False), ("/calendar/india-data-release-dates", "India data schedule", False)]
+
+
+def _pick_for_embed(events: list[dict]) -> list[dict]:
+    """What a trader should notice: everything High, India/US Medium, and holidays."""
+    return [e for e in events if e["impact"] == "High" or e["impact"] == "Holiday" or (e["impact"] == "Medium" and e["country"] in ("INR", "USD"))]
+
+
+def home_section(econ: Econ, today: date | None = None, days: int = 6, cap: int = 4) -> str:
+    """Homepage section: the next few days of market-moving releases, grouped by day, linking to the calendar."""
+    today = today or datetime.now(IST).date()
+    try:
+        events = _pick_for_embed(econ.events(today, today + timedelta(days=days)))
+    except Exception:
+        events = []
+    now_ts = time.time()
+    by_day: dict[str, list] = {}
+    for e in events:
+        if e["ts"] >= now_ts - 3600:
+            by_day.setdefault(e["date"], []).append(e)
+    cards = []
+    for key in sorted(by_day)[:4]:
+        d = date.fromisoformat(key)
+        rows = by_day[key]
+        items = "".join(f'<div class="ev"><span class="t">{e["when"]}</span><span>{e["flag"]}</span><span class="imp {_esc(e["impact"])}"></span>'
+                        f'<span class="n">{_esc(e["title"])}</span><span class="f">{("fcst " + _esc(e["forecast"])) if e["forecast"] else ""}</span></div>' for e in rows[:cap])
+        more = f'<div class="ev"><span></span><span></span><span></span><a class="t" href="/calendar?d={key}">+{len(rows) - cap} more →</a></div>' if len(rows) > cap else ""
+        cards.append(f'<div class="ev-day"><h4 class="{"today" if d == today else ""}">{"Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else d.strftime("%A"))}<small>{d.strftime("%d %b")}</small></h4>{items}{more}</div>')
+    if not cards:
+        cards.append('<div class="ev-day"><h4>Quiet week</h4><div class="ev"><span class="t"></span><span></span><span></span><span class="n">No high-impact releases in the next few days.</span></div></div>')
+    links = "".join(f'<a href="{href}"{" class=main" if main else ""}>{label}</a>' for href, label, main in _SCHEDULE_LINKS)
+    return (f'<section id="events"><div class="wrap"><div class="sec-head rv"><div><span class="eyebrow">CALENDAR · free, in IST</span><h2>What moves the market this week</h2></div>'
+            f'<p>India CPI, RBI, US CPI and the Fed, expiries and holidays — every scheduled release, with the implied move on the terminal.</p></div>'
+            f'<div class="ev-grid rv">{"".join(cards)}</div><div class="ev-links rv">{links}</div></div></section>')
+
+
+def brief_block(econ: Econ, day: date) -> str:
+    """'Scheduled today' block for a daily brief page: the day's notable releases and closures, with a link to the calendar."""
+    try:
+        events = _pick_for_embed(econ.events(day, day))
+    except Exception:
+        events = []
+    if not events:
+        return ""
+    rows = "".join(f'<tr><td class="t">{e["when"]}</td><td class="t">{e["flag"]}</td><td class="t"><span class="imp {_esc(e["impact"])}" style="margin-right:6px"></span>{_esc(e["impact"]).lower()}</td>'
+                   f'<td class="n">{_esc(e["title"])}</td><td class="v">{("<b>" + _esc(e["actual"]) + "</b>") if e["actual"] else (_esc(e["forecast"]) if e["forecast"] else "")}</td></tr>' for e in events)
+    return (f'<h3>Scheduled today</h3><div class="scrollx"><table class="cal"><thead><tr><th style="text-align:left;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">IST</th><th></th><th></th>'
+            f'<th style="text-align:left;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">RELEASE</th><th style="text-align:right;color:var(--faint);font-weight:500;font-size:10px;padding:4px 8px">ACTUAL / FCST</th></tr></thead><tbody>{rows}</tbody></table></div>'
+            f'<p class="stamp"><a href="/calendar?d={day.isoformat()}">Full week on the economic calendar →</a></p>')
+
+
+_BRIEF_CSS = """
+table.cal{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin:0 0 6px}table.cal td{padding:6px 8px;border-bottom:1px solid rgba(190,150,255,.1);vertical-align:top}
+table.cal td.t{white-space:nowrap;color:var(--muted)}table.cal td.n{color:var(--text);font-family:var(--body);font-size:14px}table.cal td.v{text-align:right;white-space:nowrap;color:var(--muted)}table.cal td.v b{color:var(--cyan)}
+.imp{display:inline-block;width:10px;height:10px;border-radius:2px}.imp.High{background:var(--down)}.imp.Medium{background:var(--gold)}.imp.Low{background:var(--faint)}.imp.Holiday{background:transparent;border:1px solid var(--faint)}
+"""

@@ -453,7 +453,7 @@ def title_for(rec: dict) -> tuple[str, str]:
             f"India VIX {_n(d.get('vix'), 2)}, ATM IV {_n(n['atm_iv'], 1)}%, four strategies priced off the live chain.")
 
 
-def render_day(store: Briefs, date: str) -> bytes | None:
+def render_day(store: Briefs, date: str, extra: str = "", extra_css: str = "") -> bytes | None:
     rec = store.get(date)
     if rec is None or not (rec["open"] or rec["close"]):
         return None
@@ -464,6 +464,8 @@ def render_day(store: Briefs, date: str) -> bytes | None:
               "inLanguage": "en-IN", "isAccessibleForFree": True, "image": "https://finostat.com/og.jpg", "isPartOf": {"@id": "https://finostat.com/brief"}})
     body = [f'<nav class="crumb"><a href="/">FINO</a> · <a href="/brief">BRIEF</a> · {date}</nav><h1>Expiry brief · {_esc(_pretty(date))}</h1>',
             '<p class="lede">What the NIFTY option chain is pricing today, in numbers a trader can act on: the straddle as the expected move, volatility, skew, and four structures priced live. Written by the server at fixed times, every trading day.</p>']
+    if extra:
+        body.append(extra)
     if rec["open"]:
         body.append(_section(rec["open"], "At the open · 09:20 IST"))
         body.append(_others(rec["open"]))
@@ -479,7 +481,7 @@ def render_day(store: Briefs, date: str) -> bytes | None:
     pager = '<div class="pager">' + (f'<a href="/brief/{prev_}"><small>← Earlier</small>{_pretty(prev_)}</a>' if prev_ else '<span></span>') \
             + (f'<a href="/brief/{next_}" style="text-align:right"><small>Later →</small>{_pretty(next_)}</a>' if next_ else '<a href="/brief" style="text-align:right"><small>Archive →</small>All briefs</a>') + '</div>'
     body.append(pager + '<p style="margin-top:22px"><a class="cta" href="/finch/option-pricing">Why the straddle is the expected move — Finch, chapter 6 →</a></p>')
-    doc = (_HEAD.replace("__TITLE__", _esc(title)).replace("__DESC__", _esc(desc)).replace("__PATH__", f"/brief/{date}").replace("__LD__", ld).replace("__CSS__", _CSS))
+    doc = (_HEAD.replace("__TITLE__", _esc(title)).replace("__DESC__", _esc(desc)).replace("__PATH__", f"/brief/{date}").replace("__LD__", ld).replace("__CSS__", _CSS + extra_css))
     return (doc + "".join(body) + _FOOT).encode("utf-8")
 
 

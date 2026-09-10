@@ -102,6 +102,18 @@ xp = P.render("expiry-dates", date(2026, 9, 10), holidays=hs, contracts=ci).deco
 check("expiry page: next expiry banner, per-series sections, schedule sentence, FAQ", "Next index expiry: NIFTY 50 on Tue 15 Sep 2026" in xp and "usually Tuesdays" in xp and "NIFTY 50 on Tuesdays" in xp and "FAQPage" in xp and "Stock options (monthly)" in xp)
 check("expiry page renders without a contract index", "loads once the market data feed connects" in P.render("expiry-dates", date(2026, 9, 10)).decode())
 
+print("\n=== embeds ===")
+home = E.home_section(ec2, date(2026, 9, 10))
+check("home section: section id, day cards, holiday card on Mon 14, links to calendar pages", 'id="events"' in home and "ev-day" in home and "Ganesh" in home and '/calendar/expiry-dates' in home and 'href="/calendar" class=main' in home)
+check("home section: upcoming feed row shown (Fed decision 16 Sep)", "Federal Funds Rate" in home)
+blk = E.brief_block(ec2, date(2026, 9, 10))
+check("brief block: scheduled today with the CPI row (18:00 IST) and calendar link", "Scheduled today" in blk and "Core CPI m/m" in blk and "18:00" in blk and "/calendar?d=2026-09-10" in blk)
+check("brief block empty on a day with nothing notable", E.brief_block(ec2, date(2026, 9, 6)) == "")
+import brief as B
+bs = B.Briefs(tmp / "acct.db"); bs.put("2026-09-10", "open", {"at": "09:20", "live": True, "u": {}, "vix": None})
+page_b = B.render_day(bs, "2026-09-10", extra=blk, extra_css=E._BRIEF_CSS).decode()
+check("brief page carries the block and its css", "Scheduled today" in page_b and "table.cal{" in page_b)
+
 print("\n=== schedule pages ===")
 import econ_pages as P
 t = date(2026, 9, 10)

@@ -344,6 +344,8 @@ class Page:
         # Latest YouTube uploads: section markup, its CSS, and the click-to-play script.
         doc = doc.replace("<!--VIDEOS-->", videos.render_section(VIDEOS.latest(6), videos.load_reels()), 1)
         doc = doc.replace("/*VIDEOS_CSS*/", videos.CSS, 1)
+        doc = doc.replace("<!--EVENTS-->", _home_events(), 1)
+        doc = doc.replace("/*EVENTS_CSS*/", econ._HOME_CSS, 1)
         doc = doc.replace("</body>", "<script>" + videos.JS + "</script>\n</body>", 1)
         metas = ""
         if SITE_VERIFY["GOOGLE_SITE_VERIFICATION"]:
@@ -369,6 +371,22 @@ class Page:
                 f'<span>{esc(n["handle"])}</span></div></div></li>'
             )
         return "".join(out)
+
+
+_HOME_EVENTS: dict = {"at": 0.0, "html": ""}
+
+
+def _home_events() -> str:
+    """The homepage calendar strip, re-rendered at most every five minutes."""
+    now = time.time()
+    if now - _HOME_EVENTS["at"] > 300:
+        try:
+            _HOME_EVENTS["html"] = econ.home_section(ECON)
+        except Exception:
+            log.exception("home events strip failed")
+            _HOME_EVENTS["html"] = ""
+        _HOME_EVENTS["at"] = now
+    return _HOME_EVENTS["html"]
 
 
 PAGE = Page(config.STATIC_ROOT / "index.html")
@@ -485,7 +503,11 @@ class Handler(BaseHTTPRequestHandler):
             if route.startswith("/brief/"):
                 date = route[len("/brief/"):]
                 if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
-                    body = brief.render_day(BRIEFS, date)
+                    try:
+                        extra = econ.brief_block(ECON, econ.date.fromisoformat(date))
+                    except ValueError:
+                        extra = ""
+                    body = brief.render_day(BRIEFS, date, extra=extra, extra_css=econ._BRIEF_CSS)
                     if body is not None:
                         return self._send(body, "text/html; charset=utf-8", cache="public, max-age=300")
             if route == "/broker/upstox/connect":
