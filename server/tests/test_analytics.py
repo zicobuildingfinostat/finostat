@@ -70,7 +70,7 @@ n = CH.merge_rest_oi(sock, rest)
 check("two empty sides filled with OI/ΔOI/vol/bid/ask; existing socket OI untouched; missing IV taken, own IV kept",
       n == 2 and sock[0]["ce"]["oi"] == 500000 and sock[0]["ce"]["oi_chg"] == 12000 and sock[0]["ce"]["oi_since"] == "prev close" and sock[0]["ce"]["iv"] == 12.0
       and sock[0]["pe"]["iv"] == 13.1 and sock[0]["pe"]["vol"] == 2500 and sock[1]["pe"]["oi"] == 777 and sock[1]["ce"] is None, (n, sock))
-summ = CH.oi_summary(sock, 23990.0)
+summ = CH.oi_summary(sock, 24000.0)
 check("oi_summary works off the merged OI (PCR, walls)", summ and summ["pcr"] is not None and summ["call_wall"] == 24000 and summ["put_wall"] == 24000, summ)
 
 print("\n=== history engine ===")
