@@ -65,6 +65,19 @@ button{cursor:pointer;background:none;border:0}
   background:linear-gradient(180deg,#fff 20%,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
 .top .logo b{color:var(--gold);-webkit-text-fill-color:var(--gold)}
 .top .sym{color:var(--cyan);font-size:11.5px;letter-spacing:.08em}
+.tcmd{display:flex;align-items:center;gap:8px;flex:1;max-width:520px;min-width:160px;border:1px solid var(--line-strong);background:#06031a;padding:0 10px;height:30px;position:relative}
+.tcmd .go{color:var(--gold);font-weight:700;font-size:11px;letter-spacing:.1em}
+.tcmd input{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;font-size:12px;text-transform:uppercase;letter-spacing:.06em;min-width:0}
+.tcmd input::placeholder{color:var(--faint);text-transform:none;letter-spacing:0}
+.tcmd:focus-within{border-color:var(--gold)}
+.tcmd-msg{position:absolute;left:0;top:32px;font-size:10.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line-strong);padding:4px 8px;white-space:nowrap;z-index:6}
+.tcmd-msg.bad{color:var(--down)}.tcmd-msg.ok{color:var(--up)}
+.help{position:fixed;inset:0;z-index:960;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,3,20,.7)}.help[hidden]{display:none}
+.help .card{width:100%;max-width:720px;max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);border:1px solid var(--gold);box-shadow:0 30px 80px rgba(0,0,0,.6);font-family:var(--mono);font-size:11.5px}
+.help .hd{display:flex;gap:10px;padding:8px 12px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.help .hd .k{color:var(--gold);font-weight:600}.help .hd .x{margin-left:auto;background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px}
+.help .bd{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:6px 22px}.help h4{grid-column:1/-1;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin:8px 0 2px}
+.help div{display:flex;gap:10px;align-items:baseline;line-height:1.5}.help code{color:var(--gold);min-width:190px;white-space:nowrap}.help span{color:var(--muted)}
+@media(max-width:860px){.tcmd{max-width:none}.help .bd{grid-template-columns:1fr}.help code{min-width:0}}
 .top .r{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:11px;color:var(--faint);letter-spacing:.06em}
 .top .r a:hover{color:var(--gold)}
 .live{color:var(--up);display:inline-flex;align-items:center;gap:6px}
@@ -313,6 +326,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <header class="top">
   <a class="logo" href="/">FINO<b>·</b>TERMINAL</a>
   <span class="sym" id="t-sym">NIFTY · NEAREST EXPIRY</span>
+  <form class="tcmd" id="tcmd" autocomplete="off"><span class="go">GO</span><input id="tcmd-in" placeholder="RELIANCE · IC NIFTY 2 · NIFTY 24500 CE · ALERT NIFTY > 24800 · ? for help" aria-label="Command line"><div class="tcmd-msg" id="tcmd-msg" hidden></div></form>
   <div class="r">
     <span class="live off" id="conn">CONNECTING</span>
     <span id="clock">--:--:-- IST</span>
@@ -328,6 +342,30 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div class="tape" aria-label="Market ticker"><div class="tape-inner" id="tape"></div></div>
 
 <main class="desk">
+<div class="help" id="help" hidden role="dialog" aria-label="Command reference"><div class="card"><div class="hd"><span class="k">HELP</span><span>COMMAND LINE · press / to focus, ? for this card, Esc to close</span><button class="x" type="button" id="help-x" aria-label="Close">×</button></div>
+<div class="bd">
+<h4>Symbols</h4>
+<div><code>RELIANCE</code><span>chart it; if it has options, load it in the builder</span></div>
+<div><code>NIFTY · BN · SENSEX · FIN</code><span>index shortcuts (BANKNIFTY, FINNIFTY)</span></div>
+<div><code>BSE:RELIANCE</code><span>the BSE listing</span></div>
+<div><code>W TCS</code> <span>add to the watchlist (<code>UNW TCS</code> removes)</span></div>
+<h4>Options</h4>
+<div><code>NIFTY OPT</code><span>open the option chain with OI</span></div>
+<div><code>NIFTY 24500 CE</code><span>add a long leg · <code>NIFTY 24500 PE SELL 2</code> for a short of 2</span></div>
+<div><code>IC NIFTY 2</code><span>iron condor, 2 lots on the ticket · also SS (short straddle), LS, SG (short strangle), LSG, IF (iron fly), BCS, BPS, FLY, RATIO</span></div>
+<div><code>PAPER</code> / <code>TRADE</code><span>journal the built strategy / send it to the broker</span></div>
+<h4>Alerts</h4>
+<div><code>ALERT NIFTY > 24800</code><span>spot alert on any index or stock</span></div>
+<div><code>ALERT STRADDLE < 150</code><span>ATM straddle alert</span></div>
+<h4>Panels</h4>
+<div><code>BOOK · CAS · CHART · CHAIN · SHEET · ALERTS · WATCH · BUILDER · BROKER · N50 · WIRE · MINI</code><span>jump to a panel (unhides it)</span></div>
+<div><code>HIDE WIRE</code> / <code>SHOW WIRE</code><span>layout without the menu</span></div>
+<div><code>BRIEF · FINCH · ACCOUNT · HOME</code><span>open a page</span></div>
+<h4>Keys</h4>
+<div><code>/</code><span>focus the command line</span></div>
+<div><code>Esc</code><span>close this card, the ticket, or blur</span></div>
+<div><code>F1–F8</code><span>panel shortcuts (bottom bar)</span></div>
+</div></div></div>
 <div class="tk" id="tk" hidden role="dialog" aria-label="Order ticket"><div class="card"><div class="hd"><span class="k">TICKET</span><span id="tk-title">ORDER</span><button class="x" type="button" id="tk-x" aria-label="Close">×</button></div>
   <div class="bd"><table><thead><tr><th>LEG</th><th>SIDE</th><th>QTY/LOT</th><th>LTP</th><th>LIMIT</th></tr></thead><tbody id="tk-legs"></tbody></table>
   <div class="opts"><div><label>Lots</label><input id="tk-lots" type="number" min="1" max="50" value="1"></div><div><label>Product</label><select id="tk-product"><option value="D">NRML (carry)</option><option value="I">Intraday</option></select></div><div><label>Order type</label><select id="tk-type"><option>LIMIT</option></select></div></div>
@@ -745,6 +783,56 @@ function searchWidget(input, list, onPick){
 
 /* ---------- account, prefs, watchlist, layout ---------- */
 var PANELS=[['sheet','BFLY sheet'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+/* ---------- command line ---------- */
+var tcmdIn=document.getElementById('tcmd-in'), tcmdMsg=document.getElementById('tcmd-msg'), helpEl=document.getElementById('help');
+var PRESET_ALIAS={IC:'iron-condor',CONDOR:'iron-condor',IF:'iron-fly',IRONFLY:'iron-fly',SS:'short-straddle',STRADDLE:'short-straddle',LS:'long-straddle',SG:'short-strangle',STRANGLE:'short-strangle',LSG:'long-strangle',BCS:'bull-call-spread',BPS:'bear-put-spread',FLY:'butterfly',BFLY:'butterfly',BUTTERFLY:'butterfly',RATIO:'ratio-spread'};
+var PANEL_ALIAS={BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini'};
+var INDEX_ALIAS={NIFTY:'NIFTY 50','NIFTY50':'NIFTY 50','NIFTY 50':'NIFTY 50',BN:'BANKNIFTY',BANKNIFTY:'BANKNIFTY',NIFTYBANK:'BANKNIFTY',SENSEX:'SENSEX',SX:'SENSEX',FIN:'FINNIFTY',FINNIFTY:'FINNIFTY',VIX:'INDIA VIX',INDIAVIX:'INDIA VIX'};
+function say(msg,kind){ tcmdMsg.textContent=msg; tcmdMsg.className='tcmd-msg '+(kind||''); tcmdMsg.hidden=false; clearTimeout(say.t); say.t=setTimeout(function(){ tcmdMsg.hidden=true; },3500); }
+function goPanel(id){ var el=document.getElementById('p-'+id); if(!el) return false; if(el.hidden){ var hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[]; var i=hide.indexOf(id); if(i>=0) hide.splice(i,1); applyLayout(); savePrefs(); } el.scrollIntoView({behavior:'smooth',block:'start'}); return true; }
+function resolveSym(tok){ tok=tok.toUpperCase(); if(INDEX_ALIAS[tok]) return Promise.resolve({key:INDEX_ALIAS[tok],index:true});
+  var k=tok.indexOf(':')>0?tok:'NSE:'+tok; var known=bl.unders.filter(function(x){ return x.key===k||x.label===tok||x.label===k; })[0]; if(known) return Promise.resolve({key:known.key,fo:true});
+  return fetch('/api/symbols?q='+encodeURIComponent(tok)+'&limit=3',{credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(d){ var hits=(d.symbols||d.results||d||[]); var hit=hits.filter(function(x){ return (x.key||'').toUpperCase()===k||(x.symbol||'').toUpperCase()===tok; })[0]||hits[0]; return hit?{key:hit.key,fo:!!hit.fo}:null; }).catch(function(){ return null; }); }
+function withChain(key, fn){ bl.after=fn; selectUnderlying(key); }
+function cmdAlert(symTok, cmp, value){
+  var m=null, key=null;
+  if(symTok==='STRADDLE') m='straddle';
+  return (m?Promise.resolve({key:'straddle'}):resolveSym(symTok)).then(function(s){ if(!s) return say('unknown symbol '+symTok,'bad'); key=s.key; var metricId=m||('spot:'+key);
+    if(serverAlerts){ return srvPost('/api/alerts',{metric:metricId,strike:null,cmp:cmp,value:value,email:true}).then(function(r){ if(r&&r.error) return say('not armed: '+r.error,'bad'); say('alert armed: '+key+' '+cmp+' '+value+' (email)','ok'); loadServerAlerts(); }); }
+    alerts.push({metric:metricId,strike:null,cmp:cmp,value:value,state:'armed',created:Date.now()}); saveAlerts(); renderAlerts(); pollStocks(); say('alert armed in this browser: '+key+' '+cmp+' '+value+' — sign in for email alerts','ok'); goPanel('alerts'); });
+}
+function runCommand(raw){
+  var t=raw.trim().replace(/\s+/g,' '); if(!t) return; var U=t.toUpperCase(), a=U.split(' ');
+  if(U==='?'||U==='HELP'){ helpEl.hidden=false; return; }
+  if(U==='BRIEF'){ window.open('/brief','_blank'); return say('opening the brief'); }
+  if(U==='FINCH'){ window.open('/finch','_blank'); return say('opening Finch'); }
+  if(U==='ACCOUNT'||U==='PLAN'||U==='PLANS'){ location.href='/account'; return; }
+  if(U==='HOME'||U==='SITE'){ location.href='/'; return; }
+  if(U==='PAPER'){ document.getElementById('bl-paper').click(); return; }
+  if(U==='TRADE'||U==='TICKET'){ openTicket(); return; }
+  if(U==='CHAIN'||U==='OPT'){ if(!bl.u) return say('load an underlying first, e.g. NIFTY OPT','bad'); if(!bl.chainOpen) document.getElementById('bl-chain-btn').click(); goPanel('builder'); return say('chain · '+bl.u,'ok'); }
+  if((a[0]==='HIDE'||a[0]==='SHOW')&&a[1]&&PANEL_ALIAS[a[1]]){ var id=PANEL_ALIAS[a[1]], hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[]; var i=hide.indexOf(id); if(a[0]==='HIDE'&&i<0) hide.push(id); if(a[0]==='SHOW'&&i>=0) hide.splice(i,1); applyLayout(); savePrefs(); return say((a[0]==='HIDE'?'hidden ':'shown ')+id,'ok'); }
+  if(a.length===1&&PANEL_ALIAS[U]){ goPanel(PANEL_ALIAS[U]); return say('→ '+PANEL_ALIAS[U],'ok'); }
+  if((a[0]==='W'||a[0]==='WATCH'||a[0]==='UNW'||a[0]==='UNWATCH')&&a[1]){ var rm=a[0].indexOf('UN')===0; return resolveSym(a[1]).then(function(s){ if(!s) return say('unknown symbol '+a[1],'bad'); prefs.watchlist=prefs.watchlist||[]; var j=prefs.watchlist.indexOf(s.key); if(rm){ if(j>=0) prefs.watchlist.splice(j,1); } else if(j<0) prefs.watchlist.push(s.key); renderWatch(); savePrefs(); pollStocks(); goPanel('watch'); say((rm?'removed ':'watching ')+s.key,'ok'); }); }
+  if(a[0]==='ALERT'&&a.length>=4){ var cmp=a[2][0]==='>'?'>=':(a[2][0]==='<'?'<=':''); var v=parseFloat(a[3]); if(!cmp||isNaN(v)) return say('ALERT <SYMBOL> > 24800','bad'); return cmdAlert(a[1],cmp,v); }
+  if(PRESET_ALIAS[a[0]]&&a[1]){ var preset=PRESET_ALIAS[a[0]], lots=parseInt(a[2],10)||1; return resolveSym(a[1]).then(function(s){ if(!s||!(s.index||s.fo)) return say(a[1]+' has no options','bad'); withChain(s.key,function(){ bl.preset=preset; bl.legs=[]; priceStrategy(); document.getElementById('tk-lots').value=lots; }); goPanel('builder'); say(preset.replace(/-/g,' ')+' · '+s.key+' · '+lots+' lot'+(lots>1?'s':''),'ok'); }); }
+  var legm=U.match(/^(\S+(?: 50)?) (\d{3,6}) (CE|PE)(?: (BUY|SELL|B|S))?(?: (\d{1,2}))?$/);
+  if(legm){ var strike=Number(legm[2]), right=legm[3], side=(legm[4]||'BUY')[0]==='S'?-1:1, q=(parseInt(legm[5],10)||1)*side; return resolveSym(legm[1]).then(function(s){ if(!s||!(s.index||s.fo)) return say(legm[1]+' has no options','bad');
+      var add=function(d){ if(d.strikes.indexOf(strike)<0) return say(strike+' is outside the loaded chain (ATM ±10)','bad'); bl.legs=bl.legs.concat([{right:right,strike:strike,qty:q}]); bl.preset=null; priceStrategy(); say((q>0?'buy ':'sell ')+Math.abs(q)+'× '+strike+' '+right+' · '+s.key,'ok'); };
+      if(bl.u===s.key&&bl.strikes.length) add({strikes:bl.strikes}); else withChain(s.key,add); goPanel('builder'); }); }
+  if(a.length===2&&(a[1]==='OPT'||a[1]==='CHAIN'||a[1]==='OPTIONS')){ return resolveSym(a[0]).then(function(s){ if(!s||!(s.index||s.fo)) return say(a[0]+' has no options','bad'); withChain(s.key,function(){ if(!bl.chainOpen) document.getElementById('bl-chain-btn').click(); }); goPanel('builder'); say('chain · '+s.key,'ok'); }); }
+  if(a.length===1){ return resolveSym(a[0]).then(function(s){ if(!s) return say('unknown: '+t+' — ? for help','bad'); chartTo(s.key); if(s.index||s.fo) selectUnderlying(s.key); goPanel('chart'); say('charted '+s.key+(s.index||s.fo?' · builder loaded':''),'ok'); }); }
+  say('unknown: '+t+' — ? for help','bad');
+}
+document.getElementById('tcmd').addEventListener('submit',function(e){ e.preventDefault(); var v=tcmdIn.value; tcmdIn.value=''; runCommand(v); });
+document.getElementById('help-x').addEventListener('click',function(){ helpEl.hidden=true; });
+document.addEventListener('keydown',function(e){
+  var inField=/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||'');
+  if(e.key==='Escape'){ if(!helpEl.hidden){ helpEl.hidden=true; return; } var tkEl=document.getElementById('tk'); if(tkEl&&!tkEl.hidden){ tkEl.hidden=true; return; } if(inField) e.target.blur(); return; }
+  if(inField) return;
+  if(e.key==='/'){ e.preventDefault(); tcmdIn.focus(); }
+  else if(e.key==='?'){ e.preventDefault(); helpEl.hidden=false; }
+});
 /* ---------- BOOK: positions, net greeks, what-if ---------- */
 var bkTot=document.getElementById('bk-tot'), bkBody=document.getElementById('bk-body'), bkState=document.getElementById('bk-state'), bkPanel=document.getElementById('p-book');
 function rupee(v,d){ if(v==null) return '—'; return (v<0?'−':'')+'₹'+fmt(Math.abs(v),d==null?0:d); }
@@ -1076,6 +1164,7 @@ function priceStrategy(first){
     renderBuilder(d); blBody.hidden=false; blLock.hidden=true; blEmpty.hidden=true;
     blStatus.textContent=(d.live?'LIVE':'DELAYED')+' · spot '+fmt(d.spot)+(d.warming?' · warming':'');
     loadChain();
+    if(bl.after){ var f=bl.after; bl.after=null; try{ f(d); }catch(err){} }
     if(!bl.timer) bl.timer=setInterval(priceStrategy,3000);
   }).catch(function(){ blStatus.textContent='offline'; });
 }
