@@ -92,6 +92,12 @@ button{cursor:pointer;background:none;border:0}
 .a-sheet{grid-row:span 2;min-height:340px}
 .a-side{grid-row:span 2;display:flex;flex-direction:column;gap:10px;min-height:0}
 .a-wire{min-height:260px}
+.a-chart{grid-column:span 2;min-height:480px}
+.a-chart .ch-body{flex:1;min-height:420px;background:#06031a}
+.a-chart .ch-body>div{height:100%}
+.ch-note{color:var(--faint);font-weight:400;letter-spacing:.04em}
+.ch-sym{cursor:pointer}
+@media (max-width:980px){.a-chart{grid-column:auto;min-height:380px}.a-chart .ch-body{min-height:340px}}
 /* layout menu */
 .layout{position:relative}
 .layout summary{list-style:none;cursor:pointer;letter-spacing:.06em}
@@ -107,7 +113,7 @@ button{cursor:pointer;background:none;border:0}
 #who .me{color:var(--cyan);margin-right:8px}
 /* watchlist */
 .watch{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1px;background:var(--line);flex:1;align-content:start}
-.watch .w{background:var(--panel);padding:10px 12px;position:relative}
+.watch .w{background:var(--panel);padding:10px 12px;position:relative;cursor:pointer}
 .watch .w .sym{font-size:10.5px;letter-spacing:.1em;color:var(--cyan)}
 .watch .w .px{font-family:var(--display);font-size:26px;line-height:1;margin:4px 0 2px;letter-spacing:.02em}
 .watch .w .ch{font-size:11px}
@@ -319,6 +325,11 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
   </div>
 
+  <section class="panel a-chart" id="p-chart" aria-label="Chart">
+    <div class="panel-hd"><span class="k">CHRT</span><span class="s" id="ch-sym">NSE:NIFTY</span><span class="ch-note" id="ch-note">click any symbol on the desk to chart it · TradingView</span>
+      <span class="r"><a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:var(--faint)">tradingview.com</a></span></div>
+    <div class="ch-body"><div id="tv-chart"></div></div>
+  </section>
   <section class="panel" id="p-watch" aria-label="Watchlist">
     <div class="panel-hd"><span class="k">WATCH</span><span class="s">MY WATCHLIST</span>
       <span class="r"><span id="watch-sync">local</span></span></div>
@@ -663,7 +674,34 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+var PANELS=[['sheet','BFLY sheet'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet']];
+/* ---------- TradingView chart: follows whatever symbol you click ---------- */
+var chart={sym:null,ready:false,loading:false,pending:'NIFTY 50'};
+var chSym=document.getElementById('ch-sym'), chNote=document.getElementById('ch-note'), chPanel=document.getElementById('p-chart');
+function tvSymbol(key){
+  var k=String(key||'').trim().toUpperCase();
+  var idx={'NIFTY 50':'NSE:NIFTY','NIFTY':'NSE:NIFTY','BANKNIFTY':'NSE:BANKNIFTY','NIFTY BANK':'NSE:BANKNIFTY','FINNIFTY':'NSE:CNXFINANCE','NIFTY FIN SERVICE':'NSE:CNXFINANCE','SENSEX':'BSE:SENSEX','INDIA VIX':'NSE:INDIAVIX','MIDCPNIFTY':'NSE:NIFTY_MID_SELECT'};
+  if(idx[k]) return idx[k];
+  var ex='NSE', s=k; if(k.indexOf('BSE:')===0){ ex='BSE'; s=k.slice(4); } else if(k.indexOf('NSE:')===0){ s=k.slice(4); }
+  return ex+':'+s.replace(/[&\-\s]+/g,'_').replace(/[^A-Z0-9_]/g,'');
+}
+function drawChart(){
+  if(!chart.pending||!chart.ready||!window.TradingView) return;
+  var tv=tvSymbol(chart.pending); chart.sym=chart.pending; chart.pending=null;
+  var host=document.getElementById('tv-chart'); host.innerHTML='';
+  chSym.textContent=tv; chNote.textContent=chart.sym+' · click any symbol on the desk to chart it';
+  new TradingView.widget({container_id:'tv-chart',autosize:true,symbol:tv,interval:'5',timezone:'Asia/Kolkata',theme:'dark',style:'1',locale:'en',
+    toolbar_bg:'#120a33',enable_publishing:false,hide_side_toolbar:false,allow_symbol_change:true,withdateranges:true,save_image:false,
+    backgroundColor:'#0c0626',gridColor:'rgba(74,52,160,0.22)',hide_top_toolbar:false,studies:[],details:false});
+}
+function loadTV(){
+  if(chart.ready||chart.loading||window.FINO_LOCKED||chPanel.hidden) return;
+  chart.loading=true; var s=document.createElement('script'); s.src='https://s3.tradingview.com/tv.js'; s.async=true;
+  s.onload=function(){ chart.ready=true; chart.loading=false; drawChart(); }; s.onerror=function(){ chart.loading=false; chNote.textContent='chart unavailable (tradingview.com blocked?)'; };
+  document.head.appendChild(s);
+}
+function chartTo(key){ if(!key) return; if(chart.sym===key&&!chart.pending) return; chart.pending=key; if(chPanel.hidden) return; chart.ready?drawChart():loadTV(); }
+window.finoChartTo=chartTo;            /* the builder lives in its own scope below */
 var prefs={watchlist:['NIFTY 50','BANKNIFTY','INDIA VIX'],layout:{hide:[]}};
 try{ var lp=JSON.parse(localStorage.getItem('fino_prefs_v1')||'null'); if(lp&&lp.watchlist) prefs=lp; }catch(e){}
 var signedIn=false, saveTimer=null;
@@ -710,6 +748,7 @@ function applyLayout(){
   });
   var side=document.querySelector('.a-side');
   if(side) side.hidden=(hide.indexOf('straddle')>=0&&hide.indexOf('alerts')>=0);
+  if(!chPanel.hidden){ if(chart.sym&&chart.ready){ /* keep */ } else { chart.pending=chart.pending||chart.sym||'NIFTY 50'; chart.sym=null; chart.ready?drawChart():loadTV(); } }
 }
 menu.addEventListener('change',function(e){
   var cb=e.target; if(!cb.matches('input[data-p]')) return;
@@ -829,6 +868,7 @@ function showLock(err){
     btn.onclick=function(){ location.href='/account?plan='+need; }; }
 }
 function selectUnderlying(key){
+  if(window.finoChartTo) window.finoChartTo(key);
   bl.u=key; bl.expiry=null; bl.legs=[]; bl.preset='short-straddle'; blLock.hidden=true; blLock.removeAttribute('data-need'); blEmpty.hidden=true; blBody.hidden=true; blChainRows.innerHTML=''; blOi.hidden=true;
   blStatus.textContent='loading chain…'; blTitle.textContent='STRATEGY BUILDER · '+key;
   priceStrategy(true);
@@ -916,10 +956,12 @@ function pollN50(){
 n50Rows.addEventListener('click',function(e){
   var tr=e.target.closest('tr[data-key]'); if(!tr) return;
   var k=tr.getAttribute('data-key'); prefs.watchlist=(prefs.watchlist||[]);
+  chartTo(k);
   if(prefs.watchlist.indexOf(k)<0){ prefs.watchlist.push(k); renderWatch(); savePrefs(); pollStocks(); pollN50(); }
 });
 setInterval(pollN50, 2500); setTimeout(pollN50, 600);
 watchEl.addEventListener('click',function(e){
+  var cell=e.target.closest('.w'); if(cell&&!e.target.closest('button')){ var sb=cell.querySelector('button[data-sym]'); if(sb) chartTo(sb.getAttribute('data-sym')); return; }
   var b=e.target.closest('button[data-sym]'); if(!b) return;
   prefs.watchlist=(prefs.watchlist||[]).filter(function(s){ return s!==b.getAttribute('data-sym'); });
   renderWatch(); savePrefs();
