@@ -16,10 +16,10 @@ def check(label, ok, extra=""):
     if not ok: fails += 1
 
 print("=== amounts ===")
-check("desk monthly = ₹1,499 -> 149900 paise, no GST", P.amount_paise("desk", "monthly") == (149900, 149900, 0))
-check("pro yearly = ₹34,990", P.amount_paise("pro", "yearly") == (3499000, 3499000, 0))
+check("desk monthly = ₹2,199 -> 219900 paise, no GST", P.amount_paise("desk", "monthly") == (219900, 219900, 0))
+check("pro yearly = ₹55,990", P.amount_paise("pro", "yearly") == (5599000, 5599000, 0))
 os.environ["FINOSTAT_GST_PERCENT"] = "18"
-check("GST 18% itemised", P.amount_paise("desk", "monthly") == (176882, 149900, 26982), P.amount_paise("desk", "monthly"))
+check("GST 18% itemised", P.amount_paise("desk", "monthly") == (259482, 219900, 39582), P.amount_paise("desk", "monthly"))
 os.environ["FINOSTAT_GST_PERCENT"] = "0"
 cat = P.catalogue()
 check("catalogue: both plans, both periods, configured in test mode", set(cat["plans"]) == {"desk", "pro"} and cat["plans"]["desk"]["yearly"]["days"] == 365 and cat["configured"] and cat["test_mode"])
@@ -45,7 +45,7 @@ calls = []
 def fake_create(amount, receipt, notes, currency="INR"):
     calls.append((amount, receipt, notes)); return {"id": f"order_{len(calls)}", "amount": amount, "currency": currency}
 o = pay.create(user, "desk", "monthly", create_fn=fake_create)
-check("order created with the right amount and notes", o["order_id"] == "order_1" and o["amount"] == 149900 and calls[0][2]["plan"] == "desk" and calls[0][2]["user_id"] == str(uid), (o, calls))
+check("order created with the right amount and notes", o["order_id"] == "order_1" and o["amount"] == 219900 and calls[0][2]["plan"] == "desk" and calls[0][2]["user_id"] == str(uid), (o, calls))
 check("order stored as created", pay.get("order_1")["status"] == "created")
 try:
     pay.create(user, "gold", "monthly", create_fn=fake_create); check("bad plan rejected", False)
@@ -66,7 +66,7 @@ check("upgrading to pro starts pro now for 30 days", st3["plan"] == "pro" and ab
 hist = pay.history(uid)
 check("history lists 3 paid orders newest first", [h["order_id"] for h in hist] == ["order_3", "order_2", "order_1"] and all(h["status"] == "paid" for h in hist))
 lines = P.receipt_lines(g, "buyer@x.com")
-check("receipt lines carry plan, amount, ids", any("Desk" in l for l in lines) and any("1,499.00" in l for l in lines) and any("pay_1" in l for l in lines), lines)
+check("receipt lines carry plan, amount, ids", any("Desk" in l for l in lines) and any("2,199.00" in l for l in lines) and any("pay_1" in l for l in lines), lines)
 
 print("\n=== expiry ===")
 au.set_plan("buyer@x.com", "desk", days=1)

@@ -77,7 +77,7 @@ function render(){
     var btn=A.catalogue.configured?'<button type="button" class="pay" data-plan="'+plan+'">'+(cur?'Extend '+LABEL[plan]:'Pay '+rs(p.total_paise)+' · '+LABEL[plan])+' →</button>'
             :'<button type="button" class="pay ghost" data-request="'+plan+'">Request '+LABEL[plan]+' (activated by hand)</button>';
     return '<div class="plan'+(plan==='desk'?' best':'')+'"><h3>'+LABEL[plan]+(cur?' <span class="testbadge">CURRENT</span>':'')+'</h3><div class="price">'+rs(p.base_paise)+'<i> / '+(period==='monthly'?'30 days':'365 days')+'</i></div>'
-      +'<div class="gst">'+(p.gst_paise?'+ GST '+A.catalogue.gst_percent+'% = '+rs(p.total_paise):'GST not applicable · you pay '+rs(p.total_paise))+'</div><ul>'+FEATURES[plan].map(function(f){ return '<li>'+f+'</li>'; }).join('')+'</ul>'+btn+'</div>';
+      +'<div class="gst">'+(p.gst_paise?'+ GST '+A.catalogue.gst_percent+'% = '+rs(p.total_paise):'Exclusive of GST · none charged today · you pay '+rs(p.total_paise))+'</div><ul>'+FEATURES[plan].map(function(f){ return '<li>'+f+'</li>'; }).join('')+'</ul>'+btn+'</div>';
   }).join('');
 }
 document.getElementById('period').addEventListener('click',function(e){ var b=e.target.closest('button[data-period]'); if(!b) return; period=b.getAttribute('data-period'); Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); render(); });
@@ -128,7 +128,7 @@ def render(user: dict, status: dict, history: list[dict]) -> bytes:
         for r in history)
     hist = (f'<h2 style="font-family:var(--display);font-size:22px;text-transform:uppercase;margin:18px 0 6px">Payments</h2><div class="scrollx"><table class="hist"><thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th><th>Payment id</th></tr></thead><tbody>{rows}</tbody></table></div>'
             if history else "")
-    note = ("Prices in INR" + (f", GST {cat['gst_percent']:g}% added at checkout" if cat["gst_percent"] else ", no GST applicable") +
+    note = ("Prices in INR, exclusive of GST" + (f" — {cat['gst_percent']:g}% GST added at checkout" if cat["gst_percent"] else " (none charged today)") +
             ". Secure checkout by Razorpay. " + ("<b style='color:var(--gold)'>TEST MODE — no real money moves.</b> " if cat["test_mode"] else "") +
             "By paying you accept the <a href='/terms'>terms</a>." if cat["configured"] else
             "Online payment is not switched on yet. Requesting a plan sends us an email and we activate it by hand, usually the same day.")

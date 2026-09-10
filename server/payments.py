@@ -30,7 +30,7 @@ import urllib.request
 log = logging.getLogger("finostat.payments")
 
 API = "https://api.razorpay.com/v1"
-PRICES = {"desk": {"monthly": 1499, "yearly": 14990}, "pro": {"monthly": 3499, "yearly": 34990}}   # rupees
+PRICES = {"desk": {"monthly": 2199, "yearly": 21990}, "pro": {"monthly": 5599, "yearly": 55990}}   # rupees, exclusive of GST
 DAYS = {"monthly": 30, "yearly": 365}
 LABEL = {"desk": "Desk", "pro": "Pro desk"}
 

@@ -224,19 +224,19 @@ def score(answers: dict) -> dict:
 # the copy mirrors the homepage plan cards so nobody is promised something else.
 PITCH = {
     "starter": {
-        "plan": "desk", "name": "Desk", "price": "₹1,499 / month · ₹14,990 a year",
+        "plan": "desk", "name": "Desk", "price": "₹2,199 / month · ₹21,990 a year",
         "head": "When you start trading real money, trade it with the desk's tools",
         "why": "Starter is free and is all you need while you learn. The moment you put capital at risk, the difference between guessing and knowing is the live feed: real-time sheets, the builder priced on every F&O stock, and alerts that email you when your level trades — so you are not glued to a screen or, worse, finding out after the move.",
         "points": ["All sheets live, under 250 ms — Starter is 15-minute delayed", "Strategy builder on every F&O stock, not just the index", "Alert engine: up to 25 rules, evaluated on the server and emailed", "IV percentile, bell curves and the volatility surface, live"],
     },
     "desk": {
-        "plan": "desk", "name": "Desk", "price": "₹1,499 / month · ₹14,990 a year",
+        "plan": "desk", "name": "Desk", "price": "₹2,199 / month · ₹21,990 a year",
         "head": "You already trade. Stop trading on delayed numbers.",
         "why": "You know what a straddle is telling you — Desk makes sure you see it before the market moves on. Your knowledge score says the concepts are in place; what usually separates a practitioner from a consistent one is tooling: exact breakevens and max loss before entry, stock-option chains on demand, alerts that watch the level so you don't have to. One avoided oversized trade pays for a year of it.",
         "points": ["Real-time sheets and straddle on NIFTY, BANKNIFTY, SENSEX, FINNIFTY", "Builder on 200+ F&O stocks with live greeks and exact breakevens", "25 server-side alert rules, emailed the second they trigger", "Gamma exposure, skew heatmap, IV percentile — the context behind the price"],
     },
     "pro": {
-        "plan": "pro", "name": "Pro desk", "price": "₹3,499 / month · ₹34,990 a year",
+        "plan": "pro", "name": "Pro desk", "price": "₹5,599 / month · ₹55,990 a year",
         "head": "Your edge now is history and unlimited alerts",
         "why": "At your level the questions are quantitative: how did this structure behave across the last four years of expiries, where did the pin actually land, what did the straddle do into events. Pro adds the recorded tick history and backtesting, unlimited alert rules, the MCX arbitrage scanner and data export, plus a live session with the desk each quarter.",
         "points": ["Tick-by-tick replay and four years of expiry history", "Backtest any structure across past expiries", "Unlimited alert rules; data export and API access", "One live session with the desk every quarter"],
