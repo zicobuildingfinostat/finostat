@@ -41,7 +41,7 @@ _PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>__CSS__</style></head><body>
-<header class="top"><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/dashboard">TERMINAL</a><a href="/brief">BRIEF</a><a href="/finch">FINCH</a><a href="/auth/logout" id="logout">SIGN OUT</a></div><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/dashboard">TERMINAL</a><a href="/brief">BRIEF</a><a href="/finch">FINCH</a><a href="/auth/logout" id="logout">SIGN OUT</a></div></header>
 <main class="wrap"><nav class="crumb"><a href="/">FINO</a> · ACCOUNT</nav>
 <h1>Your account</h1><p class="lede">__EMAIL__</p>
 <div class="acct"><div>

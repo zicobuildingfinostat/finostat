@@ -34,9 +34,9 @@ a{color:var(--cyan);text-decoration:none}a:hover{color:var(--gold)}
 .top .logo b{color:var(--gold);-webkit-text-fill-color:var(--gold)}
 .top .r{margin-left:auto;display:flex;gap:14px;color:var(--faint);letter-spacing:.06em;flex-wrap:wrap}
 .top .r a{color:var(--faint)}.top .r a:hover{color:var(--gold)}
-.top .home-ic{flex:0 0 auto;width:34px;height:34px;border-radius:9px;overflow:hidden;margin-left:10px;box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22);animation:fino-glow 3.4s ease-in-out infinite}
+.top .home-ic{flex:0 0 auto;width:30px;height:30px;border-radius:9px;overflow:hidden;margin-right:2px;box-shadow:0 0 0 1px rgba(245,200,66,.3)}
 .top .home-ic img{width:100%;height:100%;display:block}
-.top .home-ic:hover{box-shadow:0 0 0 1px var(--gold),0 0 30px rgba(245,200,66,.7);animation:none}
+.top .home-ic:hover{box-shadow:0 0 0 1px var(--gold),0 0 16px rgba(245,200,66,.45)}
 @keyframes fino-glow{0%,100%{box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22)}50%{box-shadow:0 0 0 1px rgba(245,200,66,.7),0 0 26px rgba(245,200,66,.5)}}
 @media (prefers-reduced-motion:reduce){.top .home-ic{animation:none}}
 
@@ -182,7 +182,7 @@ _HEAD = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 __LD__<style>__CSS__</style></head><body>
-<header class="top"><a class="logo" href="/finch">FINCH<b>·</b>BY FINOSTAT</a><div class="r"><span class="live-dot off" id="live-dot">MARKET DATA</span><a href="/dashboard">TERMINAL</a><a href="/">SITE</a></div><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/finch">FINCH<b>·</b>BY FINOSTAT</a><div class="r"><span class="live-dot off" id="live-dot">MARKET DATA</span><a href="/dashboard">TERMINAL</a><a href="/">SITE</a></div></header>
 <main class="wrap">"""
 
 _FOOT = """<p class="disc">Finch is education, not advice. Every number marked live is today's real market, which is exactly why the examples will not match what you read yesterday. Derivatives can lose more than you put in; nothing here is a recommendation to trade. Finostat is not affiliated with NSE, BSE, MCX or SEBI.</p>

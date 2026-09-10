@@ -356,7 +356,7 @@ def render(econ: Econ, anchor: date | None = None) -> bytes:
 <script type="application/ld+json">{ld_json}</script>
 <script type="application/ld+json">{faq_json}</script>
 <style>{_CSS}</style></head><body>
-<header class="top"><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/brief">BRIEF</a><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a><a href="/account?plan=desk">GET DESK</a></div><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/brief">BRIEF</a><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a><a href="/account?plan=desk">GET DESK</a></div></header>
 <main class="wrap"><nav class="crumb"><a href="/">FINO</a> · CALENDAR</nav>
 <h1>Economic calendar</h1>
 <p class="lede">Every release that moves Indian markets, in IST: India's CPI, WPI, IIP, PMI, GDP and RBI decisions alongside US CPI, PPI, jobs and the Fed, the ECB, BoE, BoJ and China. Free, updated hourly.</p>

@@ -333,7 +333,7 @@ def render(slug: str, today: date | None = None, holidays=None, contracts=None) 
 <script type="application/ld+json">{ld1}</script>
 <script type="application/ld+json">{ld2}</script>
 <style>{econ._CSS}.cal-top a.nav.on{{border-color:var(--gold);color:var(--gold)}}table.cal td.t{{white-space:nowrap;width:auto}}</style></head><body>
-<header class="top"><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/calendar">CALENDAR</a><a href="/brief">BRIEF</a><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a></div><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/calendar">CALENDAR</a><a href="/brief">BRIEF</a><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a></div></header>
 <main class="wrap"><nav class="crumb"><a href="/">FINO</a> · <a href="/calendar">CALENDAR</a> · {_esc(PAGES[slug][0]).upper()}</nav>
 <h1>{_esc(p["h1"])}</h1>
 <p class="lede">{p["lede"]}</p>

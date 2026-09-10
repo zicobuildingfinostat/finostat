@@ -325,21 +325,11 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
 }
 
 /* guiding light */
-.cmdbar .home-ic{flex:0 0 auto;width:36px;height:36px;border-radius:9px;overflow:hidden;box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22);animation:fino-glow 3.4s ease-in-out infinite}
-.cmdbar .home-ic img{width:100%;height:100%;display:block}.cmdbar .home-ic:hover{box-shadow:0 0 0 1px var(--gold),0 0 30px rgba(245,200,66,.7);animation:none}
-@keyframes fino-glow{0%,100%{box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22)}50%{box-shadow:0 0 0 1px rgba(245,200,66,.7),0 0 26px rgba(245,200,66,.5)}}
-.desk{position:relative;overflow:hidden}
-.beam{position:absolute;bottom:-12%;width:20vw;min-width:150px;max-width:340px;height:150%;transform-origin:50% 100%;pointer-events:none;mix-blend-mode:screen;filter:blur(22px);opacity:.85;z-index:3;
-  background:linear-gradient(180deg,rgba(245,200,66,0) 0%,rgba(245,200,66,.18) 45%,rgba(255,236,180,.42) 100%)}
-.beam.a{left:6%;animation:sweep-a 16s ease-in-out infinite}
-.beam.b{right:6%;animation:sweep-b 19s ease-in-out infinite;background:linear-gradient(180deg,rgba(120,220,255,0) 0%,rgba(120,220,255,.14) 45%,rgba(200,240,255,.36) 100%)}
-@keyframes sweep-a{0%,100%{transform:rotate(-30deg)}50%{transform:rotate(24deg)}}
-@keyframes sweep-b{0%,100%{transform:rotate(28deg)}50%{transform:rotate(-22deg)}}
-#spot{position:fixed;inset:0;pointer-events:none;z-index:2;mix-blend-mode:screen;opacity:0;transition:opacity .5s;
-  background:radial-gradient(540px circle at var(--sx,50%) var(--sy,30%),rgba(245,200,66,.24),rgba(245,200,66,.07) 42%,transparent 70%)}
+#spot{position:fixed;inset:0;pointer-events:none;z-index:2;mix-blend-mode:screen;opacity:0;transition:opacity .6s;
+  background:radial-gradient(540px circle at var(--sx,50%) var(--sy,30%),rgba(245,200,66,.11),rgba(245,200,66,.03) 42%,transparent 70%)}
 #spot.on{opacity:1}
-@media (prefers-reduced-motion:reduce){.beam{animation:none;opacity:.35}.cmdbar .home-ic{animation:none}#spot{display:none}}
-@media (max-width:700px){.cmdbar .home-ic{display:none}.beam{width:38vw;filter:blur(16px);opacity:.55}}
+@media (prefers-reduced-motion:reduce){#spot{display:none}}
+
 
 /* mobile menu */
 .burger{display:none;width:42px;height:42px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);border-radius:6px;cursor:pointer;padding:0;flex:0 0 auto;position:relative;margin-left:auto}
@@ -388,7 +378,6 @@ body.menu-open{overflow:hidden}
       <a class="btn ghost" href="/login">Sign in</a>
       <a class="btn primary" href="/signup">Get started</a>
     </div>
-    <a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="36" height="36"></a>
     <button class="burger" id="burger" aria-label="Open menu" aria-controls="mnav" aria-expanded="false"><span></span><span></span><span></span></button>
   </div>
 </header>
@@ -418,7 +407,6 @@ body.menu-open{overflow:hidden}
 
 <!-- DESK -->
 <div class="desk">
-  <div class="beam a" aria-hidden="true"></div><div class="beam b" aria-hidden="true"></div>
   <div class="wrap desk-grid">
 
     <div class="panel intro">
@@ -916,12 +904,14 @@ body.menu-open{overflow:hidden}
 </script>
 <script>
 (function(){
-  /* the searchlight follows the pointer on devices that have one; touch screens keep the sweeping beams only */
+  /* the light follows the user's own pointer or finger and fades when they stop; it never moves by itself */
   var spot=document.getElementById('spot');
-  if(!spot||!window.matchMedia||!matchMedia('(hover:hover) and (pointer:fine)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return;
-  var raf=null,x=0,y=0;
+  if(!spot||(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches))return;
+  var raf=null,x=0,y=0,idle=null;
   function paint(){raf=null;spot.style.setProperty('--sx',x+'px');spot.style.setProperty('--sy',y+'px');}
-  document.addEventListener('pointermove',function(e){x=e.clientX;y=e.clientY;spot.classList.add('on');if(!raf)raf=requestAnimationFrame(paint);},{passive:true});
+  function at(cx,cy){x=cx;y=cy;spot.classList.add('on');if(!raf)raf=requestAnimationFrame(paint);clearTimeout(idle);idle=setTimeout(function(){spot.classList.remove('on');},1400);}
+  document.addEventListener('pointermove',function(e){at(e.clientX,e.clientY);},{passive:true});
+  document.addEventListener('pointerdown',function(e){at(e.clientX,e.clientY);},{passive:true});
   document.addEventListener('pointerleave',function(){spot.classList.remove('on');});
 })();
 </script>

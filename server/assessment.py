@@ -519,14 +519,14 @@ def render_page() -> bytes:
 <style>:root{{--bg:#0c0626;--panel:#120a33;--panel-hd:#1c1052;--line:#2c1c66;--line-strong:#4a34a0;--gold:#f5c842;--gold-2:#ffe27a;--cyan:#7fe0f0;--up:#3dd68c;--down:#ff5c6c;--text:#f1edff;--muted:#a89ccf;--faint:#6d609e;--display:"Barlow Condensed",Impact,sans-serif;--body:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}}
 *{{box-sizing:border-box;margin:0;padding:0}}html{{background:var(--bg)}}body{{font-family:var(--body);color:var(--text);background:radial-gradient(ellipse 70% 45% at 50% 0%,rgba(122,60,245,.5),transparent 70%),var(--bg);min-height:100vh}}
 .top{{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase}}.top a{{color:var(--muted);text-decoration:none;margin-left:16px}}.top .logo{{color:var(--gold);font-family:var(--display);font-size:20px;letter-spacing:.06em;margin:0}}
-.top .home-ic{{flex:0 0 auto;width:34px;height:34px;border-radius:9px;overflow:hidden;margin-left:10px;box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22);animation:fino-glow 3.4s ease-in-out infinite}}
+.top .home-ic{{flex:0 0 auto;width:30px;height:30px;border-radius:9px;overflow:hidden;margin-right:2px;box-shadow:0 0 0 1px rgba(245,200,66,.3)}}
 .top .home-ic img{{width:100%;height:100%;display:block}}
-.top .home-ic:hover{{box-shadow:0 0 0 1px var(--gold),0 0 30px rgba(245,200,66,.7);animation:none}}
+.top .home-ic:hover{{box-shadow:0 0 0 1px var(--gold),0 0 16px rgba(245,200,66,.45)}}
 @keyframes fino-glow{{0%,100%{{box-shadow:0 0 0 1px rgba(245,200,66,.35),0 0 14px rgba(245,200,66,.22)}}50%{{box-shadow:0 0 0 1px rgba(245,200,66,.7),0 0 26px rgba(245,200,66,.5)}}}}
 @media (prefers-reduced-motion:reduce){{.top .home-ic{{animation:none}}}}
 .wrap{{max-width:680px;margin:32px auto;padding:0 16px}}{CSS}
 .fa-card{{max-height:none}}</style></head><body>
-<header class="top"><a class="logo" href="/">FINOSTAT</a><div><a href="/finch">Finch</a><a href="/dashboard">Terminal</a></div><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="34" height="34"></a></header>
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/">FINOSTAT</a><div><a href="/finch">Finch</a><a href="/dashboard">Terminal</a></div></header>
 <main class="wrap"><div id="fa-root" data-mode="page"><div class="fa-card"><div class="fa-hd"><span class="k">ASSESS</span><span class="s">TRADER ASSESSMENT</span><span>FREE · 2 MIN</span></div><div class="fa-body">{_INTRO}{form_html()}</div></div></div></main>
 <script>{JS}</script></body></html>"""
     return doc.encode("utf-8")
