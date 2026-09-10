@@ -28,6 +28,8 @@ m = E.load_macro(mf)
 check("macro rows validated", len(m) == 1 and m[0]["kind"] == "macro" and m[0]["u"] == "BANKNIFTY")
 check("shipped events.json parses", isinstance(E.load_macro(), list))
 
+check("refresh without contracts returns False (no network attempted)", not E.Calendar(lambda: C.ContractIndex(), None).refresh())
+
 print("\n=== calendar assembly + implied move ===")
 ci = C.ContractIndex()
 ci.build({"NSE": [

@@ -122,9 +122,16 @@ class Calendar:
         return True
 
     def _run(self) -> None:
-        self.refresh()
-        while not self._stop.wait(self.interval):
-            self.refresh()
+        # The contract index is built when the feed resolves, a few seconds after
+        # start: retry with backoff until a refresh succeeds, then settle down.
+        delay = 15.0
+        while not self._stop.is_set():
+            ok = self.refresh()
+            wait = self.interval if ok else min(delay, 600.0)
+            if not ok:
+                delay *= 2
+            if self._stop.wait(wait):
+                break
 
     # -- assembling the calendar --------------------------------------------
     def expiries(self, days: int) -> list[dict]:
