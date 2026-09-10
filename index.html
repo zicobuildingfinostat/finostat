@@ -329,6 +329,15 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   .session{grid-column:span 1;padding:22px 20px}
 }
 
+/* feature cards are doors to the terminal */
+.feat{cursor:pointer;transition:transform .2s,box-shadow .2s,border-color .2s}
+.feat:hover,.feat:focus-visible{transform:translateY(-3px);border-color:var(--gold);box-shadow:0 22px 60px rgba(0,0,0,.5);outline:none}
+.feat .unlock{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(245,200,66,.45);padding:5px 9px}
+.feat:hover .unlock{background:var(--gold);color:#2a1a02}
+.plan-note{border:1px solid var(--gold);background:rgba(245,200,66,.07);padding:14px 18px;margin:-14px 0 22px;font-size:15px;color:var(--text)}
+.plan-note .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;background:var(--gold);color:#2a1a02;padding:2px 7px;margin-right:10px;vertical-align:middle}
+.plan-note b{font-family:var(--display);font-size:20px;text-transform:uppercase;color:var(--gold-2)}
+
 /* holographic floor + prism sheen: static, sits under the content */
 body::after{content:"";position:fixed;left:-25%;right:-25%;bottom:-8%;height:46vh;pointer-events:none;z-index:-1;
   background:repeating-linear-gradient(90deg,rgba(150,120,255,.16) 0 1px,transparent 1px 72px),repeating-linear-gradient(0deg,rgba(150,120,255,.16) 0 1px,transparent 1px 72px);
@@ -522,26 +531,26 @@ body.menu-open{overflow:hidden}
   <div class="wrap">
     <div class="sec-head rv"><div><span class="eyebrow">What's inside</span><h2>Built for the last 30 minutes of expiry.</h2></div><p>The toolkit serious options traders in India actually use, without the institutional price tag.</p></div>
     <div class="feats">
-      <div class="panel feat wide rv"><div class="panel-hd"><span class="k">MINI</span><span class="s">BANKNIFTY PE · BUY/SELL</span><span class="r"><span class="live">LIVE</span></span></div>
-        <div class="body"><h3>Streamed by the millisecond</h3><p>WebSocket-fed sheets refresh several times a second. Butterflies, ratios and combos, always in sync with the tape.</p></div>
+      <div class="panel feat wide rv" data-feat="MINI" role="link" tabindex="0" aria-label="MINI: inside the terminal, see plans"><div class="panel-hd"><span class="k">MINI</span><span class="s">BANKNIFTY PE · BUY/SELL</span><span class="r"><span class="live">LIVE</span></span></div>
+        <div class="body"><h3>Streamed by the millisecond</h3><p>WebSocket-fed sheets refresh several times a second. Butterflies, ratios and combos, always in sync with the tape.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz"><table class="sheet"><thead><tr><th>STRIKE</th><th>BUY</th><th>SELL</th><th>Δ</th></tr></thead><tbody id="mini-rows"></tbody></table></div></div>
-      <div class="panel feat wide rv"><div class="panel-hd"><span class="k">SURF</span><span class="s">NIFTY IV SURFACE</span><span class="r"><span>RICH/CHEAP</span></span></div>
-        <div class="body"><h3>Vol surface &amp; skew</h3><p>The full IV smile across strikes and expiries, with a rich/cheap heatmap. Find dislocations before the crowd.</p></div>
+      <div class="panel feat wide rv" data-feat="SURF" role="link" tabindex="0" aria-label="SURF: inside the terminal, see plans"><div class="panel-hd"><span class="k">SURF</span><span class="s">NIFTY IV SURFACE</span><span class="r"><span>RICH/CHEAP</span></span></div>
+        <div class="body"><h3>Vol surface &amp; skew</h3><p>The full IV smile across strikes and expiries, with a rich/cheap heatmap. Find dislocations before the crowd.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz"><div class="heat" id="heat" aria-hidden="true"></div><div class="heat-legend"><span>OTM PUTS</span><span>ATM</span><span>OTM CALLS</span></div></div></div>
-      <div class="panel feat rv"><div class="panel-hd"><span class="k">RPLY</span><span class="s">NIFTY · 27FEB25</span></div>
-        <div class="body"><h3>Historical replay</h3><p>Scrub through any past expiry tick by tick. See how the sheets behaved on the days that mattered.</p></div>
+      <div class="panel feat rv" data-feat="RPLY" role="link" tabindex="0" aria-label="RPLY: inside the terminal, see plans"><div class="panel-hd"><span class="k">RPLY</span><span class="s">NIFTY · 27FEB25</span></div>
+        <div class="body"><h3>Historical replay</h3><p>Scrub through any past expiry tick by tick. See how the sheets behaved on the days that mattered.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz replay"><div style="display:flex;justify-content:space-between"><span style="color:var(--gold)">13:42:18</span><span class="up">▶ PLAYING</span></div><div class="track"><i></i></div><div class="ticks"><span>09:15</span><span>12:00</span><span>15:30</span></div></div></div>
-      <div class="panel feat rv"><div class="panel-hd"><span class="k">CURV</span><span class="s">IMPLIED DISTRIBUTION</span></div>
-        <div class="body"><h3>Bell curves</h3><p>The implied probability distribution for each expiry. Spot where risk is priced rich or cheap.</p></div>
+      <div class="panel feat rv" data-feat="CURV" role="link" tabindex="0" aria-label="CURV: inside the terminal, see plans"><div class="panel-hd"><span class="k">CURV</span><span class="s">IMPLIED DISTRIBUTION</span></div>
+        <div class="body"><h3>Bell curves</h3><p>The implied probability distribution for each expiry. Spot where risk is priced rich or cheap.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz"><svg viewBox="0 0 300 120" style="display:block;width:100%" aria-hidden="true"><defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f5c842" stop-opacity=".35"/><stop offset="1" stop-color="#f5c842" stop-opacity="0"/></linearGradient></defs><path d="M10 105 C 60 105, 90 100, 110 70 S 135 12, 150 12 S 190 70, 215 95 S 270 105, 290 105" fill="url(#g)" stroke="#f5c842" stroke-width="1.5"/><rect x="190" y="10" width="45" height="95" fill="#ff6ec7" opacity=".12"/><line x1="150" y1="8" x2="150" y2="110" stroke="#7fe0f0" stroke-dasharray="3 3"/><text x="150" y="118" font-size="8" fill="#7fe0f0" text-anchor="middle" font-family="IBM Plex Mono">SPOT</text><text x="212" y="118" font-size="8" fill="#ff6ec7" text-anchor="middle" font-family="IBM Plex Mono">RICH</text></svg></div></div>
-      <div class="panel feat rv"><div class="panel-hd"><span class="k">BKTS</span><span class="s">SHORT STRADDLE 10:00</span></div>
-        <div class="body"><h3>Backtesting</h3><p>Test an idea against four years of expiry-day data. Keep only the edges that held up.</p></div>
+      <div class="panel feat rv" data-feat="BKTS" role="link" tabindex="0" aria-label="BKTS: inside the terminal, see plans"><div class="panel-hd"><span class="k">BKTS</span><span class="s">SHORT STRADDLE 10:00</span></div>
+        <div class="body"><h3>Backtesting</h3><p>Test an idea against four years of expiry-day data. Keep only the edges that held up.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz bt"><ul><li><span>Expiries tested</span><span>204</span></li><li><span>Win rate</span><span class="up">63.2%</span></li><li><span>Avg P&amp;L / lot</span><span class="up">+₹1,140</span></li><li><span>Max drawdown</span><span class="down">−1.8%</span></li></ul></div></div>
-      <div class="panel feat wide rv"><div class="panel-hd"><span class="k">GEX</span><span class="s">NIFTY DEALER GAMMA</span></div>
-        <div class="body"><h3>Gamma exposure</h3><p>Dealer GEX by strike for Nifty and BankNifty. Know where the market is pinned and where it can run.</p></div>
+      <div class="panel feat wide rv" data-feat="GEX" role="link" tabindex="0" aria-label="GEX: inside the terminal, see plans"><div class="panel-hd"><span class="k">GEX</span><span class="s">NIFTY DEALER GAMMA</span></div>
+        <div class="body"><h3>Gamma exposure</h3><p>Dealer GEX by strike for Nifty and BankNifty. Know where the market is pinned and where it can run.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz" style="padding:12px 12px 8px"><svg viewBox="0 0 300 100" style="width:100%;display:block" aria-hidden="true"><line x1="0" y1="55" x2="300" y2="55" stroke="#2c1c66"/><g fill="#3dd68c"><rect x="20" y="40" width="18" height="15"/><rect x="50" y="30" width="18" height="25"/><rect x="80" y="12" width="18" height="43"/><rect x="110" y="22" width="18" height="33"/><rect x="140" y="38" width="18" height="17"/></g><g fill="#ff5c6c"><rect x="170" y="55" width="18" height="12"/><rect x="200" y="55" width="18" height="30"/><rect x="230" y="55" width="18" height="22"/><rect x="260" y="55" width="18" height="9"/></g><text x="89" y="96" font-size="8" fill="#f5c842" font-family="IBM Plex Mono" text-anchor="middle">24500 WALL</text><text x="209" y="96" font-size="8" fill="#ff5c6c" font-family="IBM Plex Mono" text-anchor="middle">24900</text></svg></div></div>
-      <div class="panel feat wide rv"><div class="panel-hd"><span class="k">ALRT</span><span class="s">ALERT ENGINE</span></div>
-        <div class="body"><h3>Alerts that never sleep</h3><p>Set a price or spread alert on any cell of any sheet. When your setup triggers, your phone knows before you do — push, Telegram or email.</p></div>
+      <div class="panel feat wide rv" data-feat="ALRT" role="link" tabindex="0" aria-label="ALRT: inside the terminal, see plans"><div class="panel-hd"><span class="k">ALRT</span><span class="s">ALERT ENGINE</span></div>
+        <div class="body"><h3>Alerts that never sleep</h3><p>Set a price or spread alert on any cell of any sheet. When your setup triggers, your phone knows before you do — push, Telegram or email.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz alerts" style="padding:0"><ul><li><div><b>Any cell, any sheet</b><small>Price, spread, IV or Greek thresholds</small></div><span class="tag">RULE</span></li><li><div><b>Cross-index</b><small>NIFTY, BANKNIFTY, SENSEX, FINNIFTY at once</small></div><span class="tag">RULE</span></li></ul></div></div>
     </div>
   </div>
@@ -664,6 +673,7 @@ body.menu-open{overflow:hidden}
 <section id="plans">
   <div class="wrap">
     <div class="sec-head rv"><div><span class="eyebrow">PLAN · subscription</span><h2>Plans</h2></div><p>Learn free with Finch and the daily brief. The live terminal — sheets, chains, builder, alerts — is Desk.</p></div>
+    <div class="plan-note" id="plan-note" hidden><span class="k" id="plan-note-k"></span><b id="plan-note-t"></b> is a terminal feature. It is included in Desk and Pro — pick a plan below and it is live on your terminal the moment the payment clears.</div>
     <div class="plans rv">
 
       <div class="panel plan">
@@ -935,6 +945,16 @@ body.menu-open{overflow:hidden}
   document.addEventListener('pointermove',function(e){at(e.clientX,e.clientY);},{passive:true});
   document.addEventListener('pointerdown',function(e){at(e.clientX,e.clientY);},{passive:true});
   document.addEventListener('pointerleave',function(){spot.classList.remove('on');});
+})();
+</script>
+<script>
+(function(){
+  var note=document.getElementById('plan-note'),nk=document.getElementById('plan-note-k'),nt=document.getElementById('plan-note-t');
+  function show(code,title){ if(!note)return; nk.textContent=code; nt.textContent=title; note.hidden=false; try{sessionStorage.setItem('fino_feat',code+'|'+title);}catch(e){} }
+  function go(card){ var code=card.getAttribute('data-feat')||''; var h=card.querySelector('h3'); show(code,h?h.textContent:code); var plans=document.getElementById('plans'); if(plans){ plans.scrollIntoView({behavior:'smooth',block:'start'}); } if(history.replaceState){ history.replaceState(null,'','#plans'); } }
+  document.addEventListener('click',function(e){ var card=e.target.closest('.feat[data-feat]'); if(!card)return; e.preventDefault(); go(card); });
+  document.addEventListener('keydown',function(e){ if(e.key!=='Enter'&&e.key!==' ')return; var card=e.target.closest&&e.target.closest('.feat[data-feat]'); if(!card)return; e.preventDefault(); go(card); });
+  var q=new URLSearchParams(location.search).get('feature'); if(q){ var c=document.querySelector('.feat[data-feat="'+q.toUpperCase()+'"]'); if(c){ go(c); } }
 })();
 </script>
 </body>
