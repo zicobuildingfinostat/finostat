@@ -59,6 +59,31 @@ check("cpi row rendered with forecast and actual", "Core CPI m/m" in page and "0
 check("india cpi (rolled to Mon 14th) in the week", "CPI y/y (inflation)" in page)
 check("prev/next week links", "/calendar?d=2026-08-31" in page and "/calendar?d=2026-09-14" in page)
 check("title targets the searches", "Economic Calendar" in page and "RBI" in page and "Fed" in page)
+print("\n=== holidays ===")
+import holidays as H
+payload = {"FO": [{"tradingDate": "14-Sep-2026", "weekDay": "Monday", "description": "Ganesh Chaturthi"}, {"tradingDate": "08-Nov-2026", "weekDay": "Sunday", "description": "Diwali Laxmi Pujan*"},
+                  {"tradingDate": "02-Oct-2026", "weekDay": "Friday", "description": "Mahatma Gandhi Jayanti"}, {"tradingDate": "bad", "description": "x"}],
+           "CM": [{"tradingDate": "14-Sep-2026", "weekDay": "Monday", "description": "Ganesh Chaturthi"}, {"tradingDate": "02-Oct-2026", "weekDay": "Friday", "description": "Mahatma Gandhi Jayanti"}]}
+hrows = H.parse(payload)
+check("parse: 3 rows sorted, bad date dropped, muhurat flag from the asterisk, segments merged", [r["date"] for r in hrows] == ["2026-09-14", "2026-10-02", "2026-11-08"] and hrows[2]["muhurat"] == 1 and hrows[2]["name"] == "Diwali Laxmi Pujan" and hrows[0]["fo"] == 1 and hrows[0]["cm"] == 1 and hrows[2]["cm"] == 0)
+hs = H.Holidays(tmp / "acct.db"); hs.store(hrows)
+check("store/all/dates/is_closed/next_open", len(hs.all()) == 3 and "2026-09-14" in hs.dates() and hs.is_closed(date(2026, 9, 14)) and hs.next_open(date(2026, 9, 12)) == date(2026, 9, 15))
+ev2 = E.india_events(date(2026, 9, 1), date(2026, 9, 30), hs.dates())
+cpi2 = datetime.fromtimestamp(next(e for e in ev2 if e["title"].startswith("CPI"))["ts"], E.IST)
+check("CPI Sep 2026 rolls past Ganesh Chaturthi to Tue 15 Sep", cpi2.strftime("%Y-%m-%d") == "2026-09-15", cpi2)
+pmi2 = [e for e in E.india_events(date(2026, 10, 1), date(2026, 10, 31), hs.dates()) if e["title"] == "Services PMI"][0]
+check("Services PMI Oct 2026: 3rd working day skips the 2 Oct holiday -> Tue 6 Oct", datetime.fromtimestamp(pmi2["ts"], E.IST).strftime("%Y-%m-%d") == "2026-10-06")
+ec2 = E.Econ(tmp / "acct.db", holidays=hs)
+got2 = ec2.events(date(2026, 9, 14), date(2026, 9, 20))
+check("calendar shows the weekday holiday row, not the Sunday one; CPI on the 15th", any(e["impact"] == "Holiday" and "Ganesh" in e["title"] for e in got2) and not any("Diwali" in e["title"] for e in ec2.events(date(2026, 11, 2), date(2026, 11, 8))) and any(e["title"].startswith("CPI") and e["date"] == "2026-09-15" for e in got2))
+hp = P_render = None
+import econ_pages as P
+hp = P.render("nse-holidays", date(2026, 9, 10), holidays=hs).decode()
+check("holidays page: title with year, next holiday, weekend + muhurat notes, segments", "NSE trading holidays 2026" in hp and "Next market holiday: Mon 14 Sep 2026" in hp and "falls on a weekend" in hp and "Muhurat trading session" in hp and "F&amp;O only" in hp and "F&amp;O + Equity" in hp)
+cpi_pg = P.render("india-cpi-dates", date(2026, 9, 10), holidays=hs).decode()
+check("cpi page uses holidays: Tue 15 Sep 2026, reason 'holiday'", "Tue 15 Sep 2026" in cpi_pg and "rolled from the 12th (holiday)" in cpi_pg)
+check("holidays page renders empty-safe without a store", "not loaded yet" in P.render("nse-holidays", date(2026, 9, 10)).decode())
+
 print("\n=== schedule pages ===")
 import econ_pages as P
 t = date(2026, 9, 10)

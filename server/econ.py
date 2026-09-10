@@ -66,45 +66,50 @@ def _ist(y: int, m: int, d: int, hh: int, mm: int) -> float:
     return datetime(y, m, d, hh, mm, tzinfo=IST).timestamp()
 
 
-def _roll_forward(d: date) -> date:
-    while d.weekday() >= 5:
+def _closed(d: date, hol: set) -> bool:
+    return d.weekday() >= 5 or d.isoformat() in hol
+
+
+def _roll_forward(d: date, hol: set = frozenset()) -> date:
+    while _closed(d, hol):
         d += timedelta(days=1)
     return d
 
 
-def _nth_working_day(y: int, m: int, n: int) -> date:
+def _nth_working_day(y: int, m: int, n: int, hol: set = frozenset()) -> date:
     d, seen = date(y, m, 1), 0
     while True:
-        if d.weekday() < 5:
+        if not _closed(d, hol):
             seen += 1
             if seen == n:
                 return d
         d += timedelta(days=1)
 
 
-def _last_working_day(y: int, m: int) -> date:
+def _last_working_day(y: int, m: int, hol: set = frozenset()) -> date:
     d = (date(y + (m // 12), m % 12 + 1, 1) - timedelta(days=1))
-    while d.weekday() >= 5:
+    while _closed(d, hol):
         d -= timedelta(days=1)
     return d
 
 
-def india_events(start: date, end: date) -> list[dict]:
-    """Rule-generated Indian releases between two dates (inclusive)."""
+def india_events(start: date, end: date, hol: set = frozenset()) -> list[dict]:
+    """Rule-generated Indian releases between two dates (inclusive). `hol` = ISO dates of exchange holidays,
+    so releases scheduled on a holiday roll to the next working day and PMIs count working days properly."""
     out = []
     y, m = start.year, start.month
     while date(y, m, 1) <= end:
         rows = [
-            (_roll_forward(date(y, m, 12)), 16, 0, "CPI y/y (inflation)", "High", "MOSPI, 12th at 16:00 IST; next working day if a holiday"),
-            (_roll_forward(date(y, m, 12)), 16, 0, "Industrial Production (IIP) y/y", "Medium", "MOSPI, with CPI"),
-            (_roll_forward(date(y, m, 14)), 12, 0, "WPI inflation y/y", "Medium", "DPIIT, 14th at noon"),
-            (_nth_working_day(y, m, 1), 10, 30, "Manufacturing PMI", "Medium", "S&P Global / HSBC"),
-            (_nth_working_day(y, m, 3), 10, 30, "Services PMI", "Medium", "S&P Global / HSBC"),
+            (_roll_forward(date(y, m, 12), hol), 16, 0, "CPI y/y (inflation)", "High", "MOSPI, 12th at 16:00 IST; next working day if a holiday"),
+            (_roll_forward(date(y, m, 12), hol), 16, 0, "Industrial Production (IIP) y/y", "Medium", "MOSPI, with CPI"),
+            (_roll_forward(date(y, m, 14), hol), 12, 0, "WPI inflation y/y", "Medium", "DPIIT, 14th at noon"),
+            (_nth_working_day(y, m, 1, hol), 10, 30, "Manufacturing PMI", "Medium", "S&P Global / HSBC"),
+            (_nth_working_day(y, m, 3, hol), 10, 30, "Services PMI", "Medium", "S&P Global / HSBC"),
             (date(y, m, 1), 12, 0, "GST collections", "Low", "Ministry of Finance"),
             (date(y, m, 1), 12, 0, "Auto sales (monthly)", "Low", "Manufacturer despatches"),
         ]
         if m in (2, 5, 8, 11):
-            rows.append((_last_working_day(y, m), 16, 0, "GDP growth q/y", "High", "MOSPI quarterly estimate"))
+            rows.append((_last_working_day(y, m, hol), 16, 0, "GDP growth q/y", "High", "MOSPI quarterly estimate"))
         for d, hh, mm, title, impact, detail in rows:
             if start <= d <= end:
                 out.append({"id": _eid("in", title, d), "ts": _ist(d.year, d.month, d.day, hh, mm), "country": "INR", "title": title,
@@ -162,8 +167,8 @@ def parse_ff(rows: list) -> list[dict]:
 
 
 class Econ:
-    def __init__(self, path: pathlib.Path, interval: float = 3600.0):
-        self.path, self.interval = pathlib.Path(path), interval
+    def __init__(self, path: pathlib.Path, interval: float = 3600.0, holidays=None):
+        self.path, self.interval, self.holidays = pathlib.Path(path), interval, holidays
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self.fetched: float | None = None
@@ -217,7 +222,16 @@ class Econ:
             rows = [dict(r) for r in c.execute("SELECT * FROM econ_events WHERE ts>=? AND ts<=? ORDER BY ts", (t0, t1)).fetchall()]
         for r in rows:
             r["detail"] = ""
-        gen = india_events(start, end) + fomc_events(start, end)
+        hol = self.holiday_dates()
+        gen = india_events(start, end, hol) + fomc_events(start, end)
+        if self.holidays is not None:
+            for h in self.holidays.all():
+                d = date.fromisoformat(h["date"])
+                if start <= d <= end and d.weekday() < 5:
+                    seg = "F&O and cash" if h["fo"] and h["cm"] else ("F&O" if h["fo"] else "cash market")
+                    gen.append({"id": _eid("hol", h["date"]), "ts": _ist(d.year, d.month, d.day, 9, 15), "country": "INR", "title": f"NSE closed: {h['name']}",
+                                "impact": "Holiday", "forecast": "", "previous": "", "actual": "", "source": "nse",
+                                "detail": f"{seg} segment{'s' if ' and ' in seg else ''} closed" + (" · Muhurat trading in the evening" if h["muhurat"] else "")})
         # the feed already carries the Fed decision in its week: keep the feed's row, drop the generated one
         ff_fomc_days = {datetime.fromtimestamp(r["ts"], IST).date() for r in rows if r["country"] == "USD" and "federal funds" in r["title"].lower()}
         gen = [g for g in gen if not (g["title"].startswith("FOMC") and datetime.fromtimestamp(g["ts"], IST).date() in ff_fomc_days)]
@@ -229,6 +243,12 @@ class Econ:
             e["when"] = datetime.fromtimestamp(e["ts"], IST).strftime("%H:%M")
             e["date"] = datetime.fromtimestamp(e["ts"], IST).strftime("%Y-%m-%d")
         return out
+
+    def holiday_dates(self) -> set:
+        try:
+            return self.holidays.dates() if self.holidays is not None else set()
+        except Exception:
+            return set()
 
     def high_impact(self, days: int) -> list[dict]:
         today = datetime.now(IST).date()

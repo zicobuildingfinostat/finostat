@@ -49,7 +49,7 @@ def _tbl(head: list[str], rows: list[list[str]], today: date, date_col: int = 0,
     trs = []
     for r in rows:
         past = r[date_col] < today.isoformat() if isinstance(r[date_col], str) and len(r[date_col]) == 10 else False
-        cells = "".join(f'<td class="{"n" if i == name_col else "t"}">{c if i != date_col else _fmt(_d(c))}</td>' for i, c in enumerate(r))
+        cells = "".join(f'<td class="{"n" if i == name_col else "t"}">{_esc(c) if i != date_col else _fmt(_d(c))}</td>' for i, c in enumerate(r))
         trs.append(f'<tr class="{"past" if past else ""}">{cells}</tr>')
     return f'<div class="scrollx"><table class="cal"><thead><tr>{ths}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>'
 
@@ -81,22 +81,27 @@ def rbi(today: date) -> dict:
     }
 
 
-def _monthly(today: date, title_key: str, months: int = 14) -> list[dict]:
+def _monthly(today: date, title_key: str, months: int = 14, hol: set = frozenset()) -> list[dict]:
     start = date(today.year, today.month, 1)
     y, m = start.year, start.month + months
     while m > 12:
         m -= 12; y += 1
     end = date(y, m, 1) - timedelta(days=1)
-    return [e for e in econ.india_events(start, end) if e["title"] == title_key]
+    return [e for e in econ.india_events(start, end, hol) if e["title"] == title_key]
 
 
-def cpi(today: date) -> dict:
-    events = _monthly(today, "CPI y/y (inflation)")
+def cpi(today: date, hol: set = frozenset()) -> dict:
+    events = _monthly(today, "CPI y/y (inflation)", hol=hol)
     rows = []
     for e in events:
         d = datetime.fromtimestamp(e["ts"], IST).date()
         ref = (d.replace(day=1) - timedelta(days=1))
-        rows.append([d.isoformat(), f"CPI for {ref.strftime('%B %Y')}", "16:00 IST", "with IIP" + (" · rolled from the 12th (weekend)" if d.day != 12 else "")])
+        why = ""
+        if d.day != 12:
+            twelfth = d.replace(day=12)
+            blocked = [twelfth + timedelta(days=i) for i in range((d - twelfth).days)]
+            why = " · rolled from the 12th (" + ("holiday" if any(x.isoformat() in hol for x in blocked) else "weekend") + ")"
+        rows.append([d.isoformat(), f"CPI for {ref.strftime('%B %Y')}", "16:00 IST", "with IIP" + why])
     nxt = _next_of([r[0] for r in rows], today)
     return {
         "title": "India CPI Release Dates 2026-27 — inflation data schedule, time, IIP and WPI | Finostat",
@@ -140,13 +145,12 @@ def fomc(today: date) -> dict:
     }
 
 
-def india_data(today: date) -> dict:
+def india_data(today: date, hol: set = frozenset()) -> dict:
     start = date(today.year, today.month, 1)
-    y, m = (start.year + 1, start.month) if True else (0, 0)
-    end = date(y, m, 1) - timedelta(days=1)
+    end = date(start.year + 1, start.month, 1) - timedelta(days=1)
     wanted = ("GDP growth q/y", "Manufacturing PMI", "Services PMI", "WPI inflation y/y", "Industrial Production (IIP) y/y")
     rows = []
-    for e in econ.india_events(start, end):
+    for e in econ.india_events(start, end, hol):
         if e["title"] in wanted:
             d = datetime.fromtimestamp(e["ts"], IST)
             rows.append([d.strftime("%Y-%m-%d"), e["title"], d.strftime("%H:%M IST"), e.get("detail", "")])
@@ -168,7 +172,42 @@ def india_data(today: date) -> dict:
     }
 
 
+def nse_holidays(today: date, hol_rows: list[dict] | None = None) -> dict:
+    rows_in = hol_rows or []
+    years = sorted({r["date"][:4] for r in rows_in}) or [str(today.year)]
+    ylabel = " & ".join(years)
+    rows, upcoming = [], []
+    for h in rows_in:
+        d = _d(h["date"])
+        seg = "F&O + Equity" if h["fo"] and h["cm"] else ("F&O only" if h["fo"] else "Equity only")
+        note = "falls on a weekend" if d.weekday() >= 5 else ""
+        if h.get("muhurat"):
+            note = (note + " · " if note else "") + "Muhurat trading session in the evening"
+        rows.append([h["date"], h["name"], seg, note])
+        if d >= today and d.weekday() < 5:
+            upcoming.append(h)
+    nxt = upcoming[0] if upcoming else None
+    weekday_count = sum(1 for h in rows_in if _d(h["date"]).weekday() < 5)
+    return {
+        "title": f"NSE Holidays {ylabel} — stock market trading holiday list (F&O and equity) | Finostat",
+        "desc": f"Official NSE trading holidays for {ylabel} with the weekday, segment (F&O, equity) and Muhurat trading note. {weekday_count} weekday closures. Straight from the exchange's holiday master, refreshed daily.",
+        "h1": f"NSE trading holidays {ylabel}",
+        "lede": f"The days the National Stock Exchange is closed for trading in {ylabel}, as published in the exchange's holiday master and refreshed here every day. Weekend dates are listed because NSE lists them; they don't cost a trading session. Expiries that land on a holiday move to the previous trading day, and Finostat's calendar rolls India's data releases past these dates automatically.",
+        "next": f"Next market holiday: {_fmt(_d(nxt['date']))} — {nxt['name']}" if nxt else "",
+        "body": (_tbl(["DATE", "HOLIDAY", "SEGMENTS", "NOTE"], rows, today, name_col=1) if rows else '<div class="empty">holiday list not loaded yet — try again in a minute</div>') + """
+<section class="faq"><h3>Is the stock market open on Saturdays?</h3><p>No. NSE and BSE trade Monday to Friday, 09:15 to 15:30 IST, with a pre-open session from 09:00. The exchange occasionally holds a special Saturday session to test disaster-recovery systems; those are announced separately and are not on this list.</p>
+<h3>What is Muhurat trading?</h3><p>A one-hour symbolic session on the evening of Diwali (Laxmi Pujan). The market is closed during the day and opens for the special session in the evening; timings are announced by the exchange a few weeks before.</p>
+<h3>What happens to a weekly expiry on a holiday?</h3><p>It moves to the previous trading day. If Thursday is a holiday, the Thursday expiry settles on Wednesday — a shorter week, so the same premium decays faster. The <a href="/brief">daily brief</a> shows the actual expiry the contracts carry.</p>
+<h3>Do these holidays apply to commodity and currency segments?</h3><p>Not always — MCX and the currency derivatives segment keep their own lists, and several of these days have an evening commodity session. This page covers the equity cash and F&amp;O segments.</p></section>""",
+        "faq": [("Is the stock market open on Saturdays?", "No. NSE and BSE trade Monday to Friday, 09:15 to 15:30 IST, apart from occasional special test sessions announced by the exchange."),
+                ("When is the next NSE holiday?", f"{_fmt(_d(nxt['date']))}, {nxt['name']}." if nxt else ""),
+                ("What is Muhurat trading?", "A one-hour symbolic trading session held on the evening of Diwali (Laxmi Pujan), when the market is otherwise closed.")],
+        "source": "Source: NSE holiday master (equity and F&O segments), refreshed daily. Special sessions announced by the exchange are not included.",
+    }
+
+
 PAGES = {
+    "nse-holidays": ("NSE holidays", nse_holidays),
     "rbi-policy-dates": ("RBI policy dates", rbi),
     "india-cpi-dates": ("India CPI dates", cpi),
     "fomc-meeting-dates": ("FOMC dates in IST", fomc),
@@ -181,11 +220,23 @@ def links_html(current: str | None = None) -> str:
     return f'<div class="cal-top" style="margin-top:18px"><span style="color:var(--faint);letter-spacing:.14em">SCHEDULES</span>{items}</div>'
 
 
-def render(slug: str, today: date | None = None) -> bytes | None:
+def render(slug: str, today: date | None = None, holidays=None) -> bytes | None:
     if slug not in PAGES:
         return None
     today = today or datetime.now(IST).date()
-    p = PAGES[slug][1](today)
+    hol_rows = []
+    try:
+        hol_rows = holidays.all() if holidays is not None else []
+    except Exception:
+        hol_rows = []
+    hol = {h["date"] for h in hol_rows if h.get("fo")}
+    fn = PAGES[slug][1]
+    if slug == "nse-holidays":
+        p = fn(today, hol_rows)
+    elif slug in ("india-cpi-dates", "india-data-release-dates"):
+        p = fn(today, hol)
+    else:
+        p = fn(today)
     url = f"https://finostat.com/calendar/{slug}"
     faq_ld = {"@context": "https://schema.org", "@type": "FAQPage",
               "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in p["faq"] if a]}

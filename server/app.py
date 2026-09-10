@@ -42,6 +42,7 @@ import builder
 import cas
 import econ
 import econ_pages
+import holidays
 import events
 import chains
 import contracts
@@ -110,7 +111,8 @@ CHAINS = chains.ChainManager(FEED, getattr(FEED, "contracts", None) or contracts
 BRIEF = brief.Scheduler(FEED, CHAINS, BRIEFS, AUTH.path.parent / "brief.trigger")
 CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
 BOOK = book.Store(AUTH.path)
-ECON = econ.Econ(AUTH.path)
+HOLIDAYS = holidays.Holidays(AUTH.path)
+ECON = econ.Econ(AUTH.path, holidays=HOLIDAYS)
 EVENTS = events.Calendar(lambda: CONTRACTS_OF(FEED), CHAINS, cache=AUTH.path.parent / "events.json", econ=ECON)
 
 
@@ -452,7 +454,7 @@ class Handler(BaseHTTPRequestHandler):
             if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
             if route.startswith("/calendar/") and route.count("/") == 2:
-                body = econ_pages.render(route[len("/calendar/"):])
+                body = econ_pages.render(route[len("/calendar/"):], holidays=HOLIDAYS)
                 if body is not None:
                     return self._send(body, "text/html; charset=utf-8", cache="public, max-age=3600")
             if route == "/calendar":
@@ -465,6 +467,8 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError:
                         anchor = None
                 return self._send(econ.render(ECON, anchor), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/api/holidays":
+                return self._json({"holidays": HOLIDAYS.all(), "fetched": HOLIDAYS.fetched})
             if route == "/api/calendar":
                 qs = parse_qs(parsed.query)
                 try:
@@ -670,6 +674,7 @@ class Handler(BaseHTTPRequestHandler):
             "cas": {"date": CAS.date, "sessions": {u: len(s.points) for u, s in CAS.today.items()}},
             "events": {"results": len(EVENTS.results), "fetched": EVENTS.fetched, "error": EVENTS.error},
             "econ": {"fetched": ECON.fetched, "error": ECON.error},
+            "holidays": {"count": len(HOLIDAYS.all()), "fetched": HOLIDAYS.fetched, "error": HOLIDAYS.error},
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -1258,6 +1263,7 @@ def main() -> int:
     VIDEOS.start()
     CAS.start()
     EVENTS.start()
+    HOLIDAYS.start()
     ECON.start()
     FEED.start()
     NEWS.start()
@@ -1279,6 +1285,7 @@ def main() -> int:
         CAS.flush()
         EVENTS.stop()
         ECON.stop()
+        HOLIDAYS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
         BACKUP.run_now()
