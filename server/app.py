@@ -46,6 +46,7 @@ import holidays
 import analytics
 import history
 import upstox_rest
+import candles
 import events
 import chains
 import contracts
@@ -117,6 +118,7 @@ BOOK = book.Store(AUTH.path)
 HOLIDAYS = holidays.Holidays(AUTH.path)
 UREST = upstox_rest.Client()
 CHAINS.rest = UREST                    # builder chains get OI, ΔOI and volume from the REST chain
+CANDLES = candles.Candles(UREST)
 HIST = history.History(UREST, upstox_rest.CandleStore(recorder._data_dir() / "history.db"))
 _ANALYTICS_U = ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX")
 
@@ -221,7 +223,7 @@ def _paid(user) -> bool:
 # course keeps its live numbers.
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
-                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest"}
+                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles"}
 
 
 def _gate(user, ukey: str):
@@ -576,6 +578,19 @@ class Handler(BaseHTTPRequestHandler):
                     out = analytics.gex(ch["rows"], ch["spot"], ch.get("lot") or 1, ch["t"]) or {"error": "open interest not available for this chain"}
                 out.update(meta)
                 return self._json(out, 503 if "error" in out else 200)
+            if route == "/api/candles":
+                qs = parse_qs(parsed.query)
+                label = qs.get("u", ["NIFTY 50"])[0]
+                tf = qs.get("tf", ["5m"])[0]
+                key = candles.resolve_key(label, getattr(FEED, "_meta", None))
+                if not key:
+                    return self._json({"error": "unknown symbol"}, 404)
+                try:
+                    out = CANDLES.series(key, tf)
+                except upstox_rest.RestError as exc:
+                    return self._json({"error": str(exc)}, 503)
+                out["label"] = label
+                return self._json(out)
             if route == "/api/replay/days":
                 u = parse_qs(parsed.query).get("u", ["NIFTY 50"])[0]
                 try:

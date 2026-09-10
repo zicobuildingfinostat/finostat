@@ -73,6 +73,23 @@ check("two empty sides filled with OI/ΔOI/vol/bid/ask; existing socket OI untou
 summ = CH.oi_summary(sock, 24000.0)
 check("oi_summary works off the merged OI (PCR, walls)", summ and summ["pcr"] is not None and summ["call_wall"] == 24000 and summ["put_wall"] == 24000, summ)
 
+print("\n=== candles (chart) ===")
+import candles as CD
+meta = {"NSE_EQ|INE002A01018": {"kind": "stock", "label": "NSE:RELIANCE"}, "NSE_FO|1": {"kind": "option"}}
+check("resolve_key: index labels, NSE:SYM, bare SYM, raw keys, unknown", CD.resolve_key("NIFTY 50", meta) == "NSE_INDEX|Nifty 50" and CD.resolve_key("nifty", meta) == "NSE_INDEX|Nifty 50"
+      and CD.resolve_key("NSE:RELIANCE", meta) == "NSE_EQ|INE002A01018" and CD.resolve_key("reliance", meta) == "NSE_EQ|INE002A01018" and CD.resolve_key("NSE_FO|47317", meta) == "NSE_FO|47317" and CD.resolve_key("NSE:NOPE", meta) is None)
+one = []
+for day in ("2026-09-09", "2026-09-10"):
+    for i in range(75):                     # 75 five-minute bars = a full session
+        h, m = divmod(9 * 60 + 15 + 5 * i, 60)
+        px = 100 + i
+        one.append([f"{day}T{h:02d}:{m:02d}:00+05:30", px, px + 2, px - 1, px + 1, 10, 0])
+agg = CD.aggregate(one, 15)
+check("15m aggregate: 25 bars/day, aligned to 09:15, OHLC/volume folded", len(agg) == 50 and agg[0][0].endswith("09:15:00+05:30") and agg[1][0].endswith("09:30:00+05:30") and agg[0][1] == 100 and agg[0][2] == 104 and agg[0][3] == 99 and agg[0][4] == 103 and agg[0][5] == 30, agg[:2])
+hr = CD.aggregate(one, 60)
+check("1h aggregate: last bucket 15:15 holds 3 bars; first day has 7 bars", len(hr) == 14 and hr[6][0].endswith("15:15:00+05:30") and hr[6][5] == 30, [(x[0][11:16], x[5]) for x in hr[:7]])
+check("aggregate passthrough for 0", CD.aggregate(one, 0) is one)
+
 print("\n=== history engine ===")
 check("legs: iron condor = 4 legs, short at ±w, long at ±2w", H.legs_for("iron_condor", 24000, 50, 2) == [("CE", 24100, -1), ("PE", 23900, -1), ("CE", 24200, 1), ("PE", 23800, 1)])
 class FakeClient:

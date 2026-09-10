@@ -48,8 +48,8 @@ class Client:
     def token(self) -> str:
         return (self._token if self._token is not None else getattr(config, "UPSTOX_ACCESS_TOKEN", "")) or ""
 
-    def get(self, path: str, params: dict | None = None, ttl: float = 0.0, timeout: float = 25.0):
-        url = BASE + path + (("?" + urllib.parse.urlencode(params)) if params else "")
+    def get(self, path: str, params: dict | None = None, ttl: float = 0.0, timeout: float = 25.0, base: str = BASE):
+        url = base + path + (("?" + urllib.parse.urlencode(params)) if params else "")
         if ttl:
             hit = self._cache.get(url)
             if hit and time.time() - hit[0] < ttl:
@@ -76,6 +76,10 @@ class Client:
         if ttl:
             self._cache[url] = (time.time(), data)
         return data
+
+    def get_v3(self, path: str, ttl: float = 0.0):
+        """Same call against the v3 API (candles with arbitrary minute intervals)."""
+        return self.get(path, ttl=ttl, base=BASE.replace("/v2", "/v3"))
 
     # -- live chain --------------------------------------------------------
     def option_chain(self, u: str, expiry: str) -> dict:

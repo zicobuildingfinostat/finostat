@@ -185,8 +185,11 @@ button{cursor:pointer;background:none;border:0}
 .tk .warn{font-size:10.5px;color:var(--muted);line-height:1.5;margin:0 0 10px;padding:8px 10px;border-left:3px solid var(--down);background:rgba(255,92,108,.06)}
 .tk .warn input{width:auto;margin-right:6px}
 .tk .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tk .res{font-size:10.5px;margin-top:8px;line-height:1.5}.tk .res .ok{color:var(--up)}.tk .res .bad{color:var(--down)}
-.a-chart .ch-body{flex:1;min-height:420px;background:#06031a}
-.a-chart .ch-body>div{height:100%}
+.a-chart .ch-body{flex:1;min-height:420px;background:#06031a;display:flex;flex-direction:column;min-height:0}
+.ch-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line);font-size:10.5px;flex-shrink:0}
+.ch-tools .seg button{font-size:10px;letter-spacing:.08em;padding:3px 8px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.ch-tools .seg button.on{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.ch-ohlc{color:var(--text);font-variant-numeric:tabular-nums}.ch-ohlc b{color:var(--gold)}.ch-ohlc .up{color:var(--up)}.ch-ohlc .down{color:var(--down)}.ch-hint{margin-left:auto;color:var(--faint);font-size:10px}
+.ch-wrap{position:relative;flex:1;min-height:360px}#ch-cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
 .ch-note{color:var(--faint);font-weight:400;letter-spacing:.04em}
 .ch-sym{cursor:pointer}
 @media (max-width:980px){.a-chart{grid-column:auto;min-height:380px}.a-chart .ch-body{min-height:340px}}
@@ -472,9 +475,12 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <div class="cas-legend"><span><i style="background:#7fe0f0"></i>Index IEP / level</span><span><i style="background:#f5c842"></i>Synthetic future (ATM + CE − PE)</span><span><i style="background:#ff5c6c;height:1px"></i>3:15 reference</span></div>
   </section>
   <section class="panel a-chart" id="p-chart" aria-label="Chart">
-    <div class="panel-hd"><span class="k">CHRT</span><span class="s" id="ch-sym">NSE:NIFTY</span><span class="ch-note" id="ch-note">click any symbol on the desk to chart it · TradingView</span>
-      <span class="r"><a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:var(--faint)">tradingview.com</a></span></div>
-    <div class="ch-body"><div id="tv-chart"></div></div>
+    <div class="panel-hd"><span class="k">CHRT</span><span class="s" id="ch-sym">NIFTY 50</span><span class="ch-note" id="ch-note">click any symbol on the desk to chart it</span>
+      <span class="r"><span class="live off" id="ch-state">—</span></span></div>
+    <div class="ch-body">
+      <div class="ch-tools"><span class="seg" id="ch-tf"><button type="button" data-tf="1m">1m</button><button type="button" data-tf="5m" class="on">5m</button><button type="button" data-tf="15m">15m</button><button type="button" data-tf="1h">1h</button><button type="button" data-tf="D">D</button></span><span class="ch-ohlc" id="ch-ohlc">—</span><span class="ch-hint">scroll to zoom · drag to pan · NSE &amp; BSE data via Upstox</span></div>
+      <div class="ch-wrap"><canvas id="ch-cv"></canvas></div>
+    </div>
   </section>
   <section class="panel" id="p-watch" aria-label="Watchlist">
     <div class="panel-hd"><span class="k">WATCH</span><span class="s">MY WATCHLIST</span>
@@ -1058,33 +1064,69 @@ if(/[?&]broker=(connected|failed)/.test(location.search)){ var m=location.search
 window.finoBrokerReady=function(){ var d=brState.data; var up=d&&(d.brokers||[]).filter(function(b){ return b.id==='upstox'; })[0]; return !!(up&&up.connected&&!up.expired); };
 window.finoCanTrade=function(){ return !!(brState.data&&brState.data.can_trade); };
 window.finoBrokerPoll=pollBroker;
-/* ---------- TradingView chart: follows whatever symbol you click ---------- */
-var chart={sym:null,ready:false,loading:false,pending:'NIFTY 50'};
-var chSym=document.getElementById('ch-sym'), chNote=document.getElementById('ch-note'), chPanel=document.getElementById('p-chart');
-function tvSymbol(key){
-  var k=String(key||'').trim().toUpperCase();
-  var idx={'NIFTY 50':'NSE:NIFTY','NIFTY':'NSE:NIFTY','BANKNIFTY':'NSE:BANKNIFTY','NIFTY BANK':'NSE:BANKNIFTY','FINNIFTY':'NSE:CNXFINANCE','NIFTY FIN SERVICE':'NSE:CNXFINANCE','SENSEX':'BSE:SENSEX','INDIA VIX':'NSE:INDIAVIX','MIDCPNIFTY':'NSE:NIFTY_MID_SELECT'};
-  if(idx[k]) return idx[k];
-  var ex='NSE', s=k; if(k.indexOf('BSE:')===0){ ex='BSE'; s=k.slice(4); } else if(k.indexOf('NSE:')===0){ s=k.slice(4); }
-  return ex+':'+s.replace(/[&\-\s]+/g,'_').replace(/[^A-Z0-9_]/g,'');
+/* ---------- chart: our own candles from Upstox (TradingView's embed refuses NSE symbols) ---------- */
+var chart={sym:null,pending:'NIFTY 50',ready:true,loading:false,tf:'5m',data:[],n:120,end:0,hover:null,drag:null,timer:null,at:0};
+var chSym=document.getElementById('ch-sym'), chNote=document.getElementById('ch-note'), chPanel=document.getElementById('p-chart'), chState=document.getElementById('ch-state'), chOhlc=document.getElementById('ch-ohlc'), chCv=document.getElementById('ch-cv');
+function chFmt(v,d){ if(v==null||isNaN(v)) return '—'; d=d==null?(v>=1000?1:2):d; return Number(v).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function chVol(v){ if(!v) return '—'; return v>=1e7?(v/1e7).toFixed(2)+'cr':v>=1e5?(v/1e5).toFixed(1)+'L':v>=1000?(v/1000).toFixed(1)+'k':String(v); }
+function chColor(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#fff'; }
+function chMarketOpen(){ var d=new Date(Date.now()+(330+new Date().getTimezoneOffset())*60000); var m=d.getHours()*60+d.getMinutes(); return d.getDay()>0&&d.getDay()<6&&m>=9*60&&m<=15*60+45; }
+function fetchCandles(){
+  if(!chart.sym||window.FINO_LOCKED) return;
+  var sym=chart.sym, tf=chart.tf, atEnd=(chart.end>=chart.data.length-1);
+  fetch('/api/candles?u='+encodeURIComponent(sym)+'&tf='+tf,{credentials:'same-origin'}).then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); }).then(function(x){
+    if(sym!==chart.sym||tf!==chart.tf) return;
+    if(x.s>=400){ chNote.textContent=(x.j&&x.j.error)||('chart unavailable ('+x.s+')'); chState.textContent='—'; chState.className='live off'; return; }
+    var same=chart.data.length===x.j.candles.length; chart.data=x.j.candles; chart.at=Date.now();
+    if(!same||atEnd){ chart.end=chart.data.length-1; }
+    if(chart.n>chart.data.length) chart.n=chart.data.length;
+    var open=chMarketOpen(); chState.textContent=open?'LIVE':'CLOSED'; chState.className='live'+(open?'':' off');
+    var last=chart.data[chart.data.length-1], prev=chart.data.length>1?chart.data[chart.data.length-2]:last;
+    var base=tf==='D'?(prev?prev[4]:last[1]):chart.data.filter(function(c){ return c[0].slice(0,10)<last[0].slice(0,10); }).slice(-1)[0];
+    var ref=base?(Array.isArray(base)?base[4]:base):last[1]; var chg=last[4]-ref;
+    chNote.innerHTML='<b style="color:var(--gold)">'+chFmt(last[4])+'</b> <span class="'+(chg>=0?'up':'down')+'">'+(chg>=0?'+':'')+chFmt(chg)+' ('+(chg/ref*100).toFixed(2)+'%)</span> · '+tf+' · '+chart.data.length+' bars';
+    renderChart();
+  }).catch(function(){ chNote.textContent='chart: network'; });
 }
-function drawChart(){
-  if(!chart.pending||!chart.ready||!window.TradingView) return;
-  var tv=tvSymbol(chart.pending); chart.sym=chart.pending; chart.pending=null;
-  var host=document.getElementById('tv-chart'); host.innerHTML='';
-  chSym.textContent=tv; chNote.textContent=chart.sym+' · click any symbol on the desk to chart it';
-  new TradingView.widget({container_id:'tv-chart',autosize:true,symbol:tv,interval:'5',timezone:'Asia/Kolkata',theme:'dark',style:'1',locale:'en',
-    toolbar_bg:'#120a33',enable_publishing:false,hide_side_toolbar:false,allow_symbol_change:true,withdateranges:true,save_image:false,
-    backgroundColor:'#0c0626',gridColor:'rgba(74,52,160,0.22)',hide_top_toolbar:false,studies:[],details:false});
+function renderChart(){
+  var cv=chCv; if(!cv||chPanel.hidden) return; var d=chart.data; var r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1; var W=Math.max(200,Math.floor(r.width)), H=Math.max(160,Math.floor(r.height));
+  if(cv.width!==Math.floor(W*dpr)||cv.height!==Math.floor(H*dpr)){ cv.width=Math.floor(W*dpr); cv.height=Math.floor(H*dpr); }
+  var c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,H); c.font='10px IBM Plex Mono, monospace';
+  var C={up:chColor('--up'),down:chColor('--down'),gold:chColor('--gold'),cyan:chColor('--cyan'),faint:chColor('--faint'),muted:chColor('--muted'),text:chColor('--text')};
+  if(!d.length){ c.fillStyle=C.faint; c.fillText('loading candles…',12,24); return; }
+  var axR=64, axB=20, volH=Math.floor(H*.16); var pw=W-axR, ph=H-axB-volH-6;
+  var n=Math.max(10,Math.min(chart.n,d.length)); var end=Math.max(n-1,Math.min(chart.end,d.length-1)); var start=end-n+1; var vis=d.slice(start,end+1);
+  var hi=-Infinity, lo=Infinity, vmax=0; vis.forEach(function(k){ if(k[2]>hi) hi=k[2]; if(k[3]<lo) lo=k[3]; if(k[5]>vmax) vmax=k[5]; }); var pad=(hi-lo)*.08||1; hi+=pad; lo-=pad;
+  var bw=pw/n; var X=function(i){ return (i-start)*bw+bw/2; }, Y=function(p){ return 8+(hi-p)/(hi-lo)*(ph-8); };
+  c.strokeStyle='rgba(190,150,255,.10)'; c.fillStyle=C.faint; c.textAlign='left';
+  for(var g=0;g<=5;g++){ var p=lo+(hi-lo)*g/5, y=Y(p); c.beginPath(); c.moveTo(0,y); c.lineTo(pw,y); c.stroke(); c.fillText(chFmt(p),pw+6,y+3); }
+  var lastDay=null; c.textAlign='center'; var every=Math.max(1,Math.round(n/8));
+  vis.forEach(function(k,i){ var day=k[0].slice(0,10); var idx=start+i; if(chart.tf!=='D'&&lastDay&&day!==lastDay){ c.strokeStyle='rgba(190,150,255,.18)'; c.setLineDash([2,3]); c.beginPath(); c.moveTo(X(idx)-bw/2,0); c.lineTo(X(idx)-bw/2,H-axB); c.stroke(); c.setLineDash([]); }
+    if(i%every===0){ c.fillStyle=C.faint; c.fillText(chart.tf==='D'?day.slice(5):(day!==lastDay&&lastDay?day.slice(5)+' '+k[0].slice(11,16):k[0].slice(11,16)),X(idx),H-6); } lastDay=day; });
+  vis.forEach(function(k,i){ var idx=start+i, x=X(idx), up=k[4]>=k[1]; var col=up?C.up:C.down; var vh=vmax?k[5]/vmax*volH:0; c.fillStyle=up?'rgba(72,232,150,.28)':'rgba(255,92,120,.28)'; c.fillRect(x-bw*.35,H-axB-vh,Math.max(1,bw*.7),vh);
+    c.strokeStyle=col; c.fillStyle=col; c.lineWidth=1; c.beginPath(); c.moveTo(x,Y(k[2])); c.lineTo(x,Y(k[3])); c.stroke(); var yo=Y(k[1]), yc=Y(k[4]); var top=Math.min(yo,yc), h=Math.max(1,Math.abs(yo-yc)); var w=Math.max(1,bw*.62); if(bw>=3) c.fillRect(x-w/2,top,w,h); else c.fillRect(x-.5,top,1,h); });
+  var last=d[d.length-1]; if(end===d.length-1){ var yl=Y(last[4]); c.strokeStyle=C.gold; c.setLineDash([3,3]); c.beginPath(); c.moveTo(0,yl); c.lineTo(pw,yl); c.stroke(); c.setLineDash([]); c.fillStyle=C.gold; c.fillRect(pw+2,yl-8,axR-4,16); c.fillStyle='#2a1a02'; c.textAlign='left'; c.fillText(chFmt(last[4]),pw+6,yl+3); }
+  if(chart.hover!=null){ var hi_=Math.max(start,Math.min(end,chart.hover.i)); var k2=d[hi_]; var hx=X(hi_); c.strokeStyle='rgba(255,255,255,.35)'; c.setLineDash([3,3]); c.beginPath(); c.moveTo(hx,0); c.lineTo(hx,H-axB); c.stroke(); if(chart.hover.y!=null&&chart.hover.y<ph){ c.beginPath(); c.moveTo(0,chart.hover.y); c.lineTo(pw,chart.hover.y); c.stroke(); var pv=hi-(chart.hover.y-8)/(ph-8)*(hi-lo); c.setLineDash([]); c.fillStyle='rgba(255,255,255,.12)'; c.fillRect(pw+2,chart.hover.y-8,axR-4,16); c.fillStyle=C.text; c.textAlign='left'; c.fillText(chFmt(pv),pw+6,chart.hover.y+3); } c.setLineDash([]);
+    c.fillStyle='rgba(255,255,255,.12)'; c.textAlign='center'; c.fillRect(hx-38,H-axB+2,76,16); c.fillStyle=C.text; c.fillText(k2[0].slice(5,16).replace('T',' '),hx,H-axB+14);
+    var ch2=k2[4]-k2[1]; chOhlc.innerHTML='<b>O</b> '+chFmt(k2[1])+' <b>H</b> '+chFmt(k2[2])+' <b>L</b> '+chFmt(k2[3])+' <b>C</b> '+chFmt(k2[4])+' <span class="'+(ch2>=0?'up':'down')+'">'+(ch2>=0?'+':'')+chFmt(ch2)+'</span> <b>V</b> '+chVol(k2[5]); }
+  else { var k3=d[end]; var ch3=k3[4]-k3[1]; chOhlc.innerHTML='<b>O</b> '+chFmt(k3[1])+' <b>H</b> '+chFmt(k3[2])+' <b>L</b> '+chFmt(k3[3])+' <b>C</b> '+chFmt(k3[4])+' <span class="'+(ch3>=0?'up':'down')+'">'+(ch3>=0?'+':'')+chFmt(ch3)+'</span> <b>V</b> '+chVol(k3[5]); }
+  chart._geo={start:start,end:end,bw:bw,pw:pw,ph:ph};
 }
-function loadTV(){
-  if(chart.ready||chart.loading||window.FINO_LOCKED||chPanel.hidden) return;
-  chart.loading=true; var s=document.createElement('script'); s.src='https://s3.tradingview.com/tv.js'; s.async=true;
-  s.onload=function(){ chart.ready=true; chart.loading=false; drawChart(); }; s.onerror=function(){ chart.loading=false; chNote.textContent='chart unavailable (tradingview.com blocked?)'; };
-  document.head.appendChild(s);
-}
-function chartTo(key){ if(!key) return; if(chart.sym===key&&!chart.pending) return; chart.pending=key; if(chPanel.hidden) return; chart.ready?drawChart():loadTV(); }
+function drawChart(){ if(chart.pending){ chart.sym=chart.pending; chart.pending=null; chart.data=[]; chart.end=0; chSym.textContent=chart.sym; chNote.textContent='loading '+chart.sym+'…'; chOhlc.textContent='—'; renderChart(); fetchCandles(); } else renderChart(); }
+function loadTV(){ drawChart(); }
+function chartTo(key){ if(!key) return; if(chart.sym===key&&!chart.pending) return; chart.pending=key; if(chPanel.hidden) return; drawChart(); }
 window.finoChartTo=chartTo;            /* the builder lives in its own scope below */
+if(chCv){
+  document.getElementById('ch-tf').addEventListener('click',function(e){ var b=e.target.closest('button[data-tf]'); if(!b) return; Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); chart.tf=b.getAttribute('data-tf'); chart.data=[]; chart.n=120; chart.end=0; chNote.textContent='loading…'; renderChart(); fetchCandles(); });
+  chCv.addEventListener('wheel',function(e){ if(!chart.data.length) return; e.preventDefault(); var g=chart._geo; if(!g) return; var r=chCv.getBoundingClientRect(); var fx=(e.clientX-r.left)/g.pw; var n0=chart.n; var n1=Math.round(Math.max(15,Math.min(chart.data.length,n0*(e.deltaY>0?1.18:0.85)))); var anchor=g.start+fx*n0; chart.n=n1; chart.end=Math.max(n1-1,Math.min(chart.data.length-1,Math.round(anchor+(1-fx)*n1-1))); renderChart(); },{passive:false});
+  chCv.addEventListener('pointerdown',function(e){ chart.drag={x:e.clientX,end:chart.end}; chCv.setPointerCapture(e.pointerId); });
+  chCv.addEventListener('pointermove',function(e){ var r=chCv.getBoundingClientRect(); var g=chart._geo; if(!g) return; if(chart.drag){ var dx=e.clientX-chart.drag.x; var shift=Math.round(-dx/g.bw); chart.end=Math.max(Math.min(chart.n,chart.data.length)-1,Math.min(chart.data.length-1,chart.drag.end+shift)); }
+    var i=g.start+Math.floor((e.clientX-r.left)/g.bw); chart.hover={i:i,y:e.clientY-r.top}; renderChart(); });
+  chCv.addEventListener('pointerup',function(){ chart.drag=null; }); chCv.addEventListener('pointercancel',function(){ chart.drag=null; });
+  chCv.addEventListener('pointerleave',function(){ chart.drag=null; chart.hover=null; renderChart(); });
+  window.addEventListener('resize',function(){ renderChart(); });
+  setInterval(function(){ if(document.hidden||chPanel.hidden||!chart.sym) return; var age=Date.now()-chart.at; if((chMarketOpen()&&age>20000)||age>300000) fetchCandles(); },5000);
+}
 var prefs={watchlist:['NIFTY 50','BANKNIFTY','INDIA VIX'],layout:{hide:[]}};
 try{ var lp=JSON.parse(localStorage.getItem('fino_prefs_v1')||'null'); if(lp&&lp.watchlist) prefs=lp; }catch(e){}
 var signedIn=false, saveTimer=null;
