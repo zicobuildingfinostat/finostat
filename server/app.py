@@ -116,6 +116,7 @@ CAS = cas.Recorder(FEED, CHAINS, cas.Store(AUTH.path))
 BOOK = book.Store(AUTH.path)
 HOLIDAYS = holidays.Holidays(AUTH.path)
 UREST = upstox_rest.Client()
+CHAINS.rest = UREST                    # builder chains get OI, ΔOI and volume from the REST chain
 HIST = history.History(UREST, upstox_rest.CandleStore(recorder._data_dir() / "history.db"))
 _ANALYTICS_U = ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX")
 

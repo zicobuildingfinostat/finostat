@@ -1231,7 +1231,7 @@ function renderChain(c){
       +'<td class="k">'+r.strike+'</td><td class="px" data-r="PE" data-k="'+r.strike+'">'+(pe.ltp!=null?pe.ltp.toFixed(2):'—')+'</td><td>'+(pe.iv!=null?pe.iv.toFixed(1):'—')+'</td>'+chTd(pe)+oiTd('pe',pe)+'</tr>';
   }).join('');
   var since=null; c.rows.some(function(r){ var s=(r.ce&&r.ce.oi_since)||(r.pe&&r.pe.oi_since); if(s){ since=s; return true; } });
-  blChainNote.textContent=(o?'OI from the exchange feed · ΔOI since the first tick seen today · click a price to add that leg':'this chain socket carries no open interest yet')+(c.live?'':' · last traded');
+  blChainNote.textContent=(o?'OI from the exchange '+(c.oi_source==='rest'?'(Upstox) · ΔOI vs previous close':'feed · ΔOI since the first tick seen today')+' · click a price to add that leg':'no open interest for this chain yet')+(c.live?'':' · last traded');
 }
 blChainBtn.addEventListener('click',function(){ bl.chainOpen=!bl.chainOpen; blChainBtn.classList.toggle('on',bl.chainOpen); blChain.hidden=!bl.chainOpen; if(!bl.chainOpen) blOi.hidden=true; else loadChain(); });
 blChainRows.addEventListener('click',function(e){ var td=e.target.closest('td.px'); if(!td||bl.legs.length>=8) return; bl.legs.push({right:td.getAttribute('data-r'),strike:Number(td.getAttribute('data-k')),qty:1}); bl.preset=null; priceStrategy(); });

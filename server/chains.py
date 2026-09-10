@@ -13,11 +13,39 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 import bs
 from contracts import INDEX_UNDERLYINGS
 
 log = logging.getLogger("finostat.chains")
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def merge_rest_oi(rows: list[dict], rest_rows: list[dict]) -> int:
+    """Fill open interest, ΔOI (vs previous close), volume, bid/ask — and IV where ours is
+    missing — from an Upstox REST chain. The socket's LTPC mode carries none of that on the
+    Standard plan. Returns how many option sides received OI."""
+    by = {r["strike"]: r for r in rest_rows}
+    n = 0
+    for row in rows:
+        src = by.get(row["strike"])
+        if not src:
+            continue
+        for side in ("ce", "pe"):
+            dst, s = row.get(side), src.get(side)
+            if not dst or not s:
+                continue
+            if dst.get("oi") is None and s.get("oi") is not None:
+                dst["oi"], dst["oi_chg"], dst["oi_since"] = s["oi"], s.get("oi_chg"), "prev close"
+                n += 1
+            if dst.get("vol") is None and s.get("vol") is not None:
+                dst["vol"] = s["vol"]
+            if dst.get("bid") is None and s.get("bid") is not None:
+                dst["bid"], dst["ask"] = s["bid"], s.get("ask")
+            if dst.get("iv") is None and s.get("iv"):
+                dst["iv"] = round(float(s["iv"]), 2)
+    return n
 
 
 def oi_summary(rows: list[dict], spot: float) -> dict | None:
@@ -46,6 +74,8 @@ class ChainManager:
     def __init__(self, feed, contracts, half: int = 10, ttl: float = 600.0, max_warm: int = 40):
         self.feed, self.contracts = feed, contracts
         self.half, self.ttl, self.max_warm = half, ttl, max_warm
+        self.rest = None                      # upstox_rest.Client, set by the app: OI + Greeks the socket lacks
+        self._rest_warned = 0.0
         self._lock = threading.Lock()
         self._warm: dict[str, dict] = {}     # ukey -> {expiry, keys, last, name}
         self._stop = threading.Event()
@@ -120,9 +150,20 @@ class ChainManager:
             rows.append(entry)
         step = self.contracts.step(name, expiry)
         atm = next((r["strike"] for r in ladder if r["atm"]), None)
+        oi_source = "socket"
+        if self.rest is not None and kind == "index" and any(row.get(sd) and row[sd].get("oi") is None for row in rows for sd in ("ce", "pe")):
+            day = datetime.fromtimestamp(expiry / 1000, IST).strftime("%Y-%m-%d")
+            try:
+                rc = self.rest.option_chain(ukey, day)                    # cached 30 s inside the client
+                if merge_rest_oi(rows, rc.get("rows") or []):
+                    oi_source = "rest"
+            except Exception as exc:                                       # noqa: BLE001 - OI is a bonus, never a blocker
+                if now - self._rest_warned > 300:
+                    self._rest_warned = now
+                    log.info("chain OI via REST unavailable for %s: %s", ukey, exc)
         oi = oi_summary(rows, spot)
         return {
-            "oi": oi,
+            "oi": oi, "oi_source": oi_source, "oi_basis": "prev close" if oi_source == "rest" else "day open",
             "underlying": ukey, "kind": kind, "name": name, "exchange": exch,
             "spot": round(spot, 2), "expiry": expiry, "expiries": expiries[:6],
             "step": step, "atm": atm, "lot": ladder[0]["lot"], "t_years": round(t, 6),

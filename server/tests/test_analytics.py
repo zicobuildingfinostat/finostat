@@ -60,6 +60,19 @@ check("calls positive, puts negative, cumulative and flip present", g and all(x[
 check("largest + is above spot (call OI heavier there), largest − below", g and g["max_pos"]["strike"] >= SPOT and g["max_neg"]["strike"] <= SPOT, g and (g["max_pos"], g["max_neg"]))
 check("no OI -> None", A.gex(chain(oi=False), SPOT, 65, T) is None)
 
+print("\n=== chain OI merge (REST into socket rows) ===")
+import chains as CH
+sock = [{"strike": 24000, "atm": True, "ce": {"ltp": 100.0, "iv": 12.0, "oi": None, "oi_chg": None, "vol": None, "bid": None, "ask": None}, "pe": {"ltp": 98.0, "iv": None, "oi": None, "vol": None, "bid": None, "ask": None}},
+        {"strike": 24050, "atm": False, "ce": None, "pe": {"ltp": 120.0, "iv": 12.5, "oi": 777, "oi_chg": 5, "vol": 9, "bid": 119, "ask": 121}}]
+rest = [{"strike": 24000, "ce": {"ltp": 100.5, "iv": 12.2, "oi": 500000, "oi_chg": 12000, "vol": 3000, "bid": 100, "ask": 101}, "pe": {"ltp": 98.2, "iv": 13.1, "oi": 400000, "oi_chg": -8000, "vol": 2500, "bid": 98, "ask": 99}},
+        {"strike": 24050, "ce": {"ltp": 80, "iv": 12, "oi": 1, "oi_chg": 0, "vol": 1, "bid": 1, "ask": 2}, "pe": {"ltp": 121, "iv": 12.6, "oi": 999, "oi_chg": 1, "vol": 1, "bid": 1, "ask": 2}}]
+n = CH.merge_rest_oi(sock, rest)
+check("two empty sides filled with OI/ΔOI/vol/bid/ask; existing socket OI untouched; missing IV taken, own IV kept",
+      n == 2 and sock[0]["ce"]["oi"] == 500000 and sock[0]["ce"]["oi_chg"] == 12000 and sock[0]["ce"]["oi_since"] == "prev close" and sock[0]["ce"]["iv"] == 12.0
+      and sock[0]["pe"]["iv"] == 13.1 and sock[0]["pe"]["vol"] == 2500 and sock[1]["pe"]["oi"] == 777 and sock[1]["ce"] is None, (n, sock))
+summ = CH.oi_summary(sock, 23990.0)
+check("oi_summary works off the merged OI (PCR, walls)", summ and summ["pcr"] is not None and summ["call_wall"] == 24000 and summ["put_wall"] == 24000, summ)
+
 print("\n=== history engine ===")
 check("legs: iron condor = 4 legs, short at ±w, long at ±2w", H.legs_for("iron_condor", 24000, 50, 2) == [("CE", 24100, -1), ("PE", 23900, -1), ("CE", 24200, 1), ("PE", 23800, 1)])
 class FakeClient:
