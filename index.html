@@ -322,6 +322,28 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   .strats,.learn-grid{grid-template-columns:1fr}
   .session{grid-column:span 1;padding:22px 20px}
 }
+
+/* mobile menu */
+.burger{display:none;width:42px;height:42px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);border-radius:6px;cursor:pointer;padding:0;flex:0 0 auto;position:relative;margin-left:auto}
+.burger span{position:absolute;left:11px;right:11px;height:2px;background:var(--gold);border-radius:2px;transition:transform .25s,opacity .2s,top .25s}
+.burger span:nth-child(1){top:13px}.burger span:nth-child(2){top:20px}.burger span:nth-child(3){top:27px}
+.burger[aria-expanded="true"] span:nth-child(1){top:20px;transform:rotate(45deg)}.burger[aria-expanded="true"] span:nth-child(2){opacity:0}.burger[aria-expanded="true"] span:nth-child(3){top:20px;transform:rotate(-45deg)}
+#mnav{display:none;position:fixed;top:60px;left:0;right:0;bottom:0;z-index:29;background:rgba(12,6,38,.98);backdrop-filter:blur(14px);overflow-y:auto;padding:18px 0 40px;-webkit-overflow-scrolling:touch}
+#mnav.open{display:block}
+#mnav .grp{padding:8px 0 14px}#mnav .grp h5{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);margin:0 0 4px;padding:0 4px}
+#mnav .grp a{display:flex;align-items:center;justify-content:space-between;padding:13px 6px;border-bottom:1px solid rgba(190,150,255,.12);font-family:var(--display);font-size:21px;text-transform:uppercase;letter-spacing:.02em;color:var(--text);text-decoration:none}
+#mnav .grp a small{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:none;color:var(--muted)}
+#mnav .grp a.hot{color:var(--gold)}#mnav .grp a:active{background:rgba(245,200,66,.08)}
+#mnav .mcta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 14px}#mnav .mcta .btn{justify-content:center;text-align:center}
+body.menu-open{overflow:hidden}
+@media (max-width:700px){
+  .burger{display:block}
+  .cmdbar .wrap{gap:10px}
+  .nav-cta{margin-left:auto}.burger{margin-left:0}
+  .nav-cta .primary{padding:10px 12px;font-size:11px}
+  .intro .proof{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+  .intro h1{font-size:40px}
+}
 </style>
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://finostat.com/#org","name":"Finostat","url":"https://finostat.com/","logo":"https://finostat.com/og.jpg","email":"zico@finostat.com","description":"Live options analytics terminal and derivatives education for Indian markets: NSE and BSE real-time data, option chains with Greeks, a strategy builder, server-side alerts and the Finch course.","founder":{"@type":"Person","@id":"https://finostat.com/founders#person","name":"Zico Karmakar","url":"https://finostat.com/founders"},"sameAs":["https://www.youtube.com/@finostat","https://www.instagram.com/chase.alpha_/"],"areaServed":"IN"},{"@type":"WebSite","@id":"https://finostat.com/#website","url":"https://finostat.com/","name":"Finostat","alternateName":["finostat.com","Finostat terminal"],"publisher":{"@id":"https://finostat.com/#org"},"inLanguage":"en-IN"},{"@type":"WebPage","@id":"https://finostat.com/#page","url":"https://finostat.com/","name":"Finostat — Desk-grade options analytics for Nifty, BankNifty & Sensex","isPartOf":{"@id":"https://finostat.com/#website"},"about":{"@id":"https://finostat.com/#org"}}]}</script>
 </head>
@@ -348,8 +370,31 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
       <a class="btn ghost" href="/login">Sign in</a>
       <a class="btn primary" href="/signup">Get started</a>
     </div>
+    <button class="burger" id="burger" aria-label="Open menu" aria-controls="mnav" aria-expanded="false"><span></span><span></span><span></span></button>
   </div>
 </header>
+<nav id="mnav" aria-label="Mobile menu"><div class="wrap">
+  <div class="mcta"><a class="btn primary lg" href="/dashboard">Open the terminal →</a><a class="btn lg" href="/login">Sign in</a></div>
+  <div class="grp"><h5>Terminal</h5>
+    <a class="hot" href="/dashboard">Trading terminal<small>live sheets</small></a>
+    <a href="/dashboard#builder">Strategy builder<small>price any structure</small></a>
+    <a href="/calendar">Economic calendar<small>free · IST</small></a>
+    <a href="/calendar/expiry-dates">Expiry dates<small>NIFTY · BANKNIFTY · SENSEX</small></a>
+    <a href="/brief">Daily expiry brief<small>09:20 IST</small></a>
+  </div>
+  <div class="grp"><h5>Learn</h5>
+    <a href="/finch">Finch course<small>12 chapters, live data</small></a>
+    <a href="#strategies">Strategies<small>explained</small></a>
+    <a href="/assessment">Trader assessment<small>3 minutes</small></a>
+    <a href="#watch">Videos &amp; reels</a>
+  </div>
+  <div class="grp"><h5>Account</h5>
+    <a class="hot" href="#plans">See plans<small>Desk ₹2,199 · Pro ₹5,599</small></a>
+    <a href="/signup">Get started<small>free account</small></a>
+    <a href="/contact">Contact us</a>
+    <a href="/founders">The founder</a>
+  </div>
+</div></nav>
 
 <!-- DESK -->
 <div class="desk">
@@ -725,7 +770,11 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   const simSheet=()=>applySheet(rows.map(r=>{const c=r.slice();for(let j=1;j<=3;j++)c[j]=Math.round(Math.max(0.5,c[j]+(Math.random()-.5)*(j===3?1.6:3.6))*10)/10;c[4]=Math.round((c[4]+(Math.random()-.5)*.6)*10)/10;return c;}));
   /* Always re-attempt the server. Latching 'offline' permanently would mean a
      brief blip left the page on fake numbers until a reload. */
-  const pollSheet=()=>fetch('/api/sheet').then(r=>r.json()).then(d=>{if(d.rows&&d.rows.length)applySheet(d.rows);}).catch(simSheet);
+  /* The live sheet is a Desk feature: a 402 means "not signed in / not paid". Stop asking the
+     server and animate the baked snapshot as a demo instead of hammering the API every second. */
+  let ss=null, demoTimer=null;
+  const paywalled=()=>{ stopPolling(); if(ss){ ss.close(); ss=null; } if(!demoTimer&&!reduce) demoTimer=setInterval(simSheet, 2500); };
+  const pollSheet=()=>fetch('/api/sheet').then(r=>{ if(r.status===402){ paywalled(); return null; } return r.json(); }).then(d=>{if(d&&d.rows&&d.rows.length)applySheet(d.rows);}).catch(simSheet);
 
   /* Prefer the server push: the sheet arrives as it changes rather than on a
      timer, which is what keeps the refresh under 250 ms end to end. Polling is
@@ -734,7 +783,7 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   const startPolling=()=>{if(!sheetTimer) sheetTimer=setInterval(pollSheet, reduce?5000:900);};
   const stopPolling=()=>{if(sheetTimer){clearInterval(sheetTimer); sheetTimer=null;}};
   if('EventSource' in window){
-    const ss=new EventSource('/api/sheet/stream');
+    ss=new EventSource('/api/sheet/stream');
     ss.addEventListener('sheet',e=>{
       streamed=true; stopPolling();
       let d; try{ d=JSON.parse(e.data); }catch(_){ return; }
@@ -762,7 +811,7 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   if(reduce) typed.textContent=cmds[0]; else type();
 
   /* ---- mini sheet ---- */
-  const mini=(window.FINO&&window.FINO.mini)||[[54000,11.4,-8.2],[54100,14.8,-6.1],[54200,9.7,-9.9],[54300,7.3,-12.4]];
+  const mini=(window.FINO&&window.FINO.mini&&window.FINO.mini.length)?window.FINO.mini:[[54000,11.4,-8.2],[54100,14.8,-6.1],[54200,9.7,-9.9],[54300,7.3,-12.4]];
   const mr=document.getElementById('mini-rows');
   const drawMini=()=>mr.innerHTML=mini.map(r=>`<tr><td>${r[0]}</td><td>${r[1].toFixed(1)}</td><td class="down">${r[2].toFixed(1)}</td><td class="${r[1]+r[2]>=0?'up':'down'}">${(r[1]+r[2]).toFixed(1)}</td></tr>`).join('');
   drawMini();
@@ -833,6 +882,16 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
   document.querySelectorAll('.rv').forEach(el=>io.observe(el));
 })();
 
+</script>
+<script>
+(function(){
+  var b=document.getElementById('burger'),m=document.getElementById('mnav');if(!b||!m)return;
+  function set(open){m.classList.toggle('open',open);b.setAttribute('aria-expanded',open?'true':'false');b.setAttribute('aria-label',open?'Close menu':'Open menu');document.body.classList.toggle('menu-open',open);}
+  b.addEventListener('click',function(){set(!m.classList.contains('open'));});
+  m.addEventListener('click',function(e){if(e.target.closest('a'))set(false);});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')set(false);});
+  window.addEventListener('resize',function(){if(window.innerWidth>700)set(false);});
+})();
 </script>
 </body>
 </html>

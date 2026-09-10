@@ -1435,6 +1435,7 @@ if(seed.rows&&seed.rows.length){ ingest(seed); } else { renderSheet([],null); }
 renderAlerts();
 })();
 </script>
+<script>(function(){var h=(location.hash||'').replace('#','');var el=h&&document.getElementById('p-'+h);if(el){setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});},300);}})();</script>
 </body>
 </html>
 """
