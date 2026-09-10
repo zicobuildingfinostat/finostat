@@ -188,6 +188,7 @@ button{cursor:pointer;background:none;border:0}
 .a-chart .ch-body{flex:1;min-height:420px;background:#06031a;display:flex;flex-direction:column;min-height:0}
 .ch-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line);font-size:10.5px;flex-shrink:0}
 .ch-tools .seg button{font-size:10px;letter-spacing:.08em;padding:3px 8px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.ch-tools .seg button.on{background:var(--gold);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.ch-tog{font-size:10px;letter-spacing:.08em;padding:3px 8px;border:1px solid var(--line-strong);color:var(--muted);background:none;cursor:pointer}.ch-tog.on{border-color:var(--cyan);color:var(--cyan)}
 .ch-ohlc{color:var(--text);font-variant-numeric:tabular-nums}.ch-ohlc b{color:var(--gold)}.ch-ohlc .up{color:var(--up)}.ch-ohlc .down{color:var(--down)}.ch-hint{margin-left:auto;color:var(--faint);font-size:10px}
 .ch-wrap{position:relative;flex:1;min-height:360px}#ch-cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
 .ch-note{color:var(--faint);font-weight:400;letter-spacing:.04em}
@@ -478,7 +479,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     <div class="panel-hd"><span class="k">CHRT</span><span class="s" id="ch-sym">NIFTY 50</span><span class="ch-note" id="ch-note">click any symbol on the desk to chart it</span>
       <span class="r"><span class="live off" id="ch-state">—</span></span></div>
     <div class="ch-body">
-      <div class="ch-tools"><span class="seg" id="ch-tf"><button type="button" data-tf="1m">1m</button><button type="button" data-tf="5m" class="on">5m</button><button type="button" data-tf="15m">15m</button><button type="button" data-tf="1h">1h</button><button type="button" data-tf="D">D</button></span><span class="ch-ohlc" id="ch-ohlc">—</span><span class="ch-hint">scroll to zoom · drag to pan · NSE &amp; BSE data via Upstox</span></div>
+      <div class="ch-tools"><span class="seg" id="ch-tf"><button type="button" data-tf="1m">1m</button><button type="button" data-tf="5m" class="on">5m</button><button type="button" data-tf="15m">15m</button><button type="button" data-tf="1h">1h</button><button type="button" data-tf="D">D</button></span><button type="button" class="ch-tog on" id="ch-vp" title="Volume profile of the visible range">VP</button><span class="ch-ohlc" id="ch-ohlc">—</span><span class="ch-hint">scroll to zoom · drag to pan · NSE &amp; BSE data via Upstox</span></div>
       <div class="ch-wrap"><canvas id="ch-cv"></canvas></div>
     </div>
   </section>
@@ -1065,7 +1066,8 @@ window.finoBrokerReady=function(){ var d=brState.data; var up=d&&(d.brokers||[])
 window.finoCanTrade=function(){ return !!(brState.data&&brState.data.can_trade); };
 window.finoBrokerPoll=pollBroker;
 /* ---------- chart: our own candles from Upstox (TradingView's embed refuses NSE symbols) ---------- */
-var chart={sym:null,pending:'NIFTY 50',ready:true,loading:false,tf:'5m',data:[],n:120,end:0,hover:null,drag:null,timer:null,at:0};
+var chart={sym:null,pending:'NIFTY 50',ready:true,loading:false,tf:'5m',data:[],n:120,end:0,hover:null,drag:null,timer:null,at:0,vp:true};
+try{ chart.vp=localStorage.getItem('fino_chart_vp')!=='off'; }catch(e){}
 var chSym=document.getElementById('ch-sym'), chNote=document.getElementById('ch-note'), chPanel=document.getElementById('p-chart'), chState=document.getElementById('ch-state'), chOhlc=document.getElementById('ch-ohlc'), chCv=document.getElementById('ch-cv');
 function chFmt(v,d){ if(v==null||isNaN(v)) return '—'; d=d==null?(v>=1000?1:2):d; return Number(v).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function chVol(v){ if(!v) return '—'; return v>=1e7?(v/1e7).toFixed(2)+'cr':v>=1e5?(v/1e5).toFixed(1)+'L':v>=1000?(v/1000).toFixed(1)+'k':String(v); }
@@ -1105,6 +1107,20 @@ function renderChart(){
     if(i%every===0){ c.fillStyle=C.faint; c.fillText(chart.tf==='D'?day.slice(5):(day!==lastDay&&lastDay?day.slice(5)+' '+k[0].slice(11,16):k[0].slice(11,16)),X(idx),H-6); } lastDay=day; });
   vis.forEach(function(k,i){ var idx=start+i, x=X(idx), up=k[4]>=k[1]; var col=up?C.up:C.down; var vh=vmax?k[5]/vmax*volH:0; c.fillStyle=up?'rgba(72,232,150,.28)':'rgba(255,92,120,.28)'; c.fillRect(x-bw*.35,H-axB-vh,Math.max(1,bw*.7),vh);
     c.strokeStyle=col; c.fillStyle=col; c.lineWidth=1; c.beginPath(); c.moveTo(x,Y(k[2])); c.lineTo(x,Y(k[3])); c.stroke(); var yo=Y(k[1]), yc=Y(k[4]); var top=Math.min(yo,yc), h=Math.max(1,Math.abs(yo-yc)); var w=Math.max(1,bw*.62); if(bw>=3) c.fillRect(x-w/2,top,w,h); else c.fillRect(x-.5,top,1,h); });
+  /* volume profile of the visible range: volume spread across each bar's low–high, 48 price bins,
+     point of control (POC) and the 70% value area (VAH/VAL) */
+  var vpInfo=null;
+  if(chart.vp&&vmax>0){ var bins=48, bh=(hi-lo)/bins, prof=new Array(bins).fill(0), profUp=new Array(bins).fill(0), tot=0;
+    vis.forEach(function(k){ var l=k[3], h=k[2], v=k[5]||0; if(!v) return; var b0=Math.max(0,Math.floor((l-lo)/bh)), b1=Math.min(bins-1,Math.floor((h-lo)/bh)); var per=v/(b1-b0+1); for(var b=b0;b<=b1;b++){ prof[b]+=per; if(k[4]>=k[1]) profUp[b]+=per; } tot+=v; });
+    var pmax=Math.max.apply(null,prof)||1, poc=prof.indexOf(pmax); var inVA=new Array(bins).fill(false); inVA[poc]=true; var acc=prof[poc], up_=poc+1, dn_=poc-1;
+    while(acc<tot*.7&&(up_<bins||dn_>=0)){ var a=up_<bins?prof[up_]:-1, b=dn_>=0?prof[dn_]:-1; if(a>=b){ inVA[up_]=true; acc+=a; up_++; } else { inVA[dn_]=true; acc+=b; dn_--; } }
+    var maxW=pw*.22; for(var bi=0;bi<bins;bi++){ if(!prof[bi]) continue; var yTop=Y(lo+(bi+1)*bh), yBot=Y(lo+bi*bh), w=prof[bi]/pmax*maxW; var upW=prof[bi]?w*profUp[bi]/prof[bi]:0;
+      c.fillStyle=bi===poc?'rgba(245,200,66,.55)':(inVA[bi]?'rgba(70,225,255,.30)':'rgba(70,225,255,.13)'); c.fillRect(pw-w,yTop+.5,w,Math.max(1,yBot-yTop-1));
+      if(bi!==poc){ c.fillStyle=inVA[bi]?'rgba(72,232,150,.22)':'rgba(72,232,150,.10)'; c.fillRect(pw-upW,yTop+.5,upW,Math.max(1,yBot-yTop-1)); } }
+    var vah=lo+(up_)*bh, val=lo+(dn_+1)*bh, pocP=lo+(poc+.5)*bh; var yp=Y(pocP); c.strokeStyle='rgba(245,200,66,.7)'; c.setLineDash([4,3]); c.beginPath(); c.moveTo(0,yp); c.lineTo(pw,yp); c.stroke(); c.setLineDash([]);
+    c.fillStyle=C.gold; c.textAlign='left'; c.fillText('POC '+chFmt(pocP),6,yp-4); c.fillStyle='rgba(70,225,255,.9)'; c.fillText('VAH '+chFmt(vah),6,Y(vah)-4); c.fillText('VAL '+chFmt(val),6,Y(val)+12);
+    vpInfo={poc:pocP,vah:vah,val:val}; }
+  chart._vp=vpInfo;
   var last=d[d.length-1]; if(end===d.length-1){ var yl=Y(last[4]); c.strokeStyle=C.gold; c.setLineDash([3,3]); c.beginPath(); c.moveTo(0,yl); c.lineTo(pw,yl); c.stroke(); c.setLineDash([]); c.fillStyle=C.gold; c.fillRect(pw+2,yl-8,axR-4,16); c.fillStyle='#2a1a02'; c.textAlign='left'; c.fillText(chFmt(last[4]),pw+6,yl+3); }
   if(chart.hover!=null){ var hi_=Math.max(start,Math.min(end,chart.hover.i)); var k2=d[hi_]; var hx=X(hi_); c.strokeStyle='rgba(255,255,255,.35)'; c.setLineDash([3,3]); c.beginPath(); c.moveTo(hx,0); c.lineTo(hx,H-axB); c.stroke(); if(chart.hover.y!=null&&chart.hover.y<ph){ c.beginPath(); c.moveTo(0,chart.hover.y); c.lineTo(pw,chart.hover.y); c.stroke(); var pv=hi-(chart.hover.y-8)/(ph-8)*(hi-lo); c.setLineDash([]); c.fillStyle='rgba(255,255,255,.12)'; c.fillRect(pw+2,chart.hover.y-8,axR-4,16); c.fillStyle=C.text; c.textAlign='left'; c.fillText(chFmt(pv),pw+6,chart.hover.y+3); } c.setLineDash([]);
     c.fillStyle='rgba(255,255,255,.12)'; c.textAlign='center'; c.fillRect(hx-38,H-axB+2,76,16); c.fillStyle=C.text; c.fillText(k2[0].slice(5,16).replace('T',' '),hx,H-axB+14);
@@ -1118,6 +1134,8 @@ function chartTo(key){ if(!key) return; if(chart.sym===key&&!chart.pending) retu
 window.finoChartTo=chartTo;            /* the builder lives in its own scope below */
 if(chCv){
   document.getElementById('ch-tf').addEventListener('click',function(e){ var b=e.target.closest('button[data-tf]'); if(!b) return; Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); chart.tf=b.getAttribute('data-tf'); chart.data=[]; chart.n=120; chart.end=0; chNote.textContent='loading…'; renderChart(); fetchCandles(); });
+  document.getElementById('ch-vp').addEventListener('click',function(){ chart.vp=!chart.vp; this.classList.toggle('on',chart.vp); try{ localStorage.setItem('fino_chart_vp',chart.vp?'on':'off'); }catch(e){} renderChart(); });
+  document.getElementById('ch-vp').classList.toggle('on',chart.vp);
   chCv.addEventListener('wheel',function(e){ if(!chart.data.length) return; e.preventDefault(); var g=chart._geo; if(!g) return; var r=chCv.getBoundingClientRect(); var fx=(e.clientX-r.left)/g.pw; var n0=chart.n; var n1=Math.round(Math.max(15,Math.min(chart.data.length,n0*(e.deltaY>0?1.18:0.85)))); var anchor=g.start+fx*n0; chart.n=n1; chart.end=Math.max(n1-1,Math.min(chart.data.length-1,Math.round(anchor+(1-fx)*n1-1))); renderChart(); },{passive:false});
   chCv.addEventListener('pointerdown',function(e){ chart.drag={x:e.clientX,end:chart.end}; chCv.setPointerCapture(e.pointerId); });
   chCv.addEventListener('pointermove',function(e){ var r=chCv.getBoundingClientRect(); var g=chart._geo; if(!g) return; if(chart.drag){ var dx=e.clientX-chart.drag.x; var shift=Math.round(-dx/g.bw); chart.end=Math.max(Math.min(chart.n,chart.data.length)-1,Math.min(chart.data.length-1,chart.drag.end+shift)); }
