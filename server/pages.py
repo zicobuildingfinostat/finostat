@@ -1058,8 +1058,60 @@ renderAlerts();
 """
 
 
-def render_dashboard(snapshot: dict) -> bytes:
-    return DASHBOARD.replace("__SEED__", _seed(snapshot)).encode("utf-8")
+_PAYWALL_CSS = """<style>
+body.locked main.desk{filter:blur(7px) saturate(.8);pointer-events:none;user-select:none;opacity:.8}
+body.locked .cmd,body.locked .fkeys{pointer-events:none}
+.paywall{position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;padding:18px;background:radial-gradient(ellipse 60% 50% at 50% 40%,rgba(12,6,38,.35),rgba(12,6,38,.78))}
+.paywall .card{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--gold);box-shadow:0 30px 90px rgba(0,0,0,.7),0 0 40px rgba(245,200,66,.12);font-family:var(--body)}
+.paywall .hd{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel-hd);border-bottom:1px solid var(--line-strong);font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.paywall .hd .k{color:var(--gold);font-weight:600}.paywall .hd .s{color:var(--cyan)}.paywall .hd .r{margin-left:auto;color:var(--faint)}
+.paywall .bd{padding:20px 22px 22px}
+.paywall h2{font-family:var(--display);font-size:32px;line-height:.95;text-transform:uppercase;margin:0 0 8px;color:var(--text)}
+.paywall p{color:var(--muted);font-size:14.5px;line-height:1.55;margin:0 0 12px}
+.paywall ul{list-style:none;margin:0 0 16px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:13px;color:var(--text)}
+.paywall li{padding-left:14px;position:relative}.paywall li::before{content:"▸";position:absolute;left:0;color:var(--gold)}
+.paywall .price{font-family:var(--display);font-size:30px;color:var(--gold);margin:0 0 14px}.paywall .price i{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.paywall .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.paywall a.b{display:inline-flex;align-items:center;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:11px 16px;border:1px solid var(--line-strong);color:var(--text);text-decoration:none}
+.paywall a.b.primary{background:linear-gradient(180deg,var(--gold-2),#f2b830);color:#2a1a02;border-color:var(--gold);font-weight:600}
+.paywall a.b:hover{border-color:var(--gold);color:var(--gold)}.paywall a.b.primary:hover{filter:brightness(1.08);color:#000}
+.paywall small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:12px;letter-spacing:.04em}
+@media(max-width:560px){.paywall ul{grid-template-columns:1fr}.paywall h2{font-size:26px}}
+</style>"""
+
+
+def _paywall(signed_in: bool, plan: str) -> str:
+    if signed_in:
+        head = "Your account is on Starter" if plan == "starter" else f"Your {plan} plan has ended"
+        lead = "The live terminal is part of Desk. Everything behind this screen is running — the sheets, the chains, the alerts — it just needs a plan on the account."
+        primary = '<a class="b primary" href="/account?plan=desk">Get Desk — pay by UPI or card →</a>'
+        secondary = '<a class="b" href="/finch">Finch is free · read it</a>'
+    else:
+        head = "The terminal is for Desk members"
+        lead = "Sign in with your email, pick Desk, and this screen unblurs the moment the payment clears. Starter stays free for Finch, the daily brief and the assessment."
+        primary = '<a class="b primary" href="/login?next=%2Faccount%3Fplan%3Ddesk">Sign in &amp; get Desk →</a>'
+        secondary = '<a class="b" href="/login">Already a member? Sign in</a>'
+    return f"""<div class="paywall" role="dialog" aria-label="Desk plan required"><div class="card">
+<div class="hd"><span class="k">DESK</span><span class="s">LIVE TERMINAL</span><span class="r">₹2,199 / 30 DAYS</span></div>
+<div class="bd"><h2>{head}</h2><p>{lead}</p>
+<ul><li>Sheets live, under 250 ms</li><li>Option chains with OI, PCR, max pain</li><li>Builder on every F&amp;O stock</li><li>Server alerts, emailed</li><li>Watchlist, Nifty 50 panel, news wire</li><li>Nothing auto-renews</li></ul>
+<div class="price">₹2,199 <i>/ 30 days · ₹21,990 / year · exclusive of GST</i></div>
+<div class="row">{primary}{secondary}</div>
+<small>Pro desk (₹5,599) adds recorded history, backtesting and unlimited alerts. <a href="/#plans" style="color:var(--cyan)">Compare plans</a></small>
+</div></div></div>"""
+
+
+def render_dashboard(snapshot: dict, locked: bool = False, signed_in: bool = False, plan: str = "starter") -> bytes:
+    doc = DASHBOARD.replace("__SEED__", _seed(snapshot))
+    if locked:
+        # The page renders its seed as usual (so the blur has real panels under
+        # it) but every network call is neutered before the app scripts run.
+        guard = ('<script>window.FINO_LOCKED=true;window.fetch=function(){return Promise.reject(new Error("locked"));};'
+                 'window.EventSource=function(){return {close:function(){},addEventListener:function(){},onmessage:null};};'
+                 'document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("locked");});</script>')
+        doc = doc.replace("<script>window.SEED=", _PAYWALL_CSS + guard + "<script>window.SEED=", 1)
+        doc = doc.replace("</body>", _paywall(signed_in, plan) + "\n</body>", 1)
+    return doc.encode("utf-8")
 
 
 STRATEGY = r"""<!DOCTYPE html>

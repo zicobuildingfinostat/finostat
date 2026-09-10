@@ -225,8 +225,8 @@ def score(answers: dict) -> dict:
 PITCH = {
     "starter": {
         "plan": "desk", "name": "Desk", "price": "₹2,199 / month · ₹21,990 a year",
-        "head": "When you start trading real money, trade it with the desk's tools",
-        "why": "Starter is free and is all you need while you learn. The moment you put capital at risk, the difference between guessing and knowing is the live feed: real-time sheets, the builder priced on every F&O stock, and alerts that email you when your level trades — so you are not glued to a screen or, worse, finding out after the move.",
+        "head": "The terminal itself is Desk — learn free, then trade with the desk's tools",
+        "why": "Starter is free and is all you need while you learn: Finch, the daily brief and the strategy pages all run on the live market. The terminal — real-time sheets, option chains with open interest, the builder priced on every F&O stock, and alerts that email you when your level trades — is Desk, because that is where capital is at risk and guessing costs money.",
         "points": ["All sheets live, under 250 ms — Starter is 15-minute delayed", "Strategy builder on every F&O stock, not just the index", "Alert engine: up to 25 rules, evaluated on the server and emailed", "IV percentile, bell curves and the volatility surface, live"],
     },
     "desk": {

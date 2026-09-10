@@ -81,7 +81,8 @@ def _h(value: str) -> str:
 # granted with admin.py after payment is received out of band.
 PLANS = ("starter", "desk", "pro")
 ENTITLEMENTS = {
-    "builder_index":  "starter",   # strategy builder on the four indices
+    "terminal":       "desk",      # the live terminal itself (/dashboard and its data APIs)
+    "builder_index":  "starter",   # strategy builder on the four indices (Finch's live examples)
     "builder_stocks": "desk",      # ...and every F&O stock
     "history":        "pro",       # historical replay / backtesting (future)
 }

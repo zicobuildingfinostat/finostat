@@ -97,6 +97,18 @@ def _plan_of(user) -> str:
     return (user or {}).get("plan") or "starter"
 
 
+def _paid(user) -> bool:
+    """Desk or Pro (and not expired): the terminal and its data streams."""
+    return authmod.entitled(_plan_of(user), "terminal")
+
+
+# Everything the terminal page pulls. Finch's live examples use /api/quotes,
+# /api/chain and /api/strategy (index only), which stay open so the free
+# course keeps its live numbers.
+TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
+                 "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts"}
+
+
 def _gate(user, ukey: str):
     """(ok, error payload). Index chains are Starter; stock chains need Desk."""
     feature = "builder_index" if ukey in contracts.INDEX_UNDERLYINGS else "builder_stocks"
@@ -374,8 +386,14 @@ class Handler(BaseHTTPRequestHandler):
             if route in ("/", "/index.html"):
                 return self._send(PAGE.render(), "text/html; charset=utf-8")
             if route == "/dashboard":
-                return self._send(pages.render_dashboard(FEED.snapshot()),
-                                  "text/html; charset=utf-8")
+                user = self._current_user()
+                paid = _paid(user)
+                return self._send(pages.render_dashboard(FEED.snapshot(), locked=not paid, signed_in=user is not None,
+                                                         plan=_plan_of(user)),
+                                  "text/html; charset=utf-8", cache="no-store")
+            if (route in TERMINAL_APIS or route.startswith("/api/alerts/")) and not _paid(self._current_user()):
+                return self._json({"error": "plan required", "need": "desk", "feature": "terminal",
+                                   "signed_in": self._current_user() is not None}, 402)
             if _VERIFY_FILE_RE.match(route[1:]) and route[1:] == SITE_VERIFY["GOOGLE_VERIFY_FILE"]:
                 return self._send(f"google-site-verification: {route[1:]}\n".encode(), "text/html; charset=utf-8", cache="public, max-age=3600")
             if route == "/brief":
@@ -586,6 +604,8 @@ class Handler(BaseHTTPRequestHandler):
                 user = self._current_user()
                 if user is None:
                     return self._json({"error": "not signed in"}, 401)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk", "feature": "terminal", "signed_in": True}, 402)
                 if self.headers.get("X-Requested-With") != "fetch":
                     return self._json({"error": "bad request"}, 400)
                 if route == "/api/alerts":
