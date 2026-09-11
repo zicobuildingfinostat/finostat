@@ -1067,7 +1067,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "lot": chain["lot"], "atm": chain["atm"], "step": chain["step"],
                                    "strikes": strikes, "legs": legs, "metrics": metrics,
                                    "live": chain["live"], "warming": chain["warming"]})
-            if route in ("/api/book/open", "/api/book/close", "/api/book/delete"):
+            if route in ("/api/book/open", "/api/book/close", "/api/book/delete", "/api/algo"):
                 user = self._current_user()
                 if user is None:
                     return self._json({"error": "not signed in"}, 401)
