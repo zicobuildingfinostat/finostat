@@ -90,6 +90,11 @@ hr = CD.aggregate(one, 60)
 check("1h aggregate: last bucket 15:15 holds 3 bars; first day has 7 bars", len(hr) == 14 and hr[6][0].endswith("15:15:00+05:30") and hr[6][5] == 30, [(x[0][11:16], x[5]) for x in hr[:7]])
 check("aggregate passthrough for 0", CD.aggregate(one, 0) is one)
 
+print("\n=== REST quote rows ===")
+import upstoxfeed as UF
+rows_ltp = UF.UpstoxFeed.rest_ltp_rows({"NSE_EQ:TCS": {"last_price": 2211.1, "instrument_token": "NSE_EQ|INE467B01029", "cp": 2204.1}, "X": {"instrument_token": "k", "last_price": None}, "Y": {"last_price": 1}})
+check("ltp payload parsed by instrument key with close; rows without key/price dropped", rows_ltp == [("NSE_EQ|INE467B01029", 2211.1, 2204.1)], rows_ltp)
+
 print("\n=== history engine ===")
 check("legs: iron condor = 4 legs, short at ±w, long at ±2w", H.legs_for("iron_condor", 24000, 50, 2) == [("CE", 24100, -1), ("PE", 23900, -1), ("CE", 24200, 1), ("PE", 23800, 1)])
 class FakeClient:

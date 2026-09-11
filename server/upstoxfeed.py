@@ -127,11 +127,54 @@ class UpstoxFeed(Feed):
         self._dyn_started = False
 
     # -- lifecycle ----------------------------------------------------------
+    REST_QUOTE_EVERY = 30          # seconds between REST LTP sweeps of the non-streamed stocks (market hours)
+
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="upstox", daemon=True)
         self._thread.start()
         self._threads.append(self._thread)
         threading.Thread(target=self._publisher, name="upstox-publish", daemon=True).start()
+        threading.Thread(target=self._rest_quotes_loop, name="upstox-rest-quotes", daemon=True).start()
+
+    # -- non-streamed stocks: last price + close over REST -------------------
+    @staticmethod
+    def rest_ltp_rows(data: dict) -> list[tuple[str, float, float | None]]:
+        """Upstox /market-quote/ltp payload -> [(instrument_key, last_price, close)]."""
+        out = []
+        for v in (data or {}).values():
+            key, ltp = v.get("instrument_token"), v.get("last_price")
+            if key and ltp is not None:
+                out.append((key, float(ltp), float(v["cp"]) if v.get("cp") else None))
+        return out
+
+    def _rest_quotes_loop(self) -> None:
+        import upstox_rest
+        client = upstox_rest.Client()
+        warned = 0.0
+        while not self._stop.is_set():
+            from datetime import timedelta, timezone
+            now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+            hhmm = now.hour * 60 + now.minute
+            in_session = now.weekday() < 5 and 9 * 60 <= hhmm <= 15 * 60 + 40
+            keys = [k for k, m in self._meta.items() if m.get("kind") == "stock" and not m.get("stream", True)]
+            if keys and client.token:
+                got = 0
+                try:
+                    for i in range(0, len(keys), 500):
+                        data = client.get("/market-quote/ltp", {"instrument_key": ",".join(keys[i:i + 500])}, base=upstox_rest.BASE.replace("/v2", "/v3"))
+                        for key, ltp, close in self.rest_ltp_rows(data):
+                            self._prices[key] = ltp
+                            if close:
+                                self._closes[key] = close
+                            got += 1
+                    if got:
+                        self._uni_dirty = True
+                except Exception as exc:                        # noqa: BLE001 - quotes are best effort
+                    if time.time() - warned > 300:
+                        warned = time.time()
+                        log.info("REST quotes sweep failed: %s", str(exc)[:120])
+            if self._stop.wait(self.REST_QUOTE_EVERY if in_session else 600):
+                return
 
     def _track(self, thread: threading.Thread) -> threading.Thread:
         thread.start()
@@ -259,7 +302,10 @@ class UpstoxFeed(Feed):
         stocks = self._resolve_universe()
         log.info("ticker: subscribing to %d instruments (%d options, %d stocks)",
                  len(self._meta), count, stocks)
-        return [k for k, m in self._meta.items() if m.get("kind") != "chain"]
+        keys = [k for k, m in self._meta.items() if m.get("kind") != "chain" and m.get("stream", True)]
+        rest = sum(1 for m in self._meta.values() if m.get("kind") == "stock" and not m.get("stream", True))
+        log.info("ticker: streaming %d instruments; %d non-F&O stocks quoted over REST every %ds", len(keys), rest, self.REST_QUOTE_EVERY)
+        return keys
 
     BSE_GROUPS = {"A", "B", "T", "X", "XT", "EQ"}   # tradable equity groups; F/G are debt
 
@@ -271,6 +317,11 @@ class UpstoxFeed(Feed):
         rows = self._instruments("NSE")
         fo = {r.get("underlying_symbol") or r.get("name") for r in rows
               if r.get("segment") == "NSE_FO" and r.get("instrument_type") == "FUT"}
+        try:
+            members = set(self.index_members())
+        except Exception:                                   # noqa: BLE001
+            members = set()
+        stream_all = config.STREAM == "all"
         fo_isin = set()
         n = 0
         for r in rows:
@@ -284,7 +335,8 @@ class UpstoxFeed(Feed):
             if is_fo and r.get("isin"):
                 fo_isin.add(r["isin"])
             self._meta[key] = {"kind": "stock", "label": "NSE:" + sym, "symbol": sym,
-                               "exchange": "NSE", "name": r.get("name", ""), "fo": is_fo}
+                               "exchange": "NSE", "name": r.get("name", ""), "fo": is_fo,
+                               "stream": stream_all or is_fo or sym in members}
             n += 1
         if "bse" in config.UNIVERSE:
             for r in self._instruments("BSE"):
@@ -296,7 +348,7 @@ class UpstoxFeed(Feed):
                     continue
                 self._meta[key] = {"kind": "stock", "label": "BSE:" + sym, "symbol": sym,
                                    "exchange": "BSE", "name": r.get("name", ""),
-                                   "fo": r.get("isin") in fo_isin}
+                                   "fo": r.get("isin") in fo_isin, "stream": stream_all}
                 n += 1
         # Compact per-underlying contract index for on-demand chains, built while
         # the masters are in memory.

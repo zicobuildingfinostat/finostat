@@ -84,6 +84,9 @@ MINI_SYMBOL = os.environ.get("FINOSTAT_MINI_SYMBOL", "BANKNIFTY").strip().upper(
 # F&O-flagged), "nse+bse" (adds BSE equity groups A/B/T/X/XT on a second
 # socket), or "none".
 UNIVERSE = os.environ.get("FINOSTAT_UNIVERSE", "nse").strip().lower()
+# Which stocks ride the websocket: "fo" = F&O names + NIFTY 50 members (one socket, leaves the second
+# Upstox connection for the chain socket with open interest); "all" = every equity (needs two sockets).
+STREAM = os.environ.get("FINOSTAT_STREAM", "fo").strip().lower()
 MINI_STEP = _int("FINOSTAT_MINI_STEP", 100)
 
 # --- News wire --------------------------------------------------------------
