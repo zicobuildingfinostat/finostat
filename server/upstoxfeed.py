@@ -127,7 +127,7 @@ class UpstoxFeed(Feed):
         self._dyn_started = False
 
     # -- lifecycle ----------------------------------------------------------
-    REST_QUOTE_EVERY = 30          # seconds between REST LTP sweeps of the non-streamed stocks (market hours)
+    REST_QUOTE_EVERY = 60          # seconds between REST LTP sweeps of the non-streamed stocks (market hours)
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="upstox", daemon=True)
@@ -147,33 +147,61 @@ class UpstoxFeed(Feed):
                 out.append((key, float(ltp), float(v["cp"]) if v.get("cp") else None))
         return out
 
+    REST_FAST_EVERY = 3            # seconds between REST sweeps of the *streamed* set while the socket is refused
+
+    def _rest_sweep(self, client, keys: list[str]) -> int:
+        import upstox_rest
+        got = 0
+        for i in range(0, len(keys), 500):
+            data = client.get("/market-quote/ltp", {"instrument_key": ",".join(keys[i:i + 500])}, base=upstox_rest.BASE.replace("/v2", "/v3"))
+            for key, ltp, close in self.rest_ltp_rows(data):
+                self._prices[key] = ltp
+                if close:
+                    self._closes[key] = close
+                got += 1
+        return got
+
     def _rest_quotes_loop(self) -> None:
+        """Two jobs on one thread: (1) every REST_QUOTE_EVERY seconds, last price + close for the
+        equities that do not ride the socket; (2) while the socket is refused (Upstox connection
+        cap) and the market is open, every REST_FAST_EVERY seconds the whole streamed set — tape,
+        sheet options, F&O stocks and the warm chains — so the terminal keeps moving on 3-second
+        prices instead of freezing."""
         import upstox_rest
         client = upstox_rest.Client()
-        warned = 0.0
+        warned, last_slow, rest_mode = 0.0, 0.0, False
         while not self._stop.is_set():
             from datetime import timedelta, timezone
             now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
             hhmm = now.hour * 60 + now.minute
             in_session = now.weekday() < 5 and 9 * 60 <= hhmm <= 15 * 60 + 40
-            keys = [k for k, m in self._meta.items() if m.get("kind") == "stock" and not m.get("stream", True)]
-            if keys and client.token:
-                got = 0
+            socket_down = self._ws is None
+            if client.token:
                 try:
-                    for i in range(0, len(keys), 500):
-                        data = client.get("/market-quote/ltp", {"instrument_key": ",".join(keys[i:i + 500])}, base=upstox_rest.BASE.replace("/v2", "/v3"))
-                        for key, ltp, close in self.rest_ltp_rows(data):
-                            self._prices[key] = ltp
-                            if close:
-                                self._closes[key] = close
-                            got += 1
-                    if got:
-                        self._uni_dirty = True
+                    if in_session and socket_down:
+                        fast = [k for k, m in self._meta.items() if m.get("kind") != "stock" or m.get("stream", True)]
+                        fast += [k for k in self._dyn_keys if k not in self._meta]
+                        if fast and self._rest_sweep(client, fast):
+                            self._ticks += len(fast)
+                            self._dirty.set()                     # the publisher rebuilds sheet/mini/quotes and marks the snapshot live
+                            if not rest_mode:
+                                rest_mode = True
+                                log.warning("socket refused: prices for %d instruments via REST polling every %ds until the socket is allowed", len(fast), self.REST_FAST_EVERY)
+                            self._publish(feed_mode="rest")
+                    elif rest_mode and not socket_down:
+                        rest_mode = False
+                        self._publish(feed_mode="socket")
+                        log.info("socket back: REST polling stands down")
+                    if time.time() - last_slow >= (self.REST_QUOTE_EVERY if in_session else 600):
+                        last_slow = time.time()
+                        slow = [k for k, m in self._meta.items() if m.get("kind") == "stock" and not m.get("stream", True)]
+                        if slow and self._rest_sweep(client, slow):
+                            self._uni_dirty = True
                 except Exception as exc:                        # noqa: BLE001 - quotes are best effort
                     if time.time() - warned > 300:
                         warned = time.time()
                         log.info("REST quotes sweep failed: %s", str(exc)[:120])
-            if self._stop.wait(self.REST_QUOTE_EVERY if in_session else 600):
+            if self._stop.wait(self.REST_FAST_EVERY if (in_session and socket_down) else 5.0):
                 return
 
     def _track(self, thread: threading.Thread) -> threading.Thread:
