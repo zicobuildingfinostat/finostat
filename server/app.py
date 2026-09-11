@@ -38,6 +38,7 @@ import backup
 import book
 import brief
 import broker
+import sqlite3
 import builder
 import cas
 import econ
@@ -47,6 +48,7 @@ import analytics
 import history
 import upstox_rest
 import candles
+import algo
 import events
 import chains
 import contracts
@@ -119,6 +121,49 @@ HOLIDAYS = holidays.Holidays(AUTH.path)
 UREST = upstox_rest.Client()
 CHAINS.rest = UREST                    # builder chains get OI, ΔOI and volume from the REST chain
 CANDLES = candles.Candles(UREST)
+
+
+def _user_email(user_id: int) -> str:
+    try:
+        c = sqlite3.connect(AUTH.path, timeout=5)
+        r = c.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+        c.close()
+        return r[0] if r else ""
+    except sqlite3.Error:
+        return ""
+
+
+def _algo_live_router(a: dict, legs: list, lots: int, closing: bool) -> list:
+    """Route an algo's legs as LIMIT orders through the user's connected Upstox account (Upstox rules: no market orders)."""
+    email = _user_email(a["user_id"])
+    if not broker.trade_allowed(email):
+        raise broker.BrokerError("order routing is not open to this account yet")
+    client, acc = _broker_client({"id": a["user_id"]})
+    if client is None:
+        raise broker.BrokerError(acc.get("error", "broker not connected"))
+    r = CHAINS.resolve(a["params"]["u"])
+    ci = CONTRACTS_OF(FEED)
+    if r is None or ci is None:
+        raise broker.BrokerError("unknown underlying")
+    name = r[0]
+    pos_expiry = None
+    pid = a["state"].get("position_id")
+    for x in BOOK.open_positions(a["user_id"]) + BOOK.closed_positions(a["user_id"], 5):
+        if x["id"] == pid:
+            pos_expiry = int(x["expiry"])
+    if pos_expiry is None:
+        raise broker.BrokerError("position expiry unknown")
+    priced = []
+    for l in legs:
+        px = float(l.get("price") or 0)
+        lim = px * (1.005 if l["qty"] > 0 else 0.995)
+        priced.append(dict(l, price=round(round(lim / 0.05) * 0.05, 2)))
+    plan = broker.plan_orders(priced, lambda right, strike: ci.key_for(name, pos_expiry, strike, right), lots, "I", "LIMIT", "finostat-algo")
+    return broker.execute(client, plan)
+
+
+ALGOS = algo.Store(AUTH.path)
+ALGO = algo.Engine(ALGOS, CHAINS, BOOK, FEED, lambda: CONTRACTS_OF(FEED), live_router=_algo_live_router)
 HIST = history.History(UREST, upstox_rest.CandleStore(recorder._data_dir() / "history.db"))
 _ANALYTICS_U = ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX")
 
@@ -223,7 +268,7 @@ def _paid(user) -> bool:
 # course keeps its live numbers.
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
-                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles"}
+                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo"}
 
 
 def _gate(user, ukey: str):
@@ -707,6 +752,16 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     days = 21
                 return self._json(EVENTS.calendar(days))
+            if route == "/api/algo":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "sign in to run algos"}, 401)
+                now = algo.datetime.now(algo.IST)
+                in_session = now.weekday() < 5 and "09:14" <= now.strftime("%H:%M") <= "15:32"
+                acc = BROKERS.get(user["id"], "upstox")
+                return self._json({"templates": algo.TEMPLATES, "algos": [ALGO.view(a) for a in ALGOS.list(user["id"])],
+                                   "engine": {"in_session": in_session, "last_tick": ALGO.last_tick},
+                                   "broker": bool(acc and acc.get("token") and not acc.get("expired")), "trade_allowed": broker.trade_allowed(user["email"])})
             if route == "/api/book":
                 user = self._current_user()
                 if user is None:
@@ -1024,6 +1079,45 @@ class Handler(BaseHTTPRequestHandler):
                     body = json.loads(self._read_body().decode("utf-8") or "{}")
                 except ValueError:
                     return self._json({"error": "invalid json"}, 400)
+                if route == "/api/algo":
+                    op = str(body.get("op", ""))
+                    if op == "create":
+                        params = dict(body.get("params") or {})
+                        if params.get("mode") == "live":
+                            acc = BROKERS.get(user["id"], "upstox")
+                            if not (acc and acc.get("token") and not acc.get("expired")):
+                                return self._json({"error": "live mode needs a connected broker — connect Upstox in the BROKER panel first, or use paper mode"}, 409)
+                            if not broker.trade_allowed(user["email"]):
+                                return self._json({"error": "order routing is not open to your account yet — run it in paper mode"}, 403)
+                        try:
+                            aid = ALGOS.create(user["id"], str(body.get("name", "")), str(body.get("template", "")), params)
+                        except ValueError as exc:
+                            return self._json({"error": str(exc)}, 400)
+                        return self._json({"ok": True, "id": aid})
+                    try:
+                        aid = int(body.get("id"))
+                    except (TypeError, ValueError):
+                        return self._json({"error": "bad id"}, 400)
+                    a = ALGOS.get(aid, user["id"])
+                    if a is None:
+                        return self._json({"error": "not found"}, 404)
+                    if op == "delete":
+                        return self._json({"ok": ALGOS.delete(aid, user["id"])})
+                    if op == "stop":
+                        if a["status"] == "running":
+                            a["params"]["days"] = "once"                       # let the exit rules finish today, then retire
+                            ALGOS.save(a, "stop requested — retires after today's exit")
+                        else:
+                            a["status"] = "stopped"
+                            ALGOS.save(a, "disarmed")
+                        return self._json({"ok": True})
+                    if op == "arm":
+                        a["status"] = "armed"
+                        ALGOS.save(a, "armed")
+                        return self._json({"ok": True})
+                    if op == "square_off":
+                        return self._json(ALGO.square_off(a))
+                    return self._json({"error": "unknown op"}, 400)
                 if route == "/api/book/open":
                     ukey = str(body.get("u", ""))
                     ok, err = _gate(user, ukey)
@@ -1427,6 +1521,7 @@ def main() -> int:
     EVENTS.start()
     HOLIDAYS.start()
     ECON.start()
+    ALGO.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -1447,6 +1542,7 @@ def main() -> int:
         CAS.flush()
         EVENTS.stop()
         ECON.stop()
+        ALGO.stop()
         HOLIDAYS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
