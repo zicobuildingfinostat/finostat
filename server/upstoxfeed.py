@@ -400,6 +400,7 @@ class UpstoxFeed(Feed):
         key count needs: the first in this thread, the rest in helpers that
         follow it down so every reconnect re-resolves the whole universe."""
         backoff = 1.0
+        slow = False
         while not self._stop.is_set():
             self._stop_extra = threading.Event()
             try:
@@ -419,6 +420,12 @@ class UpstoxFeed(Feed):
             except wsclient.WebSocketClosed as exc:
                 log.warning("feed closed (%s)", exc)
                 self._publish(live=False, error=f"stream closed: {exc}")
+            except wsclient.WebSocketError as exc:
+                # 403 on the handshake = Upstox's per-user connection cap (2 on Standard). Hammering it every
+                # 30 s keeps the count from ever draining and looks like abuse, so back off in minutes.
+                slow = "403" in str(exc)
+                log.warning("feed handshake failed (%s)%s", exc, " -- connection cap; retrying slowly" if slow else "")
+                self._publish(live=False, error=str(exc))
             except Exception as exc:
                 log.exception("unexpected feed failure")
                 self._publish(live=False, error=str(exc))
@@ -429,9 +436,12 @@ class UpstoxFeed(Feed):
                     self._ws = None
             if self._stop.is_set():
                 break
+            if slow:
+                backoff = min(300.0, max(backoff * 2, 120.0))
             log.info("reconnecting in %.0fs", backoff)
             self._stop.wait(backoff)
-            backoff = min(self.BACKOFF_MAX, backoff * 2)
+            backoff = backoff if slow else min(self.BACKOFF_MAX, backoff * 2)
+            slow = False
 
     def _socket_loop(self, n: int, keys: list[str]) -> None:
         """Reconnect loop for an additional socket; lives until the primary restarts."""
