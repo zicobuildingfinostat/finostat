@@ -58,6 +58,18 @@ CSS = r"""
 .dcx-form p{font-size:10.5px;color:var(--muted);line-height:1.5;margin:6px 0}.dcx-form .row{display:flex;gap:8px;align-items:center;margin-top:8px}.dcx-form button{font-size:10px;letter-spacing:.1em;padding:6px 12px;border:1px solid var(--gold);color:var(--gold);background:none;cursor:pointer}.dcx-form button:hover{background:var(--gold);color:#2a1a02}.dcx-form button.danger{border-color:var(--down);color:var(--down)}.dcx-form button.danger:hover{background:var(--down);color:#fff}
 .dcx-msg{font-size:10.5px;color:var(--muted)}.dcx-msg.bad{color:var(--down)}.dcx-msg.ok{color:var(--up)}
 .dcx-state{display:flex;gap:8px;align-items:center;font-size:11px;padding:4px 0 8px;border-bottom:1px solid var(--line);margin-bottom:6px}.dcx-state .pill{font-size:9px;letter-spacing:.12em;padding:1px 6px;border:1px solid var(--line-strong);color:var(--muted)}.dcx-state .pill.on{color:var(--up);border-color:var(--up)}
+.gd-sig{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.gd-sig .lbl{font-family:var(--display);font-size:38px;line-height:.9;font-weight:700;letter-spacing:.02em}.gd-sig .lbl.buy{color:var(--up)}.gd-sig .lbl.sell{color:var(--down)}.gd-sig .lbl.neutral{color:var(--muted)}
+.gd-sig .meter{position:relative;height:10px;background:linear-gradient(90deg,rgba(255,92,108,.55),rgba(255,92,108,.12) 40%,rgba(120,100,160,.25) 50%,rgba(61,214,140,.12) 60%,rgba(61,214,140,.55));border:1px solid var(--line-strong)}
+.gd-sig .meter i{position:absolute;top:-5px;width:3px;height:18px;background:var(--gold);box-shadow:0 0 8px var(--gold)}.gd-sig .meter b{position:absolute;top:-16px;font-size:9px;letter-spacing:.1em;color:var(--faint)}.gd-sig .meter b.l{left:0}.gd-sig .meter b.m{left:50%;transform:translateX(-50%)}.gd-sig .meter b.r{right:0}
+.gd-sig .sub{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5}.gd-sig .sub b{color:var(--text);font-weight:500}
+.gd-sig .conf{font-size:9.5px;letter-spacing:.14em;padding:3px 8px;border:1px solid var(--line-strong);color:var(--muted);text-align:center}.gd-sig .conf.ok{color:var(--up);border-color:var(--up)}.gd-sig .conf.bad{color:var(--down);border-color:var(--down)}.gd-sig .conf.mid{color:var(--gold);border-color:var(--gold)}
+.gd-cvw{height:460px!important;cursor:crosshair}
+.gd-sys{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}.gd-sys>div{min-width:0}.gd-sys>div:first-child{border-right:1px solid var(--line)}
+.gd-sys h5{font-size:9.5px;letter-spacing:.14em;color:var(--faint);padding:6px 10px 2px;text-transform:uppercase}.gd-sys h5 i{font-style:normal;color:var(--gold);margin-left:8px}
+.gd-sys table td{padding:4px 8px;font-size:10.5px;text-align:left;vertical-align:top}.gd-sys td.v{font-weight:600;white-space:nowrap;width:44px}.gd-sys td.v.up{color:var(--up)}.gd-sys td.v.down{color:var(--down)}.gd-sys td.v.z{color:var(--faint)}
+.gd-sys td.n{white-space:nowrap;color:var(--text)}.gd-sys td.n small{display:block;color:var(--faint);font-size:9.5px}.gd-sys td.note{color:var(--muted)}
+@media(max-width:980px){.gd-sys{grid-template-columns:1fr}.gd-sys>div:first-child{border-right:0;border-bottom:1px solid var(--line)}.gd-sig{grid-template-columns:1fr}.gd-cvw{height:380px!important}}
 .g-foot{padding:6px 10px;border-top:1px solid var(--line);font-size:10px;color:var(--faint);line-height:1.45}
 .g-fkeys{display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;border-top:1px solid var(--line);background:#06031a;font-size:10px;letter-spacing:.08em}.g-fkeys a{padding:3px 9px;border:1px solid var(--line-strong);color:var(--muted)}.g-fkeys a:hover{border-color:var(--gold);color:var(--gold)}
 @media(max-width:980px){.bl-wrap,.dcx-wrap{grid-template-columns:1fr}.bl-left{border-right:0;border-bottom:1px solid var(--line)}.a-wide{grid-column:auto}}
@@ -92,6 +104,18 @@ BODY = r"""
     <div class="panel-hd"><span class="k">VOL</span><span class="s">DVOL · FUNDING · PERP OI</span><span class="r"><span id="vol-state">—</span></span></div>
     <div class="g-kpi" id="vol-kpi"></div>
     <div class="g-foot">DVOL is Deribit's 30-day implied volatility index (like VIX for BTC/ETH). Funding is the perpetual's current 8-hour rate: positive means longs pay shorts. Spot in ₹ via CoinGecko.</div>
+  </section>
+
+  <section class="panel a-wide" id="p-gold" aria-label="Gold signal">
+    <div class="panel-hd"><span class="k">GOLD</span><span class="s" id="gd-title">GOLD SIGNAL · XAU/USD · 1D</span><span class="r"><span id="gd-state">—</span></span></div>
+    <div class="oc-top"><span class="seg" id="gd-tf"><button type="button" data-tf="1h">1H</button><button type="button" data-tf="4h">4H</button><button type="button" data-tf="1d" class="on">1D</button></span>
+      <span class="seg" id="gd-layers"><button type="button" data-l="zones" class="on">ZONES</button><button type="button" data-l="liq" class="on">LIQUIDITY</button><button type="button" data-l="struct" class="on">STRUCTURE</button><button type="button" data-l="ma" class="on">MA</button><button type="button" data-l="st" class="on">SUPERTREND</button></span>
+      <span class="an-note" id="gd-note">move the pointer over the chart to read a bar</span></div>
+    <div class="gd-sig" id="gd-sig"></div>
+    <div class="g-kpi" id="gd-kpi"></div>
+    <div class="an-cvw gd-cvw"><canvas class="an-cv" id="gd-cv"></canvas></div>
+    <div class="gd-sys" id="gd-sys"></div>
+    <div class="g-foot">Composite of published systems (Turtle breakout, 200-bar rule, Raschke's Holy Grail, MACD, RSI, Supertrend, Ichimoku, Bollinger, EMA ribbon) blended 50/50 with price-action structure (BOS/CHoCH, order blocks, fair value gaps, liquidity sweeps of equal highs/lows, premium/discount, displacement, rejection candles). Score −1…+1; BUY from +0.25, SELL from −0.25, with hysteresis so a state holds until the score decays through ±0.10. Nothing repaints: every swing, break and vote is registered only once confirmed. Candles: gold-backed PAXG/USDT on Binance (tracks XAU/USD), spot cross-checked against XAU. Hit rate = share of past flips that were in profit 10 bars later — a sanity check, not a promise.</div>
   </section>
 
   <section class="panel a-wide" id="p-chain" aria-label="Crypto option chain">
@@ -148,7 +172,7 @@ __ANALYTICS__
     </div>
   </section>
 </main>
-<div class="g-fkeys"><a href="#p-tv">CHART</a><a href="#p-chain">CHAIN</a><a href="#p-build">BUILD</a><a href="#p-surf">SURF</a><a href="#p-skew">SKEW</a><a href="#p-curv">CURV</a><a href="#p-gex">GEX</a><a href="#p-coindcx">COINDCX</a><a href="/dashboard">INDIA TERMINAL</a></div>
+<div class="g-fkeys"><a href="#p-tv">CHART</a><a href="#p-gold">GOLD</a><a href="#p-chain">CHAIN</a><a href="#p-build">BUILD</a><a href="#p-surf">SURF</a><a href="#p-skew">SKEW</a><a href="#p-curv">CURV</a><a href="#p-gex">GEX</a><a href="#p-coindcx">COINDCX</a><a href="/dashboard">INDIA TERMINAL</a></div>
 """
 
 JS = r"""
@@ -235,6 +259,61 @@ JS = r"""
     if(bl.chain&&bl.chain.spot){ var sp=bl.chain.spot; c.strokeStyle=C.cyan; c.setLineDash([4,3]); c.beginPath(); c.moveTo(sx(sp),pad.t); c.lineTo(sx(sp),g.h-pad.b); c.stroke(); c.setLineDash([]); c.fillStyle=C.cyan; c.textAlign='center'; c.fillText('spot '+nf(sp,0),sx(sp),pad.t-2); }
     (m.breakevens||[]).forEach(function(b){ c.fillStyle=C.gold; c.textAlign='center'; c.fillText('BE '+nf(b,0),sx(b),sy(0)-4); }); }
   window.addEventListener('resize',function(){ drawPayoff(); });
+
+  /* GOLD signal */
+  var gd={tf:'1d',data:null,layers:{zones:true,liq:true,struct:true,ma:true,st:true},hover:null};
+  segInit($('gd-tf'),'data-tf',function(tf){ gd.tf=tf; loadGold(); });
+  $('gd-layers').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; var k=b.getAttribute('data-l'); gd.layers[k]=!gd.layers[k]; b.classList.toggle('on',gd.layers[k]); drawGold(); });
+  function loadGold(){ if(locked) return; $('gd-state').textContent='loading…'; var cvw=($('gd-cv').getBoundingClientRect().width||900); getJSON('/api/global/gold?tf='+gd.tf+'&bars='+Math.max(80,Math.min(240,Math.floor(cvw/4.2))),function(d){ gd.data=d; renderGold(d); drawGold(); },function(e){ $('gd-state').textContent=e; }); }
+  function renderGold(d){ var dir=d.direction; var cls=dir>0?'buy':dir<0?'sell':'neutral'; var conf=d.confluence==='CONFLUENCE'?'ok':d.confluence==='CONFLICT'?'bad':'mid';
+    var pos=((d.score+1)/2*100).toFixed(1);
+    $('gd-title').textContent='GOLD SIGNAL · XAU/USD · '+gd.tf.toUpperCase()+' · '+(d.regime||'').toUpperCase();
+    $('gd-sig').innerHTML='<div class="lbl '+cls+'">'+d.signal+'</div><div><div class="meter"><b class="l">STRONG SELL</b><b class="m">0</b><b class="r">STRONG BUY</b><i style="left:'+pos+'%"></i></div><div class="sub">score <b>'+(d.score>=0?'+':'')+nf(d.score,2)+'</b> · classic systems <b>'+(d.classic_score>=0?'+':'')+nf(d.classic_score,2)+'</b> · price action <b>'+(d.pa_score>=0?'+':'')+nf(d.pa_score,2)+'</b>'+(d.since?' · '+(dir?d.since.side+' since ':'last signal '+d.since.side+' ')+new Date(d.since.t).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+(gd.tf!=='1d'?' '+new Date(d.since.t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):'')+' @ '+usd(d.since.price,0)+(dir?'':' (exited)'):'')+'</div></div><div class="conf '+conf+'">'+d.confluence+'<br><small style="letter-spacing:0;font-size:9px">'+(d.confluence==='CONFLUENCE'?'systems and structure agree':d.confluence==='CONFLICT'?'systems and structure disagree':'one side is neutral')+'</small></div>';
+    var st=d.stats||{}; var av=st.avg_pct!=null&&Math.abs(st.avg_pct)<0.005?0:st.avg_pct;
+    var items=[['gold (PAXG close)',usd(d.entry,2),'c'],['XAU spot',d.spot_xau?usd(d.spot_xau,2):'—','m'],['₹ / 10 g',d.inr_10g?'₹'+nf(d.inr_10g,0):'—','m'],['stop',d.stop?usd(d.stop,0)+'<i>'+(d.risk_pct!=null?nf(d.risk_pct,2)+'% risk':'')+'</i>':'—',dir?'down':'m'],['target (2R)',d.target?usd(d.target,0):'—',dir?'up':'m'],['ADX / RSI',nf(d.adx,0)+' / '+nf(d.rsi,0),'m'],['ATR',usd(d.atr,1),'m'],['past flips hit',st.n?nf(st.hit_rate,0)+'%<i>'+st.n+' · avg '+(av>=0?'+':'')+nf(av,2)+'% / '+st.horizon+' bars</i>':'—',st.hit_rate>=50?'up':'down']];
+    $('gd-kpi').innerHTML=items.map(function(k){ return '<div><small>'+k[0]+'</small><b class="'+(k[2]||'')+'">'+k[1]+'</b></div>'; }).join('');
+    function tbl(group){ var rows=d.systems.filter(function(x){ return x.group===group; }); return '<table>'+rows.map(function(x){ var v=x.vote>0?'BUY':x.vote<0?'SELL':'—'; return '<tr><td class="v '+(x.vote>0?'up':x.vote<0?'down':'z')+'">'+v+'</td><td class="n">'+x.name+'<small>'+x.who+' · w '+x.weight+'</small></td><td class="note">'+x.note+'</td></tr>'; }).join('')+'</table>'; }
+    $('gd-sys').innerHTML='<div><h5>Classic systems<i>'+(d.classic_score>=0?'+':'')+nf(d.classic_score,2)+'</i></h5>'+tbl('classic')+'</div><div><h5>Price action · smart money<i>'+(d.pa_score>=0?'+':'')+nf(d.pa_score,2)+'</i></h5>'+tbl('price action')+'</div>';
+    $('gd-state').textContent='LIVE · '+new Date(d.as_of*1000).toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit'})+' · '+d.source; }
+  function drawGold(){ var d=gd.data, cv=$('gd-cv'); if(!d||!cv||!d.series) return; var g=ctx2d(cv), c=g.c, S=d.series, n=S.t.length; var pad={l:8,r:64,t:14,b:18}; var scoreH=70; var ph=g.h-pad.t-pad.b-scoreH-8; var pw=g.w-pad.l-pad.r; var bw=pw/n;
+    var lo=Infinity, hi=-Infinity; for(var i=0;i<n;i++){ if(S.l[i]<lo) lo=S.l[i]; if(S.h[i]>hi) hi=S.h[i]; } if(d.stop){ lo=Math.min(lo,d.stop); hi=Math.max(hi,d.stop); } if(d.target){ lo=Math.min(lo,d.target); hi=Math.max(hi,d.target); } var m=(hi-lo)*.06||1; lo-=m; hi+=m;
+    function sx(i){ return pad.l+i*bw+bw/2; } function sy(p){ return pad.t+(hi-p)/(hi-lo)*ph; } var y0=pad.t+ph;
+    var L=gd.layers, pa=d.pa||{}; var dense=bw<4.5; c.save(); c.beginPath(); c.rect(pad.l,pad.t-12,pw,ph+14); c.clip();
+    // dealing range premium/discount
+    if(L.struct&&pa.range){ var r=pa.range, mid=(r.hi+r.lo)/2; c.fillStyle='rgba(255,92,108,.05)'; c.fillRect(sx(r.i0),sy(r.hi),g.w-pad.r-sx(r.i0),sy(mid)-sy(r.hi)); c.fillStyle='rgba(61,214,140,.05)'; c.fillRect(sx(r.i0),sy(mid),g.w-pad.r-sx(r.i0),sy(r.lo)-sy(mid)); c.strokeStyle='rgba(245,200,66,.35)'; c.setLineDash([2,4]); c.beginPath(); c.moveTo(sx(r.i0),sy(mid)); c.lineTo(g.w-pad.r,sy(mid)); c.stroke(); c.setLineDash([]); c.fillStyle='rgba(245,200,66,.6)'; c.textAlign='left'; c.fillText('50% · '+(pa.structure===1?'discount below':pa.structure===-1?'premium above':''),sx(r.i0)+3,sy(mid)-3); }
+    // zones
+    if(L.zones){ (pa.fvgs||[]).slice(dense?-4:-8).forEach(function(f){ c.fillStyle=f.dir===1?'rgba(61,214,140,.13)':'rgba(255,92,108,.13)'; c.fillRect(sx(f.i)-bw/2,sy(f.top),g.w-pad.r-sx(f.i)+bw/2,Math.max(1,sy(f.bot)-sy(f.top))); }); (pa.obs||[]).slice(dense?-3:-6).forEach(function(o){ c.fillStyle=o.dir===1?'rgba(106,53,240,.28)':'rgba(255,110,199,.22)'; c.fillRect(sx(o.i)-bw/2,sy(o.top),g.w-pad.r-sx(o.i)+bw/2,Math.max(1,sy(o.bot)-sy(o.top))); c.fillStyle=o.dir===1?'rgba(170,140,255,.9)':'rgba(255,150,220,.9)'; c.textAlign='left'; c.fillText(o.dir===1?'OB demand':'OB supply',sx(o.i)+2,sy(o.top)-2); }); }
+    // liquidity pools
+    if(L.liq){ (pa.pools||[]).slice(dense?-5:-10).forEach(function(p){ var end=p.swept&&p.swept>0?sx(p.swept):g.w-pad.r; c.strokeStyle=p.type==='EQH'?'rgba(255,92,108,.7)':'rgba(61,214,140,.7)'; c.setLineDash([4,3]); c.beginPath(); c.moveTo(sx(p.i0),sy(p.price)); c.lineTo(end,sy(p.price)); c.stroke(); c.setLineDash([]); c.fillStyle=p.type==='EQH'?'rgba(255,92,108,.9)':'rgba(61,214,140,.9)'; c.textAlign='left'; c.fillText(p.type+(p.swept&&p.swept>0?' swept':''),sx(p.i0)+2,sy(p.price)+(p.type==='EQH'?-3:10)); if(p.swept&&p.swept>0){ c.font='bold 11px IBM Plex Mono,monospace'; c.fillText('×',end-3,sy(p.price)+4); c.font='10px IBM Plex Mono,monospace'; } }); }
+    // MAs and bands
+    function line(arr,color,dash,w){ c.strokeStyle=color; c.lineWidth=w||1; if(dash) c.setLineDash(dash); c.beginPath(); var on=false; for(var i=0;i<n;i++){ if(arr[i]==null){ on=false; continue; } if(!on){ c.moveTo(sx(i),sy(arr[i])); on=true; } else c.lineTo(sx(i),sy(arr[i])); } c.stroke(); c.setLineDash([]); c.lineWidth=1; }
+    if(L.ma){ line(S.bb_up,'rgba(190,150,255,.18)'); line(S.bb_lo,'rgba(190,150,255,.18)'); line(S.e21,C.cyan,null,1); line(S.e50,C.gold,null,1); line(S.s200,'rgba(168,156,207,.8)',[6,4],1.2); }
+    if(L.st){ for(var i=1;i<n;i++){ if(S.st[i]==null||S.st[i-1]==null||S.st_dir[i]!==S.st_dir[i-1]) continue; c.strokeStyle=S.st_dir[i]===1?'rgba(61,214,140,.9)':'rgba(255,92,108,.9)'; c.lineWidth=1.4; c.beginPath(); c.moveTo(sx(i-1),sy(S.st[i-1])); c.lineTo(sx(i),sy(S.st[i])); c.stroke(); } c.lineWidth=1; }
+    // candles
+    var cw=Math.max(1,bw*.62); for(var i=0;i<n;i++){ var up=S.c[i]>=S.o[i]; c.strokeStyle=up?C.up:C.down; c.fillStyle=up?C.up:C.down; c.beginPath(); c.moveTo(sx(i),sy(S.h[i])); c.lineTo(sx(i),sy(S.l[i])); c.stroke(); var top=sy(Math.max(S.o[i],S.c[i])), hgt=Math.max(1,Math.abs(sy(S.o[i])-sy(S.c[i]))); c.fillRect(sx(i)-cw/2,top,cw,hgt); }
+    // structure: swings + breaks
+    if(L.struct){ c.font='9px IBM Plex Mono,monospace'; (pa.swings||[]).slice(dense?-14:-40).forEach(function(s){ if(s.i<0||s.i>=n) return; c.fillStyle=s.type==='high'?'rgba(255,92,108,.85)':'rgba(61,214,140,.85)'; c.textAlign='center'; c.fillText(s.tag,sx(s.i),s.type==='high'?sy(s.price)-4:sy(s.price)+11); }); (pa.events||[]).slice(dense?-6:-14).forEach(function(e){ if(e.i<0||e.i>=n) return; var col=e.type==='CHoCH'?C.gold:(e.dir===1?C.up:C.down); c.strokeStyle=col; c.setLineDash([3,2]); c.beginPath(); c.moveTo(sx(e.from),sy(e.level)); c.lineTo(sx(e.i),sy(e.level)); c.stroke(); c.setLineDash([]); c.fillStyle=col; c.textAlign='center'; c.fillText(e.type,sx((e.from+e.i)/2),e.dir===1?sy(e.level)-4:sy(e.level)+11); }); c.font='10px IBM Plex Mono,monospace'; }
+    // signal markers
+    (d.markers||[]).forEach(function(mk){ var i=mk.i; if(i<0||i>=n) return; c.textAlign='center'; if(mk.side==='BUY'){ c.fillStyle=C.up; c.font='bold 13px IBM Plex Mono,monospace'; c.fillText('▲',sx(i),sy(S.l[i])+14); c.font='9px IBM Plex Mono,monospace'; c.fillText('BUY',sx(i),sy(S.l[i])+24); } else if(mk.side==='SELL'){ c.fillStyle=C.down; c.font='bold 13px IBM Plex Mono,monospace'; c.fillText('▼',sx(i),sy(S.h[i])-6); c.font='9px IBM Plex Mono,monospace'; c.fillText('SELL',sx(i),sy(S.h[i])-16); } else { c.fillStyle='rgba(168,156,207,.9)'; c.font='11px IBM Plex Mono,monospace'; c.fillText('×',sx(i),sy(S.h[i])-6); } c.font='10px IBM Plex Mono,monospace'; });
+    c.restore();
+    // levels on the right
+    function level(p,color,txt,dash){ if(p==null) return; c.strokeStyle=color; if(dash) c.setLineDash(dash); c.beginPath(); c.moveTo(pad.l,sy(p)); c.lineTo(g.w-pad.r,sy(p)); c.stroke(); c.setLineDash([]); c.fillStyle=color; c.fillRect(g.w-pad.r+1,sy(p)-7,pad.r-2,14); c.fillStyle='#0c0626'; c.textAlign='left'; c.fillText(txt,g.w-pad.r+4,sy(p)+4); }
+    level(d.entry,C.cyan,nf(d.entry,0),[1,3]); level(d.stop,C.down,'SL '+nf(d.stop,0),[4,3]); level(d.target,C.up,'T '+nf(d.target,0),[4,3]);
+    // price axis
+    c.fillStyle=C.faint; c.textAlign='left'; for(var k=0;k<=5;k++){ var v=lo+(hi-lo)*k/5; if(Math.abs(sy(v)-sy(d.entry))<9||(d.stop&&Math.abs(sy(v)-sy(d.stop))<9)||(d.target&&Math.abs(sy(v)-sy(d.target))<9)) continue; c.fillText(nf(v,0),g.w-pad.r+4,sy(v)+3); }
+    // time axis
+    c.textAlign='center'; var step=Math.max(1,Math.round(n/Math.max(3,Math.floor(pw/(gd.tf==='1d'?70:110))))); for(var i=0;i<n;i+=step){ var dt=new Date(S.t[i]); c.fillText(gd.tf==='1d'?dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}),sx(i),g.h-scoreH-10); }
+    // score strip
+    var sy0=y0+8+scoreH/2, sh=scoreH/2-4; c.strokeStyle='rgba(190,150,255,.14)'; c.beginPath(); c.moveTo(pad.l,sy0); c.lineTo(g.w-pad.r,sy0); c.stroke(); c.strokeStyle='rgba(255,255,255,.12)'; c.setLineDash([2,3]); c.beginPath(); c.moveTo(pad.l,sy0-sh*.25); c.lineTo(g.w-pad.r,sy0-sh*.25); c.moveTo(pad.l,sy0+sh*.25); c.lineTo(g.w-pad.r,sy0+sh*.25); c.stroke(); c.setLineDash([]);
+    for(var i=0;i<n;i++){ var v=S.score[i]; if(v==null) continue; c.fillStyle=S.state[i]===1?'rgba(61,214,140,.85)':S.state[i]===-1?'rgba(255,92,108,.85)':'rgba(168,156,207,.5)'; var hh=v*sh; c.fillRect(sx(i)-cw/2,Math.min(sy0,sy0-hh),cw,Math.abs(hh)||1); }
+    c.fillStyle=C.faint; c.textAlign='left'; c.fillText('composite score  +1',pad.l+2,y0+18); c.fillText('−1',pad.l+2,y0+8+scoreH-2);
+    // hover
+    if(gd.hover!=null&&gd.hover>=0&&gd.hover<n){ var i=gd.hover; c.strokeStyle='rgba(245,200,66,.45)'; c.beginPath(); c.moveTo(sx(i),pad.t); c.lineTo(sx(i),g.h-pad.b); c.stroke(); var dt=new Date(S.t[i]); $('gd-note').textContent=dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+(gd.tf!=='1d'?' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):'')+'  O '+nf(S.o[i],1)+'  H '+nf(S.h[i],1)+'  L '+nf(S.l[i],1)+'  C '+nf(S.c[i],1)+'  score '+(S.score[i]==null?'—':(S.score[i]>=0?'+':'')+nf(S.score[i],2))+'  '+(S.state[i]===1?'BUY':S.state[i]===-1?'SELL':'neutral'); }
+    gd.geom={pad:pad,bw:bw,n:n}; }
+  $('gd-cv').addEventListener('pointermove',function(e){ if(!gd.geom) return; var r=e.currentTarget.getBoundingClientRect(); var i=Math.floor((e.clientX-r.left-gd.geom.pad.l)/gd.geom.bw); if(i!==gd.hover){ gd.hover=i; drawGold(); } });
+  $('gd-cv').addEventListener('pointerleave',function(){ gd.hover=null; drawGold(); $('gd-note').textContent='move the pointer over the chart to read a bar'; });
+  window.addEventListener('resize',function(){ drawGold(); });
+  if(!locked){ loadGold(); setInterval(function(){ if(visible('p-gold')) loadGold(); },60000); }
 
   /* CoinDCX */
   var dcx={timer:null};

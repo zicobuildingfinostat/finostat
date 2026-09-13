@@ -66,5 +66,32 @@ check("locked has paywall + guard", "FINO_LOCKED=true" in locked and 'class="pay
 lapsed = pages_global.render(locked=True, signed_in=True, plan="starter").decode()
 check("starter copy", "Your account is on Starter" in lapsed)
 
+# -- GOLD signal ----------------------------------------------------------------
+import gold, random
+random.seed(7)
+px, cs = 2000.0, []
+t0 = 1700000000000
+for i in range(600):
+    drift = 0.004 if (i // 120) % 2 == 0 else -0.003
+    px *= 1 + drift + random.gauss(0, 0.01)
+    o = px * (1 + random.gauss(0, 0.003)); h = max(o, px) * (1 + abs(random.gauss(0, 0.004))); l = min(o, px) * (1 - abs(random.gauss(0, 0.004)))
+    cs.append([t0 + i * 86400000, o, h, l, px, 100 + random.random() * 50])
+gd = gold.analyze(cs, "1d")
+check("gold analyze keys", all(k in gd for k in ("signal", "score", "classic_score", "pa_score", "confluence", "systems", "markers", "series", "pa", "stats")))
+check("gold 15 systems in two groups", len(gd["systems"]) == 15 and {x["group"] for x in gd["systems"]} == {"classic", "price action"})
+check("gold signal word matches state", (gd["direction"] == 0) == (gd["signal"] == "NEUTRAL"))
+check("gold levels when directional", gd["direction"] == 0 or (gd["stop"] and gd["target"] and (gd["target"] - gd["entry"]) * gd["direction"] > 0 and (gd["entry"] - gd["stop"]) * gd["direction"] > 0))
+check("gold markers alternate sensibly", all(m["side"] in ("BUY", "SELL", "EXIT") for m in gd["markers"]) and len(gd["markers"]) > 3)
+check("gold structure events + zones found", gd["pa"]["events"] and (gd["pa"]["fvgs"] or gd["pa"]["obs"]))
+gd2 = gold.analyze(cs[:-20], "1d")
+check("gold does not repaint", gd["series"]["state"][:580] == gd2["series"]["state"] and gd["series"]["score"][:580] == gd2["series"]["score"])
+check("gold ema/rsi sanity", abs(gold.ema([1.0] * 30, 10)[-1] - 1.0) < 1e-9 and gold.rsi([float(i) for i in range(40)])[-1] == 100.0)
+st_line, st_dir = gold.supertrend(cs)
+check("gold supertrend line on the right side", all((d == 1 and ln < c[4]) or (d == -1 and ln > c[4]) or d is None for ln, d, c in zip(st_line[-50:], st_dir[-50:], cs[-50:])))
+check("gold label thresholds", gold.label(0.6) == "STRONG BUY" and gold.label(0.3) == "BUY" and gold.label(0.0) == "NEUTRAL" and gold.label(-0.3) == "SELL" and gold.label(-0.7, -1) == "STRONG SELL" and gold.label(0.4, 0) == "NEUTRAL")
+gdoc = pages_global.render().decode()
+for marker in ('id="p-gold"', "/api/global/gold?tf=", 'data-l="zones"', 'data-tf="4h"', "composite score", "Raschke"):
+    check("gold page has " + marker, marker in gdoc)
+
 print("fails:", fails)
 sys.exit(1 if fails else 0)

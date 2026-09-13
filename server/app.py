@@ -50,6 +50,7 @@ import history
 import upstox_rest
 import candles
 import crypto
+import gold
 import coindcx
 import pages_global
 import algo
@@ -222,6 +223,7 @@ WATCHDOG = watchdog.Watchdog(FEED, HOLIDAYS, notify=mailer.send_owner_note)
 FLOWS = flows.Flows(flows.Store(AUTH.path), HOLIDAYS)
 PUBCHAIN = pubchain.PublicChains(AUTH.path.parent, HOLIDAYS, contracts_of=lambda: CONTRACTS_OF(FEED))
 CRYPTO = crypto.Crypto()
+GOLD = gold.Gold()
 _DCX_CACHE: dict = {}            # user_id -> (ts, payload)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
 ALGOS = algo.Store(AUTH.path)
@@ -364,7 +366,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/global/gold", "/api/coindcx"}
 
 
 def _gate(user, ukey: str):
@@ -762,6 +764,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(out)
             if route == "/api/global/tape":
                 return self._json(CRYPTO.tape())
+            if route == "/api/global/gold":
+                qs = parse_qs(parsed.query)
+                tf = qs.get("tf", ["1d"])[0]
+                try:
+                    bars = max(60, min(400, int(qs.get("bars", ["220"])[0])))
+                except ValueError:
+                    bars = 220
+                usdinr = None
+                try:
+                    btc = [q for q in CRYPTO.crypto_tape() if q["symbol"] == "BTC"][0]
+                    usdinr = btc["inr"] / btc["price"] if btc.get("inr") and btc.get("price") else None
+                except Exception:                                   # noqa: BLE001
+                    pass
+                d = GOLD.view(tf, bars, usdinr)
+                return self._json(d, 503 if "error" in d else 200)
             if route == "/api/global/chain":
                 qs = parse_qs(parsed.query)
                 cur = qs.get("cur", ["BTC"])[0].upper()
