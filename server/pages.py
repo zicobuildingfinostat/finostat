@@ -411,7 +411,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div><code>SURF · SKEW · CURV · GEX</code><span>IV surface, vol skew &amp; moneyness, implied distribution, dealer gamma</span></div>
 <div><code>RPLY · BKTS</code><span>replay any past expiry day; backtest a structure across expiries since Oct 2024</span></div>
 <h4>Options</h4>
-<div><code>NIFTY OPT</code><span>open the option chain with OI</span></div>
+<div><code>NIFTY OPT</code><span>load the chain in the builder (OI, Greeks, 2nd/3rd order); the OPTION CHAIN panel near the top has it standalone — <code>OC</code> jumps to it</span></div>
 <div><code>NIFTY 24500 CE</code><span>add a long leg · <code>NIFTY 24500 PE SELL 2</code> for a short of 2</span></div>
 <div><code>IC NIFTY 2</code><span>iron condor, 2 lots on the ticket · also SS (short straddle), LS, SG (short strangle), LSG, IF (iron fly), BCS, BPS, FLY, RATIO</span></div>
 <div><code>PAPER</code> / <code>TRADE</code><span>journal the built strategy / send it to the broker</span></div>
@@ -477,6 +477,17 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
     </section>
   </div>
 
+  <section class="panel a-wide" id="p-chain" aria-label="Option chain">
+    <div class="panel-hd"><span class="k">OPT</span><span class="s" id="oc-title">OPTION CHAIN · NIFTY 50</span><span class="r"><span class="an-state" id="oc-state">—</span></span></div>
+    <div class="bl-chain oc" id="oc-wrap">
+      <div class="bl-views seg" id="oc-top"><span class="seg" id="oc-u"><button type="button" data-u="NIFTY 50" class="on">NIFTY</button><button type="button" data-u="BANKNIFTY">BANKNIFTY</button><button type="button" data-u="FINNIFTY">FINNIFTY</button><button type="button" data-u="SENSEX">SENSEX</button></span>
+        <select id="oc-exp" class="an-sel" aria-label="Expiry"></select>
+        <span class="seg" id="oc-view"><button type="button" data-v="oi" class="on">OI</button><button type="button" data-v="greeks">GREEKS</button><button type="button" data-v="second">2ND ORDER</button><button type="button" data-v="third">3RD ORDER</button></span><span class="bl-vnote" id="oc-vnote"></span></div>
+      <div class="bl-oi" id="oc-oi" hidden></div>
+      <div class="bl-scroll"><table><thead id="oc-head"></thead><tbody id="oc-rows"></tbody></table></div>
+      <div class="note" id="oc-note">loading…</div>
+    </div>
+  </section>
   <section class="panel" id="p-events" aria-label="Event calendar">
     <div class="panel-hd"><span class="k">EVNT</span><span class="s">EVENTS · IMPLIED MOVE PRICED</span><span class="r"><span id="ev-state">—</span></span></div>
     <div class="ev-top"><span class="seg" id="ev-filter"><button type="button" data-k="all" class="on">ALL</button><button type="button" data-k="expiry">EXPIRIES</button><button type="button" data-k="results">RESULTS</button><button type="button" data-k="macro">MACRO</button></span><span style="color:var(--faint)">next 21 days · move = ATM straddle of the expiry spanning the date · click a row to load it in the builder</span></div>
@@ -928,11 +939,11 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet'],['surf','IV surface'],['skew','Vol skew'],['curv','Implied distribution'],['gex','Gamma exposure'],['rply','Replay'],['bkts','Backtest'],['algo','Algo strategies']];
+var PANELS=[['sheet','BFLY sheet'],['chain','Option chain'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet'],['surf','IV surface'],['skew','Vol skew'],['curv','Implied distribution'],['gex','Gamma exposure'],['rply','Replay'],['bkts','Backtest'],['algo','Algo strategies']];
 /* ---------- command line ---------- */
 var tcmdIn=document.getElementById('tcmd-in'), tcmdMsg=document.getElementById('tcmd-msg'), helpEl=document.getElementById('help');
 var PRESET_ALIAS={IC:'iron-condor',CONDOR:'iron-condor',IF:'iron-fly',IRONFLY:'iron-fly',SS:'short-straddle',STRADDLE:'short-straddle',LS:'long-straddle',SG:'short-strangle',STRANGLE:'short-strangle',LSG:'long-strangle',BCS:'bull-call-spread',BPS:'bear-put-spread',FLY:'butterfly',BFLY:'butterfly',BUTTERFLY:'butterfly',RATIO:'ratio-spread'};
-var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini',SURF:'surf',SURFACE:'surf',IVS:'surf',SKEW:'skew',SMILE:'skew',MONEY:'skew',MONEYNESS:'skew',CURV:'curv',CURVE:'curv',BELL:'curv',DIST:'curv',GEX:'gex',GAMMA:'gex',RPLY:'rply',REPLAY:'rply',BKTS:'bkts',BACKTEST:'bkts',BT:'bkts',ALGO:'algo',ALGOS:'algo',BOT:'algo'};
+var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',OC:'chain',OPTCHAIN:'chain',OPTIONCHAIN:'chain',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini',SURF:'surf',SURFACE:'surf',IVS:'surf',SKEW:'skew',SMILE:'skew',MONEY:'skew',MONEYNESS:'skew',CURV:'curv',CURVE:'curv',BELL:'curv',DIST:'curv',GEX:'gex',GAMMA:'gex',RPLY:'rply',REPLAY:'rply',BKTS:'bkts',BACKTEST:'bkts',BT:'bkts',ALGO:'algo',ALGOS:'algo',BOT:'algo'};
 var INDEX_ALIAS={NIFTY:'NIFTY 50','NIFTY50':'NIFTY 50','NIFTY 50':'NIFTY 50',BN:'BANKNIFTY',BANKNIFTY:'BANKNIFTY',NIFTYBANK:'BANKNIFTY',SENSEX:'SENSEX',SX:'SENSEX',FIN:'FINNIFTY',FINNIFTY:'FINNIFTY',VIX:'INDIA VIX',INDIAVIX:'INDIA VIX'};
 function say(msg,kind){ tcmdMsg.textContent=msg; tcmdMsg.className='tcmd-msg '+(kind||''); tcmdMsg.hidden=false; clearTimeout(say.t); say.t=setTimeout(function(){ tcmdMsg.hidden=true; },3500); }
 function goPanel(id){ var el=document.getElementById('p-'+id); if(!el) return false; if(el.hidden){ var hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[]; var i=hide.indexOf(id); if(i>=0) hide.splice(i,1); applyLayout(); savePrefs(); } el.scrollIntoView({behavior:'smooth',block:'start'}); return true; }
@@ -1335,25 +1346,27 @@ function loadChain(){
   if(!bl.u||!bl.chainOpen) return;
   fetch('/api/chain?u='+encodeURIComponent(bl.u)+(bl.expiry?'&expiry='+bl.expiry:''),{credentials:'same-origin'}).then(function(r){ return r.json(); }).then(renderChain).catch(function(){});
 }
-function renderChain(c){
+var BL_CTX={rows:function(){ return blChainRows; },head:function(){ return document.getElementById('bl-chain-head'); },vnote:function(){ return document.getElementById('bl-vnote'); },note:function(){ return blChainNote; },oi:function(){ return blOi; },view:function(){ return bl.view; },u:function(){ return bl.u; }};
+function renderChain(c){ bl.lastChain=c; renderChainInto(BL_CTX,c); }
+function renderChainInto(ctx,c){
+  var blChainRows=ctx.rows(), blChainNote=ctx.note(), blOi=ctx.oi();
   if(!c||!c.rows){ blChainRows.innerHTML=''; blChainNote.textContent=c&&c.error?c.error:'chain unavailable'; blOi.hidden=true; return; }
   var o=c.oi, mx=o&&o.max_oi?o.max_oi:0;
   if(o){ blOi.hidden=false;
     blOi.innerHTML=[['PCR (OI)',o.pcr!=null?o.pcr.toFixed(2):'—'],['max pain',o.max_pain!=null?fmt(o.max_pain,0):'—'],['call wall',o.call_wall!=null?fmt(o.call_wall,0):'—'],['put wall',o.put_wall!=null?fmt(o.put_wall,0):'—'],['call OI',kfmt(o.tot_ce)],['put OI',kfmt(o.tot_pe)]]
       .map(function(x){ return '<div><small>'+x[0]+'</small><b>'+x[1]+'</b></div>'; }).join('');
   } else blOi.hidden=true;
-  bl.lastChain=c;
-  var view=CHAIN_VIEWS[bl.view]||CHAIN_VIEWS.oi, cols=view.cols;
-  var head=document.getElementById('bl-chain-head'); if(head){ var lh=cols.map(function(x){ return '<th>'+x[0]+'</th>'; }).join(''), rh=cols.slice().reverse().map(function(x){ return '<th>'+x[0]+'</th>'; }).join(''); head.innerHTML='<tr>'+lh+'<th>CE</th><th>STRIKE</th><th>PE</th>'+rh+'</tr>'; }
-  var vn=document.getElementById('bl-vnote'); if(vn) vn.textContent=view.note;
-  function pxTd(side,s,strike){ var lbl=(c.underlying||bl.u)+' '+strike+' '+side; return '<td class="px" data-r="'+side+'" data-k="'+strike+'">'+(s.key?'<i class="chb" title="premium chart with the underlying" data-key="'+s.key+'" data-label="'+lbl+'">∿</i>':'')+(s.ltp!=null?s.ltp.toFixed(2):'—')+'</td>'; }
+  var vkey=ctx.view(); var view=CHAIN_VIEWS[vkey]||CHAIN_VIEWS.oi, cols=view.cols;
+  var head=ctx.head(); if(head){ var lh=cols.map(function(x){ return '<th>'+x[0]+'</th>'; }).join(''), rh=cols.slice().reverse().map(function(x){ return '<th>'+x[0]+'</th>'; }).join(''); head.innerHTML='<tr>'+lh+'<th>CE</th><th>STRIKE</th><th>PE</th>'+rh+'</tr>'; }
+  var vn=ctx.vnote(); if(vn) vn.textContent=view.note;
+  function pxTd(side,s,strike){ var lbl=(c.underlying||ctx.u())+' '+strike+' '+side; return '<td class="px" data-r="'+side+'" data-k="'+strike+'">'+(s.key?'<i class="chb" title="premium chart with the underlying" data-key="'+s.key+'" data-label="'+lbl+'">∿</i>':'')+(s.ltp!=null?s.ltp.toFixed(2):'—')+'</td>'; }
   blChainRows.innerHTML=c.rows.map(function(r){
     var ce=r.ce||{}, pe=r.pe||{};
     function oiTd(side,s){ var w=mx&&s.oi?Math.round(s.oi/mx*100):0; return '<td class="'+side+' oi'+(o&&((side==='ce'&&r.strike===o.call_wall)||(side==='pe'&&r.strike===o.put_wall))?' wall':'')+'"><i style="width:'+w+'%"></i><span>'+kfmt(s.oi)+'</span></td>'; }
     function chTd(s){ return '<td class="ch">'+(s.oi_chg==null?'—':(s.oi_chg>0?'+':'')+kfmt(s.oi_chg))+'</td>'; }
     function gTd(s,f){ return '<td class="g">'+gfmt(s[f])+'</td>'; }
     var left, right;
-    if(bl.view==='oi'){ left=oiTd('ce',ce)+chTd(ce)+'<td>'+(ce.iv!=null?ce.iv.toFixed(1):'—')+'</td>'; right='<td>'+(pe.iv!=null?pe.iv.toFixed(1):'—')+'</td>'+chTd(pe)+oiTd('pe',pe); }
+    if(vkey==='oi'){ left=oiTd('ce',ce)+chTd(ce)+'<td>'+(ce.iv!=null?ce.iv.toFixed(1):'—')+'</td>'; right='<td>'+(pe.iv!=null?pe.iv.toFixed(1):'—')+'</td>'+chTd(pe)+oiTd('pe',pe); }
     else { left=cols.map(function(x){ return gTd(ce,x[1]); }).join(''); right=cols.slice().reverse().map(function(x){ return gTd(pe,x[1]); }).join(''); }
     return '<tr'+(r.atm?' class="atm"':'')+'>'+left+pxTd('CE',ce,r.strike)+'<td class="k">'+r.strike+'</td>'+pxTd('PE',pe,r.strike)+right+'</tr>';
   }).join('');
@@ -1364,6 +1377,23 @@ blChainBtn.addEventListener('click',function(){ bl.chainOpen=!bl.chainOpen; blCh
 blChainRows.addEventListener('click',function(e){ var g=e.target.closest('i.chb'); if(g){ e.stopPropagation(); if(window.finoChartTo) window.finoChartTo(g.getAttribute('data-key'), g.getAttribute('data-label'), bl.u); var cp=document.getElementById('p-chart'); if(cp&&!cp.hidden) cp.scrollIntoView({behavior:'smooth',block:'start'}); return; }
   var td=e.target.closest('td.px'); if(!td||bl.legs.length>=8) return; bl.legs.push({right:td.getAttribute('data-r'),strike:Number(td.getAttribute('data-k')),qty:1}); bl.preset=null; priceStrategy(); });
 document.getElementById('bl-view').addEventListener('click',function(e){ var b=e.target.closest('button[data-v]'); if(!b) return; Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); bl.view=b.getAttribute('data-v'); if(bl.lastChain) renderChain(bl.lastChain); });
+/* ---------- standalone OPTION CHAIN panel (same renderer, its own underlying/expiry/view) ---------- */
+var oc={u:'NIFTY 50',expiry:null,view:'oi',last:null,timer:null};
+var ocPanel=document.getElementById('p-chain');
+if(ocPanel){
+  var OC_CTX={rows:function(){ return document.getElementById('oc-rows'); },head:function(){ return document.getElementById('oc-head'); },vnote:function(){ return document.getElementById('oc-vnote'); },note:function(){ return document.getElementById('oc-note'); },oi:function(){ return document.getElementById('oc-oi'); },view:function(){ return oc.view; },u:function(){ return oc.u; }};
+  function ocLoad(){ if(ocPanel.hidden||document.hidden) return; var st=document.getElementById('oc-state'); fetch('/api/chain?u='+encodeURIComponent(oc.u)+(oc.expiry?'&expiry='+oc.expiry:''),{credentials:'same-origin'}).then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); }).then(function(x){ var c=x.j; if(x.s>=400||!c||!c.rows){ st.textContent=(c&&c.error)||('HTTP '+x.s); st.className='an-state err'; renderChainInto(OC_CTX,c||{}); return; }
+      oc.last=c; oc.expiry=c.expiry; var sel=document.getElementById('oc-exp'); var have=Array.prototype.map.call(sel.options,function(o){ return o.value; }).join(); var want=(c.expiries||[]).map(String).join(); if(have!==want){ sel.innerHTML=(c.expiries||[]).map(function(e){ var d=new Date(e); return '<option value="'+e+'">'+d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+'</option>'; }).join(''); } sel.value=String(c.expiry);
+      document.getElementById('oc-title').textContent='OPTION CHAIN · '+oc.u+' · spot '+fmt(c.spot,1)+' · ATM '+fmt(c.atm,0)+' · lot '+c.lot; st.textContent=(c.live?'LIVE':'LAST')+(c.warming?' · WARMING':''); st.className='an-state ok'; renderChainInto(OC_CTX,c); }).catch(function(){ st.textContent='network'; st.className='an-state err'; }); }
+  document.getElementById('oc-u').addEventListener('click',function(e){ var b=e.target.closest('button[data-u]'); if(!b) return; Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); oc.u=b.getAttribute('data-u'); oc.expiry=null; document.getElementById('oc-rows').innerHTML=''; ocLoad(); });
+  document.getElementById('oc-exp').addEventListener('change',function(){ oc.expiry=Number(this.value)||null; ocLoad(); });
+  document.getElementById('oc-view').addEventListener('click',function(e){ var b=e.target.closest('button[data-v]'); if(!b) return; Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); oc.view=b.getAttribute('data-v'); if(oc.last) renderChainInto(OC_CTX,oc.last); });
+  document.getElementById('oc-rows').addEventListener('click',function(e){ var g=e.target.closest('i.chb'); if(g){ e.stopPropagation(); if(window.finoChartTo) window.finoChartTo(g.getAttribute('data-key'), g.getAttribute('data-label'), oc.u); var cp=document.getElementById('p-chart'); if(cp&&!cp.hidden) cp.scrollIntoView({behavior:'smooth',block:'start'}); return; }
+    var td=e.target.closest('td.px'); if(!td) return; var leg={right:td.getAttribute('data-r'),strike:Number(td.getAttribute('data-k')),qty:1}; var note=document.getElementById('oc-note');
+    function add(){ if(bl.legs.length>=8){ note.textContent='builder already has 8 legs'; return; } bl.legs.push(leg); bl.preset=null; priceStrategy(); note.textContent='added '+leg.strike+' '+leg.right+' to the strategy builder · click the strike price again to add more'; }
+    if(bl.u===oc.u&&(!bl.expiry||bl.expiry===oc.expiry)){ add(); } else { withChain(oc.u,function(){ bl.expiry=oc.expiry; add(); }); } });
+  ocLoad(); oc.timer=setInterval(ocLoad,5000); document.addEventListener('visibilitychange',function(){ if(!document.hidden) ocLoad(); });
+}
 function stopPricing(){ if(bl.timer){ clearInterval(bl.timer); bl.timer=null; } }
 function showLock(err){
   stopPricing();                                   // nothing to price while locked
