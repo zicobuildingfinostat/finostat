@@ -293,7 +293,7 @@ PAGES = {
 
 def links_html(current: str | None = None) -> str:
     items = "".join(f'<a class="nav{" on" if slug == current else ""}" href="/calendar/{slug}">{label}</a>' for slug, (label, _) in PAGES.items())
-    items += '<a class="nav" href="/fii-dii">FII / DII today</a>'
+    items += '<a class="nav" href="/fii-dii">FII / DII today</a><a class="nav" href="/option-chain/nifty">NIFTY option chain</a><a class="nav" href="/option-chain/banknifty">BANKNIFTY option chain</a>'
     return f'<div class="cal-top" style="margin-top:18px"><span style="color:var(--faint);letter-spacing:.14em">SCHEDULES</span>{items}</div>'
 
 
