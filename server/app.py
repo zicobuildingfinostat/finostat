@@ -53,7 +53,7 @@ import crypto
 import gold
 import coindcx
 import pages_global
-import aurum_page
+import sovereign_page
 import algo
 import watchdog
 import flows
@@ -149,7 +149,7 @@ def _guest_settle(order_id: str, secure: bool):
     if user is None:
         return {"error": "account missing"}, None
     product = row.get("plan") in payments.PRODUCTS
-    nxt = "/aurum/app?paid=1" if product else "/dashboard?paid=1"
+    nxt = "/xau-sovereign/app?paid=1" if product else "/dashboard?paid=1"
     if authmod.is_phone_only(user["email"]):
         sid = AUTH.create_session(user["id"])
         return {"ok": True, "signed_in": True, "next": nxt, "plan": user["plan"]}, authmod.Auth.cookie_header(sid, secure)
@@ -157,7 +157,7 @@ def _guest_settle(order_id: str, secure: bool):
     token = AUTH.create_link(user["email"])
     sent = bool(token) and mailer.send_magic_link(user["email"], f"{PUBLIC_URL or 'https://finostat.com'}/auth/verify?token={quote(token, safe='')}&next={quote(nxt, safe='')}")
     masked = user["email"][:2] + "***" + user["email"][user["email"].find("@"):]
-    what = "Aurum Strike is unlocked" if product else f"{user['plan']} is active"
+    what = "XAU Sovereign is unlocked" if product else f"{user['plan']} is active"
     return {"ok": True, "signed_in": False, "plan": user["plan"],
             "message": f"Payment received and {what} on the account for {masked}. " + ("We've emailed your sign-in link there." if sent else "Sign in with your email link to open it.")}, None
 
@@ -397,7 +397,7 @@ KNOWN_PREFIXES = ("/strategies/",)
 
 # URLs the original marketing page advertised that were never built. Anything
 # that already crawled or bookmarked them lands somewhere real.
-RETIRED = {"/analysis": "/dashboard", "/live-session": "/contact", "/blog": "/finch",
+RETIRED = {"/aurum": "/xau-sovereign", "/aurum/buy": "/xau-sovereign/buy", "/aurum/app": "/xau-sovereign/app", "/analysis": "/dashboard", "/live-session": "/contact", "/blog": "/finch",
            "/tools/gift-nifty": "/dashboard", "/tools": "/dashboard"}
 
 # The old /learn URLs (linked from the homepage since launch) map onto Finch chapters.
@@ -692,30 +692,30 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/global":
                 user = self._current_user()
                 return self._send(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user),
-                                                      pine=user is not None and AUTH.has_product(user["id"], "aurum")),
+                                                      pine=user is not None and AUTH.has_product(user["id"], "sovereign")),
                                   "text/html; charset=utf-8", cache="no-store")
-            if route == "/aurum":
-                return self._send(aurum_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+            if route == "/xau-sovereign":
+                return self._send(sovereign_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
                                   "text/html; charset=utf-8", cache="public, max-age=300")
-            if route == "/aurum/buy":
+            if route == "/xau-sovereign/buy":
                 user = self._current_user()
-                if user is not None and AUTH.has_product(user["id"], "aurum"):
-                    return self._redirect("/aurum/app")
-                return self._send(guest.render("aurum", "lifetime", configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+                if user is not None and AUTH.has_product(user["id"], "sovereign"):
+                    return self._redirect("/xau-sovereign/app")
+                return self._send(guest.render("sovereign", "lifetime", configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
                                   "text/html; charset=utf-8", cache="no-store")
-            if route == "/aurum/app":
+            if route == "/xau-sovereign/app":
                 user = self._current_user()
-                owner = user is not None and AUTH.has_product(user["id"], "aurum")
-                return self._send(pages_global.render_aurum(locked=not (owner or _paid(user)), signed_in=user is not None, pine=owner),
+                owner = user is not None and AUTH.has_product(user["id"], "sovereign")
+                return self._send(pages_global.render_sovereign(locked=not (owner or _paid(user)), signed_in=user is not None, pine=owner),
                                   "text/html; charset=utf-8", cache="no-store")
-            if route == "/aurum/pine":
+            if route == "/xau-sovereign/pine":
                 user = self._current_user()
                 if user is None:
-                    return self._redirect("/login?next=%2Faurum%2Fapp")
-                if not AUTH.has_product(user["id"], "aurum"):
-                    return self._redirect("/aurum")
-                return self._send(aurum_page.pine_for(user["email"]), "text/plain; charset=utf-8", cache="no-store",
-                                  headers=[("Content-Disposition", 'attachment; filename="aurum-strike.pine"')])
+                    return self._redirect("/login?next=%2Fxau-sovereign%2Fapp")
+                if not AUTH.has_product(user["id"], "sovereign"):
+                    return self._redirect("/xau-sovereign")
+                return self._send(sovereign_page.pine_for(user["email"]), "text/plain; charset=utf-8", cache="no-store",
+                                  headers=[("Content-Disposition", 'attachment; filename="xau-sovereign.pine"')])
             if (route in TERMINAL_APIS or route.startswith("/api/alerts/")) and not _paid(self._current_user()):
                 return self._json({"error": "plan required", "need": "desk", "feature": "terminal",
                                    "signed_in": self._current_user() is not None}, 402)
@@ -795,8 +795,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(CRYPTO.tape())
             if route == "/api/global/gold":
                 user = self._current_user()
-                if not (_paid(user) or (user is not None and AUTH.has_product(user["id"], "aurum"))):
-                    return self._json({"error": "Aurum Strike is a one-time ₹8,000 purchase, or part of Desk", "need": "aurum", "signed_in": user is not None}, 402)
+                if not (_paid(user) or (user is not None and AUTH.has_product(user["id"], "sovereign"))):
+                    return self._json({"error": "XAU Sovereign is a one-time ₹8,000 purchase, or part of Desk", "need": "sovereign", "signed_in": user is not None}, 402)
                 qs = parse_qs(parsed.query)
                 tf = qs.get("tf", ["1d"])[0]
                 try:

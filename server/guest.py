@@ -26,7 +26,7 @@ _CSS = r"""
 
 _JS = r"""
 (function(){
-  var plan=__PLAN__, period=__PERIOD__, NAMES={desk:'Desk',pro:'Pro desk',aurum:'Aurum Strike'};
+  var plan=__PLAN__, period=__PERIOD__, NAMES={desk:'Desk',pro:'Pro desk',sovereign:'XAU Sovereign'};
   var $=function(id){ return document.getElementById(id); }; var msg=$('gc-msg');
   function show(k,t){ msg.hidden=false; msg.className='msg '+k; msg.textContent=t; }
   function total(){ var card=document.querySelector('.pl[data-plan="'+plan+'"] .px'); if(!card) return; var amt=period==='monthly'?card.getAttribute('data-m'):card.getAttribute('data-y'); $('gc-total').innerHTML='You pay <b>₹'+amt+'</b> '+(period==='lifetime'?'once for '+NAMES[plan]+' · lifetime access':'for '+NAMES[plan]+' · '+(period==='monthly'?'30 days':'365 days'));
@@ -37,7 +37,7 @@ _JS = r"""
   function loadScript(src,cb){ if(window.Cashfree) return cb(); var s=document.createElement('script'); s.src=src; s.onload=cb; s.onerror=function(){ show('bad','Cashfree checkout failed to load'); $('gc-pay').disabled=false; }; document.head.appendChild(s); }
   function post(url,body,cb){ fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},body:JSON.stringify(body),credentials:'same-origin'}).then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); }).then(function(x){ cb(x.s,x.j); }).catch(function(){ cb(0,{error:'network'}); }); }
   function settle(orderId,tries){ tries=tries||0; post('/api/pay/guest/verify',{order_id:orderId},function(s,j){
-    if(s===200&&j.ok){ if(j.signed_in){ show('ok',period==='lifetime'?'Payment received — opening Aurum Strike…':'Payment received — opening your terminal…'); location.href=j.next||'/dashboard'; } else { show('ok',j.message||'Payment received. Check your inbox for the sign-in link.'); } return; }
+    if(s===200&&j.ok){ if(j.signed_in){ show('ok',period==='lifetime'?'Payment received — opening XAU Sovereign…':'Payment received — opening your terminal…'); location.href=j.next||'/dashboard'; } else { show('ok',j.message||'Payment received. Check your inbox for the sign-in link.'); } return; }
     if(j.pending&&tries<6){ show('ok','Waiting for Cashfree to confirm…'); setTimeout(function(){ settle(orderId,tries+1); },3000); return; }
     show('bad',j.error||'Could not confirm the payment yet. If money left your account it activates automatically; write to hello@finostat.com with your mobile number.'); $('gc-pay').disabled=false; }); }
   $('gc-pay').addEventListener('click',function(){ var phone=$('gc-phone').value.trim(), email=$('gc-email').value.trim(); var d=phone.replace(/\D/g,''); if(d.length===12&&d.slice(0,2)==='91') d=d.slice(2); if(!(d.length===10&&/[6-9]/.test(d[0]))){ show('bad','Enter a 10-digit Indian mobile number.'); $('gc-phone').focus(); return; }
@@ -50,10 +50,10 @@ _JS = r"""
 
 def render(plan: str, period: str, notice: str | None = None, configured: bool = True) -> bytes:
     cat = pm.catalogue()
-    product = plan == "aurum"
-    plan = plan if plan in ("desk", "pro", "aurum") else "desk"
+    product = plan == "sovereign"
+    plan = plan if plan in ("desk", "pro", "sovereign") else "desk"
     period = "lifetime" if product else (period if period in ("monthly", "yearly") else "monthly")
-    names = {"desk": "Desk", "pro": "Pro desk", "aurum": "Aurum Strike"}
+    names = {"desk": "Desk", "pro": "Pro desk", "sovereign": "XAU Sovereign"}
     blurb = {"desk": "live terminal, chains, builder, alerts, analytics", "pro": "everything in Desk + stock chains, replay, backtests, algos"}
     cards = []
     for p in ("desk", "pro"):
@@ -62,8 +62,8 @@ def render(plan: str, period: str, notice: str | None = None, configured: bool =
                      f'<span class="px" data-m="{m:,}" data-y="{y:,}">₹{(m if period == "monthly" else y):,}</span>'
                      f'<small>{"per month" if period == "monthly" else "per year"} · {blurb[p]}</small></div>')
     if product:
-        rupees = int(cat["products"]["aurum"]["rupees"])
-        cards = [f'<div class="pl on" data-plan="aurum" role="button" tabindex="0" style="grid-column:1/-1"><b>Aurum Strike</b><span class="px" data-m="{rupees:,}" data-y="{rupees:,}">₹{rupees:,}</span>'
+        rupees = int(cat["products"]["sovereign"]["rupees"])
+        cards = [f'<div class="pl on" data-plan="sovereign" role="button" tabindex="0" style="grid-column:1/-1"><b>XAU Sovereign</b><span class="px" data-m="{rupees:,}" data-y="{rupees:,}">₹{rupees:,}</span>'
                  '<small>one-time · lifetime · XAU/USD buy·sell engine: live web app + TradingView Pine Script</small></div>']
     notice_html = f'<div class="msg ok">{account._esc(notice)}</div>' if notice else ""
     cyc = ("" if product else
@@ -82,5 +82,5 @@ def render(plan: str, period: str, notice: str | None = None, configured: bool =
             "<script>" + _JS.replace("__PLAN__", repr(plan)).replace("__PERIOD__", repr(period)) + "</script>")
     head, _, _tail = account._PAGE.partition("<main")
     doc = (head.replace("__CSS__", account._CSS + _CSS).replace("Your account — Finostat", f"Get {names[plan]} — pay with your mobile number | Finostat")
-           + '<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · ' + ('<a href="/aurum">AURUM STRIKE</a> · BUY' if product else 'GET ' + names[plan].upper()) + "</nav>" + body + "</main></body></html>")
+           + '<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · ' + ('<a href="/xau-sovereign">XAU SOVEREIGN</a> · BUY' if product else 'GET ' + names[plan].upper()) + "</nav>" + body + "</main></body></html>")
     return doc.encode("utf-8")

@@ -107,7 +107,7 @@ BODY = r"""
   </section>
 
   <section class="panel a-wide" id="p-gold" aria-label="Gold signal">
-    <div class="panel-hd"><span class="k">AURUM</span><span class="s" id="gd-title">AURUM STRIKE · XAU/USD · 1D</span><span class="r"><a id="gd-pine" href="/aurum/pine" hidden style="color:var(--gold);border:1px solid var(--gold);padding:1px 7px;font-size:9.5px;letter-spacing:.1em" title="Download the TradingView Pine Script of this indicator">PINE SCRIPT ↓</a><span id="gd-state">—</span></span></div>
+    <div class="panel-hd"><span class="k">XAU</span><span class="s" id="gd-title">XAU SOVEREIGN · XAU/USD · 1D</span><span class="r"><a id="gd-pine" href="/xau-sovereign/pine" hidden style="color:var(--gold);border:1px solid var(--gold);padding:1px 7px;font-size:9.5px;letter-spacing:.1em" title="Download the TradingView Pine Script of this indicator">PINE SCRIPT ↓</a><span id="gd-state">—</span></span></div>
     <div class="oc-top"><span class="seg" id="gd-tf"><button type="button" data-tf="1h">1H</button><button type="button" data-tf="4h">4H</button><button type="button" data-tf="1d" class="on">1D</button></span>
       <span class="seg" id="gd-layers"><button type="button" data-l="zones" class="on">ZONES</button><button type="button" data-l="liq" class="on">LIQUIDITY</button><button type="button" data-l="struct" class="on">STRUCTURE</button><button type="button" data-l="ma" class="on">MA</button><button type="button" data-l="st" class="on">SUPERTREND</button></span>
       <span class="an-note" id="gd-note">move the pointer over the chart to read a bar</span></div>
@@ -273,7 +273,7 @@ JS_GOLD = r"""
   function loadGold(){ if(locked) return; $('gd-state').textContent='loading…'; var cvw=($('gd-cv').getBoundingClientRect().width||900); getJSON('/api/global/gold?tf='+gd.tf+'&bars='+Math.max(80,Math.min(240,Math.floor(cvw/4.2))),function(d){ gd.data=d; renderGold(d); drawGold(); },function(e){ $('gd-state').textContent=e; }); }
   function renderGold(d){ var dir=d.direction; if($('conn')&&$('conn').textContent==='—'){ $('conn').textContent='LIVE'; $('conn').className='live'; } var cls=dir>0?'buy':dir<0?'sell':'neutral'; var conf=d.confluence==='CONFLUENCE'?'ok':d.confluence==='CONFLICT'?'bad':'mid';
     var pos=((d.score+1)/2*100).toFixed(1);
-    $('gd-title').textContent='AURUM STRIKE · XAU/USD · '+gd.tf.toUpperCase()+' · '+(d.regime||'').toUpperCase();
+    $('gd-title').textContent='XAU SOVEREIGN · XAU/USD · '+gd.tf.toUpperCase()+' · '+(d.regime||'').toUpperCase();
     $('gd-sig').innerHTML='<div class="lbl '+cls+'">'+d.signal+'</div><div><div class="meter"><b class="l">STRONG SELL</b><b class="m">0</b><b class="r">STRONG BUY</b><i style="left:'+pos+'%"></i></div><div class="sub">score <b>'+(d.score>=0?'+':'')+nf(d.score,2)+'</b> · classic systems <b>'+(d.classic_score>=0?'+':'')+nf(d.classic_score,2)+'</b> · price action <b>'+(d.pa_score>=0?'+':'')+nf(d.pa_score,2)+'</b>'+(d.since?' · '+(dir?d.since.side+' since ':'last signal '+d.since.side+' ')+new Date(d.since.t).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+(gd.tf!=='1d'?' '+new Date(d.since.t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):'')+' @ '+usd(d.since.price,0)+(dir?'':' (exited)'):'')+'</div></div><div class="conf '+conf+'">'+d.confluence+'<br><small style="letter-spacing:0;font-size:9px">'+(d.confluence==='CONFLUENCE'?'systems and structure agree':d.confluence==='CONFLICT'?'systems and structure disagree':'one side is neutral')+'</small></div>';
     var st=d.stats||{}; var av=st.avg_pct!=null&&Math.abs(st.avg_pct)<0.005?0:st.avg_pct;
     var items=[['gold (PAXG close)',usd(d.entry,2),'c'],['XAU spot',d.spot_xau?usd(d.spot_xau,2):'—','m'],['₹ / 10 g',d.inr_10g?'₹'+nf(d.inr_10g,0):'—','m'],['stop',d.stop?usd(d.stop,0)+'<i>'+(d.risk_pct!=null?nf(d.risk_pct,2)+'% risk':'')+'</i>':'—',dir?'down':'m'],['target (2R)',d.target?usd(d.target,0):'—',dir?'up':'m'],['ADX / RSI',nf(d.adx,0)+' / '+nf(d.rsi,0),'m'],['ATR',usd(d.atr,1),'m'],['past flips hit',st.n?nf(st.hit_rate,0)+'%<i>'+st.n+' · avg '+(av>=0?'+':'')+nf(av,2)+'% / '+st.horizon+' bars</i>':'—',st.hit_rate>=50?'up':'down']];
@@ -348,14 +348,14 @@ def _gold_panel() -> str:
     return BODY[start:end]
 
 
-AURUM_BODY = r"""
+SOV_BODY = r"""
 <header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a>
-  <a class="logo" href="/aurum/app">AURUM<b>·</b>STRIKE</a>
+  <a class="logo" href="/xau-sovereign/app">XAU<b>·</b>SOVEREIGN</a>
   <span class="sym" id="t-sym">XAU/USD BUY · SELL ENGINE · BY FINOSTAT</span>
   <div class="r">
     <span class="live off" id="conn">—</span>
     <span id="clock">--:--:-- IST</span>
-    <span id="who"><a href="/login?next=%2Faurum%2Fapp">SIGN IN</a></span>
+    <span id="who"><a href="/login?next=%2Fxau-sovereign%2Fapp">SIGN IN</a></span>
     <a href="/global">GLOBAL TERMINAL</a>
     <a href="/">← SITE</a>
   </div>
@@ -365,34 +365,34 @@ __GOLD__
   <section class="panel" id="p-pine" aria-label="TradingView Pine Script">
     <div class="panel-hd"><span class="k">PINE</span><span class="s">RUN IT ON YOUR TRADINGVIEW CHART</span></div>
     <div style="padding:12px 14px;font-size:12.5px;line-height:1.6;color:var(--muted)">
-      <p><b style="color:var(--text)">1.</b> Press <b style="color:var(--gold)">PINE SCRIPT ↓</b> in the panel header to download <code>aurum-strike.pine</code> (your licensed copy).</p>
+      <p><b style="color:var(--text)">1.</b> Press <b style="color:var(--gold)">PINE SCRIPT ↓</b> in the panel header to download <code>xau-sovereign.pine</code> (your licensed copy).</p>
       <p><b style="color:var(--text)">2.</b> In TradingView open <b style="color:var(--text)">Pine Editor</b> (bottom of the chart) → <b style="color:var(--text)">Open → New indicator</b>, replace everything with the file's contents, press <b style="color:var(--text)">Add to chart</b>. Save it as private.</p>
       <p><b style="color:var(--text)">3.</b> Open XAUUSD (OANDA / FXCM / FOREXCOM) or GC1! on 1H, 4H or 1D. Layers, swing length and the enter/exit thresholds are in the indicator's settings.</p>
-      <p><b style="color:var(--text)">4.</b> Alerts: <b style="color:var(--text)">Alerts → Condition → Aurum Strike → BUY / SELL / EXIT</b>, then route them to the TradingView app on your phone.</p>
+      <p><b style="color:var(--text)">4.</b> Alerts: <b style="color:var(--text)">Alerts → Condition → XAU Sovereign → BUY / SELL / EXIT</b>, then route them to the TradingView app on your phone.</p>
       <p style="color:var(--faint);font-size:11px">The script is licensed to your account for personal use — please don't publish or share it. It is the same engine as this app; small differences can appear because TradingView's gold feed and Finostat's PAXG candles are not identical.</p>
     </div>
   </section>
 </main>
-<div class="g-fkeys"><a href="#p-gold">SIGNAL</a><a href="#p-pine">PINE SCRIPT</a><a href="/aurum">ABOUT AURUM STRIKE</a><a href="/global">GLOBAL TERMINAL</a><a href="/account">ACCOUNT</a></div>
+<div class="g-fkeys"><a href="#p-gold">SIGNAL</a><a href="#p-pine">PINE SCRIPT</a><a href="/xau-sovereign">ABOUT XAU SOVEREIGN</a><a href="/global">GLOBAL TERMINAL</a><a href="/account">ACCOUNT</a></div>
 """
 
 
-_AURUM_DOC = None
+_SOV_DOC = None
 
 
-def render_aurum(locked: bool = False, signed_in: bool = False, pine: bool = False) -> bytes:
+def render_sovereign(locked: bool = False, signed_in: bool = False, pine: bool = False) -> bytes:
     """The buyer's page: the gold panel alone (plus Pine instructions). Locked = not a buyer and not on Desk."""
-    global _AURUM_DOC
-    if _AURUM_DOC is None:
+    global _SOV_DOC
+    if _SOV_DOC is None:
         css = pages.DASHBOARD.split("<style>", 1)[1].split("</style>", 1)[0]
-        body = AURUM_BODY.replace("__GOLD__", _gold_panel())
+        body = SOV_BODY.replace("__GOLD__", _gold_panel())
         js = JS_HELPERS + JS_GOLD + "\n})();\n"
-        _AURUM_DOC = f"""<!DOCTYPE html>
+        _SOV_DOC = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aurum Strike · XAU/USD engine</title>
+<title>XAU Sovereign · XAU/USD engine</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0c0626">
 <link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -407,16 +407,16 @@ __GUARD__{body}
 __PAYWALL__
 </body>
 </html>"""
-    doc = _AURUM_DOC
+    doc = _SOV_DOC
     pine_tag = "<script>window.FINO_PINE=true;</script>" if pine else ""
     if locked:
         guard = ('<script>window.FINO_LOCKED=true;window.fetch=function(){return Promise.reject(new Error("locked"));};'
                  'document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("locked");});</script>')
-        primary = '<a class="b primary" href="/aurum/buy">Buy Aurum Strike — ₹8,000 one-time →</a>'
-        secondary = '<a class="b" href="/aurum">What is Aurum Strike?</a>' if signed_in else '<a class="b" href="/login?next=%2Faurum%2Fapp">Already bought? Sign in</a>'
-        wall = f"""<div class="paywall" role="dialog" aria-label="Aurum Strike purchase required"><div class="card">
-<div class="hd"><span class="k">AURUM STRIKE</span><span class="s">XAU/USD BUY · SELL ENGINE</span><span class="r">₹8,000 · ONE-TIME</span></div>
-<div class="bd"><h2>{"This account has not bought Aurum Strike" if signed_in else "Aurum Strike is a one-time purchase"}</h2>
+        primary = '<a class="b primary" href="/xau-sovereign/buy">Buy XAU Sovereign — ₹8,000 one-time →</a>'
+        secondary = '<a class="b" href="/xau-sovereign">What is XAU Sovereign?</a>' if signed_in else '<a class="b" href="/login?next=%2Fxau-sovereign%2Fapp">Already bought? Sign in</a>'
+        wall = f"""<div class="paywall" role="dialog" aria-label="XAU Sovereign purchase required"><div class="card">
+<div class="hd"><span class="k">XAU SOVEREIGN</span><span class="s">XAU/USD BUY · SELL ENGINE</span><span class="r">₹8,000 · ONE-TIME</span></div>
+<div class="bd"><h2>{"This account has not bought XAU Sovereign" if signed_in else "XAU Sovereign is a one-time purchase"}</h2>
 <p>Nine published trading systems and a full smart-money price-action read on gold, blended into one non-repainting BUY / SELL call with entry, stop and target. Lifetime access to this app plus the Pine Script for your own TradingView chart.</p>
 <ul><li>1H · 4H · 1D gold, live</li><li>Every vote explained</li><li>Order blocks, FVGs, liquidity, BOS/CHoCH</li><li>Entry, stop, 2R target</li><li>TradingView Pine Script with alerts</li><li>Nothing recurring</li></ul>
 <div class="price">₹8,000 <i>once · lifetime · exclusive of GST</i></div>

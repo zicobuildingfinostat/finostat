@@ -431,7 +431,7 @@ class Auth:
             c.execute("INSERT INTO prefs(user_id,key,value,updated) VALUES(?,?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value, updated=excluded.updated",
                       (user_id, "renew_notice", json.dumps(until), time.time()))
 
-    # -- one-time products (Aurum Strike etc.) ---------------------------------
+    # -- one-time products (XAU Sovereign etc.) ---------------------------------
     def grant_product(self, user_id: int, product: str, order_id: str | None = None) -> None:
         with self._lock, self._conn() as c:
             c.execute("INSERT OR IGNORE INTO products(user_id,product,granted,order_id) VALUES(?,?,?,?)", (user_id, product, time.time(), order_id))

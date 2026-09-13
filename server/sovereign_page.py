@@ -1,9 +1,9 @@
-"""AURUM STRIKE — the XAU/USD buy·sell engine, sold as a one-time ₹8,000 product.
+"""XAU SOVEREIGN — the XAU/USD buy·sell engine, sold as a one-time ₹8,000 product.
 
-/aurum        public sales page (SEO, Product schema)
-/aurum/buy    Cashfree checkout by mobile number (guest.py with the product)
-/aurum/app    the indicator app for buyers (pages_global.render_aurum)
-/aurum/pine   the TradingView Pine Script, buyers only
+/sovereign        public sales page (SEO, Product schema)
+/xau-sovereign/buy    Cashfree checkout by mobile number (guest.py with the product)
+/xau-sovereign/app    the indicator app for buyers (pages_global.render_sovereign)
+/xau-sovereign/pine   the TradingView Pine Script, buyers only
 
 The Pine script below is the same engine as server/gold.py: classic systems + price-action structure,
 blended 50/50, hysteresis, non-repainting."""
@@ -14,7 +14,7 @@ import json
 
 from finch import _CSS as _BASE_CSS
 
-NAME = "Aurum Strike"
+NAME = "XAU Sovereign"
 TAGLINE = "The XAU/USD buy · sell engine"
 PRICE = 8000
 
@@ -77,7 +77,7 @@ def _shot_svg() -> str:
         candles.append(f'<line x1="{xs[i]:.0f}" y1="{top - 9:.0f}" x2="{xs[i]:.0f}" y2="{bot + 9:.0f}" stroke="{"#3dd68c" if up else "#ff5c6c"}" stroke-width="1.2"/>'
                        f'<rect x="{xs[i] - 6:.0f}" y="{top:.0f}" width="12" height="{max(2, bot - top):.0f}" fill="{"#3dd68c" if up else "#ff5c6c"}"/>')
     ema = " ".join(f"{xs[i]:.0f},{(sum(ys[max(0, i - 4):i + 1]) / len(ys[max(0, i - 4):i + 1])):.0f}" for i in range(n))
-    return f'''<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Illustration of the Aurum Strike chart">
+    return f'''<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Illustration of the XAU Sovereign chart">
 <rect width="{w}" height="{h}" fill="#06031a"/>
 <rect x="{xs[7] - 8:.0f}" y="{ys[8] - 4:.0f}" width="{w - 60 - xs[7]:.0f}" height="22" fill="rgba(255,92,108,.12)"/><text x="{xs[7]:.0f}" y="{ys[8] - 8:.0f}" fill="#ff8a96" font-family="IBM Plex Mono,monospace" font-size="10">OB supply</text>
 <rect x="{xs[18] - 8:.0f}" y="{ys[18] - 6:.0f}" width="{w - 60 - xs[18]:.0f}" height="20" fill="rgba(106,53,240,.3)"/><text x="{xs[18]:.0f}" y="{ys[18] - 10:.0f}" fill="#b9a6ff" font-family="IBM Plex Mono,monospace" font-size="10">OB demand</text>
@@ -100,31 +100,31 @@ def render_sales(spot: float | None, configured: bool = True) -> bytes:
     desc = (f"{NAME}: a gold (XAU/USD) buy·sell engine that blends nine published trading systems with smart-money price action — "
             f"market structure, order blocks, fair value gaps, liquidity sweeps. Non-repainting, 1H/4H/1D, live web app plus the Pine Script for TradingView. One-time ₹{PRICE:,}.")
     ld = {"@context": "https://schema.org", "@type": "Product", "name": NAME, "description": desc, "brand": {"@type": "Brand", "name": "Finostat"},
-          "url": "https://finostat.com/aurum", "image": "https://finostat.com/og.jpg", "category": "Trading indicator",
-          "offers": {"@type": "Offer", "price": str(PRICE), "priceCurrency": "INR", "availability": "https://schema.org/InStock", "url": "https://finostat.com/aurum/buy",
+          "url": "https://finostat.com/xau-sovereign", "image": "https://finostat.com/og.jpg", "category": "Trading indicator",
+          "offers": {"@type": "Offer", "price": str(PRICE), "priceCurrency": "INR", "availability": "https://schema.org/InStock", "url": "https://finostat.com/xau-sovereign/buy",
                      "seller": {"@type": "Organization", "name": "Finostat", "url": "https://finostat.com"}}}
     faq = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
-        {"@type": "Question", "name": "What is Aurum Strike?", "acceptedAnswer": {"@type": "Answer", "text": "A buy/sell signal engine for gold (XAU/USD). It scores the market from −1 to +1 by blending nine published, rule-based trading systems with smart-money price action, and prints BUY, SELL and exit markers on the chart with an entry, stop and 2R target."}},
+        {"@type": "Question", "name": "What is XAU Sovereign?", "acceptedAnswer": {"@type": "Answer", "text": "A buy/sell signal engine for gold (XAU/USD). It scores the market from −1 to +1 by blending nine published, rule-based trading systems with smart-money price action, and prints BUY, SELL and exit markers on the chart with an entry, stop and 2R target."}},
         {"@type": "Question", "name": "Does the indicator repaint?", "acceptedAnswer": {"@type": "Answer", "text": "No. Swings register only once confirmed, every vote uses closed candles, and a signal stays on the chart once printed. The same bar history gives the same signals every time."}},
-        {"@type": "Question", "name": "What do I get for ₹8,000?", "acceptedAnswer": {"@type": "Answer", "text": "Lifetime access to the live Aurum Strike web app on finostat.com (1H, 4H and daily gold charts with the engine drawn on them) and the Pine Script source of the same indicator to add to your own TradingView chart, with alerts. One-time payment, nothing recurring."}},
+        {"@type": "Question", "name": "What do I get for ₹8,000?", "acceptedAnswer": {"@type": "Answer", "text": "Lifetime access to the live XAU Sovereign web app on finostat.com (1H, 4H and daily gold charts with the engine drawn on them) and the Pine Script source of the same indicator to add to your own TradingView chart, with alerts. One-time payment, nothing recurring."}},
         {"@type": "Question", "name": "Is this investment advice?", "acceptedAnswer": {"@type": "Answer", "text": "No. It is a technical tool. Past signals do not guarantee future results; the app shows the honest hit rate of its own past flips so you can judge it yourself."}}]}
     ld_json = json.dumps(ld, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     faq_json = json.dumps(faq, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     classic = "".join(f"<tr><td>{_esc(n)}<i>{_esc(w)}</i></td><td>{_esc(d)}</td></tr>" for n, w, d in CLASSIC)
     pa = "".join(f"<tr><td>{_esc(n)}<i>{_esc(w)}</i></td><td>{_esc(d)}</td></tr>" for n, w, d in PA)
     spot_html = f'GOLD NOW · <b>${spot:,.2f}</b> / oz' if spot else "GOLD · XAU/USD"
-    buy = ('<a class="go" href="/aurum/buy">BUY NOW — ₹8,000 ONE-TIME →</a>' if configured else '<a class="go" href="/contact">PAYMENTS OPENING SOON — WRITE TO US</a>')
+    buy = ('<a class="go" href="/xau-sovereign/buy">BUY NOW — ₹8,000 ONE-TIME →</a>' if configured else '<a class="go" href="/contact">PAYMENTS OPENING SOON — WRITE TO US</a>')
     doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_esc(title)}</title><meta name="description" content="{_esc(desc)}"><meta name="theme-color" content="#0c0626"><meta name="robots" content="index, follow, max-image-preview:large">
-<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="canonical" href="https://finostat.com/aurum">
-<meta property="og:type" content="product"><meta property="og:site_name" content="Finostat"><meta property="og:title" content="{_esc(NAME)} — {_esc(TAGLINE)}"><meta property="og:description" content="{_esc(desc)}"><meta property="og:image" content="https://finostat.com/og.jpg"><meta property="og:url" content="https://finostat.com/aurum">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="canonical" href="https://finostat.com/xau-sovereign">
+<meta property="og:type" content="product"><meta property="og:site_name" content="Finostat"><meta property="og:title" content="{_esc(NAME)} — {_esc(TAGLINE)}"><meta property="og:description" content="{_esc(desc)}"><meta property="og:image" content="https://finostat.com/og.jpg"><meta property="og:url" content="https://finostat.com/xau-sovereign">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script type="application/ld+json">{ld_json}</script>
 <script type="application/ld+json">{faq_json}</script>
 <style>{_CSS}</style></head><body>
 <header class="top"><a class="home-ic" href="/" aria-label="Finostat home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/global">GLOBAL</a><a href="/calendar">CALENDAR</a><a href="/finch">FINCH</a><a href="/dashboard">TERMINAL</a></div></header>
-<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · AURUM STRIKE</nav>
+<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · XAU SOVEREIGN</nav>
 <section class="au-hero"><div>
 <p class="au-spot">{spot_html}</p>
 <h1>{_esc(NAME)}</h1>
@@ -132,7 +132,7 @@ def render_sales(spot: float | None, configured: bool = True) -> bytes:
 <p>Nine published trading systems and a full smart-money price-action read, voting on the same gold candles and printing one clean call: <b style="color:var(--up)">BUY</b>, <b style="color:var(--down)">SELL</b>, or stand aside. Entry, stop and target on the chart. Non-repainting. Built in-house by Finostat, runs on 1H, 4H and daily.</p>
 </div>
 <div class="au-buy"><div class="pr">₹8,000<i>ONE-TIME · LIFETIME</i></div>
-<ul><li>Live Aurum Strike web app — gold 1H / 4H / 1D with the engine drawn on the chart</li><li>The Pine Script source: add the same indicator to your TradingView chart, with alerts</li><li>Every vote explained in plain English, every bar</li><li>Entry, stop-loss and 2R target on each signal</li><li>Honest hit-rate of its own past flips, always visible</li><li>Pay once by UPI, card or net banking through Cashfree</li></ul>
+<ul><li>Live XAU Sovereign web app — gold 1H / 4H / 1D with the engine drawn on the chart</li><li>The Pine Script source: add the same indicator to your TradingView chart, with alerts</li><li>Every vote explained in plain English, every bar</li><li>Entry, stop-loss and 2R target on each signal</li><li>Honest hit-rate of its own past flips, always visible</li><li>Pay once by UPI, card or net banking through Cashfree</li></ul>
 {buy}
 <small>Account is created from your mobile number at checkout. Lifetime means for as long as Finostat runs the service. Not investment advice.</small></div></section>
 
@@ -151,22 +151,22 @@ def render_sales(spot: float | None, configured: bool = True) -> bytes:
 <div><b>4</b><p>On a flip the chart prints the marker, the entry, a stop from the Supertrend line or 2×ATR, and a 2R target.</p></div>
 </div>
 
-<section class="faq"><h3>Why these systems?</h3><p>They are the public, rule-based methods that well-known traders are on record using — the Turtle rules, Paul Tudor Jones's 200-day discipline, Linda Raschke's Holy Grail, Wilder's RSI and ADX, Appel's MACD, Hosoda's Ichimoku, Bollinger's bands — implemented faithfully, plus the market-structure, order-block, fair-value-gap and liquidity concepts that modern price-action trading is built on. Aurum Strike is Finostat's own blend of them; none of those traders is affiliated with it.</p>
+<section class="faq"><h3>Why these systems?</h3><p>They are the public, rule-based methods that well-known traders are on record using — the Turtle rules, Paul Tudor Jones's 200-day discipline, Linda Raschke's Holy Grail, Wilder's RSI and ADX, Appel's MACD, Hosoda's Ichimoku, Bollinger's bands — implemented faithfully, plus the market-structure, order-block, fair-value-gap and liquidity concepts that modern price-action trading is built on. XAU Sovereign is Finostat's own blend of them; none of those traders is affiliated with it.</p>
 <h3>Does it repaint?</h3><p>No. Swings register only once confirmed, every vote uses closed candles, and a printed signal stays. Reloading the same history reproduces the same signals bar for bar.</p>
 <h3>What does the web app use for gold prices?</h3><p>Gold-backed PAXG against USDT (it tracks XAU/USD within a few dollars) for 1,000 bars of 1H, 4H and daily candles, cross-checked against the live XAU spot. In TradingView, the Pine Script runs on whichever gold symbol you open — XAUUSD, GC futures, or gold in ₹.</p>
 <h3>What about the Pine Script?</h3><p>After purchase, the app has a "Pine Script" button. Open TradingView → Pine Editor → paste → Add to chart. The script draws the same zones, structure, markers and levels, keeps a live score table, and has BUY / SELL alert conditions you can route to your phone.</p>
 <h3>Refunds?</h3><p>It is a digital product delivered instantly, so there are no refunds once the app or script has been opened. Write to hello@finostat.com before buying if you have questions.</p></section>
-<p><a class="cta" href="/aurum/buy">Buy Aurum Strike — ₹8,000 one-time →</a> <a class="cta ghost" href="/global">See the Global terminal</a></p>
-<div class="au-disc">Aurum Strike is a technical analysis tool for education and research. It is not investment advice and does not guarantee returns; gold can move against any signal. Trade at your own risk and size positions responsibly. Finostat is not a SEBI-registered investment adviser.</div>
+<p><a class="cta" href="/xau-sovereign/buy">Buy XAU Sovereign — ₹8,000 one-time →</a> <a class="cta ghost" href="/global">See the Global terminal</a></p>
+<div class="au-disc">XAU Sovereign is a technical analysis tool for education and research. It is not investment advice and does not guarantee returns; gold can move against any signal. Trade at your own risk and size positions responsibly. Finostat is not a SEBI-registered investment adviser.</div>
 </main></body></html>"""
     return doc.encode("utf-8")
 
 
 PINE = r'''//@version=5
-// AURUM STRIKE — the XAU/USD buy·sell engine · © Finostat (finostat.com/aurum)
+// XAU SOVEREIGN — the XAU/USD buy·sell engine · © Finostat (finostat.com/xau-sovereign)
 // Licensed to the buyer for personal use. Same engine as the Finostat web app:
 // nine classic systems + smart-money price action, blended 50/50, hysteresis, non-repainting.
-indicator("Aurum Strike — XAU/USD Buy·Sell Engine", shorttitle="AURUM STRIKE", overlay=true, max_boxes_count=60, max_lines_count=120, max_labels_count=200)
+indicator("XAU Sovereign — Gold Buy·Sell Engine", shorttitle="XAU SOVEREIGN", overlay=true, max_boxes_count=60, max_lines_count=120, max_labels_count=200)
 
 // ───────── inputs
 showZones  = input.bool(true,  "Order blocks & fair value gaps", group="Layers")
@@ -481,7 +481,7 @@ if showTable and barstate.islast
     sig = state == 1 ? (score >= 0.5 ? "STRONG BUY" : "BUY") : state == -1 ? (score <= -0.5 ? "STRONG SELL" : "SELL") : "NEUTRAL"
     sigCol = state == 1 ? cUp : state == -1 ? cDown : #a89ccf
     agree = (classic >= 0.2 and pa >= 0.2) or (classic <= -0.2 and pa <= -0.2) ? "CONFLUENCE" : (classic >= 0.2 and pa <= -0.2) or (classic <= -0.2 and pa >= 0.2) ? "CONFLICT" : "PARTIAL"
-    table.cell(tbl, 0, 0, "AURUM STRIKE", text_color=cGold, text_size=size.small, text_halign=text.align_left)
+    table.cell(tbl, 0, 0, "XAU SOVEREIGN", text_color=cGold, text_size=size.small, text_halign=text.align_left)
     table.cell(tbl, 1, 0, sig, text_color=sigCol, text_size=size.normal)
     table.cell(tbl, 0, 1, "score", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
     table.cell(tbl, 1, 1, str.tostring(score, "+0.00;-0.00"), text_color=sigCol, text_size=size.small)
@@ -498,10 +498,10 @@ if showTable and barstate.islast
     table.cell(tbl, 0, 7, "agreement", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
     table.cell(tbl, 1, 7, agree, text_color=agree == "CONFLUENCE" ? cUp : agree == "CONFLICT" ? cDown : cGold, text_size=size.small)
 
-// ───────── alerts (Alerts → condition → Aurum Strike)
-alertcondition(buyFlip,  "Aurum Strike BUY",  "Aurum Strike: BUY {{ticker}} {{interval}} at {{close}}")
-alertcondition(sellFlip, "Aurum Strike SELL", "Aurum Strike: SELL {{ticker}} {{interval}} at {{close}}")
-alertcondition(exitFlip, "Aurum Strike EXIT", "Aurum Strike: signal exited on {{ticker}} {{interval}} at {{close}}")
+// ───────── alerts (Alerts → condition → XAU Sovereign)
+alertcondition(buyFlip,  "XAU Sovereign BUY",  "XAU Sovereign: BUY {{ticker}} {{interval}} at {{close}}")
+alertcondition(sellFlip, "XAU Sovereign SELL", "XAU Sovereign: SELL {{ticker}} {{interval}} at {{close}}")
+alertcondition(exitFlip, "XAU Sovereign EXIT", "XAU Sovereign: signal exited on {{ticker}} {{interval}} at {{close}}")
 '''
 
 
