@@ -95,6 +95,25 @@ import upstoxfeed as UF
 rows_ltp = UF.UpstoxFeed.rest_ltp_rows({"NSE_EQ:TCS": {"last_price": 2211.1, "instrument_token": "NSE_EQ|INE467B01029", "cp": 2204.1}, "X": {"instrument_token": "k", "last_price": None}, "Y": {"last_price": 1}})
 check("ltp payload parsed by instrument key with close; rows without key/price dropped", rows_ltp == [("NSE_EQ|INE467B01029", 2211.1, 2204.1)], rows_ltp)
 
+print("\n=== higher-order greeks vs finite differences ===")
+S0, K0, T0, V0 = 24000.0, 24100.0, 6 / 365, 0.13
+gx = bs.greeks_ext(S0, K0, T0, V0, "CE")
+def fd(f, x, h): return (f(x + h) - f(x - h)) / (2 * h)
+vanna_fd = fd(lambda v: bs.greeks(S0, K0, T0, v, "CE")["delta"], V0, 1e-4) / 100
+charm_fd = -fd(lambda t: bs.greeks(S0, K0, t, V0, "CE")["delta"], T0, 1e-5) / 365
+vomma_fd = fd(lambda v: bs.greeks(S0, K0, T0, v, "CE")["vega"], V0, 1e-4) / 100
+veta_fd = -fd(lambda t: bs.greeks(S0, K0, t, V0, "CE")["vega"], T0, 1e-5) / 365
+speed_fd = fd(lambda x: bs.greeks(x, K0, T0, V0, "CE")["gamma"], S0, 0.5)
+zomma_fd = fd(lambda v: bs.greeks(S0, K0, T0, v, "CE")["gamma"], V0, 1e-4) / 100
+color_fd = -fd(lambda t: bs.greeks(S0, K0, t, V0, "CE")["gamma"], T0, 1e-5) / 365
+ultima_fd = fd(lambda v: bs.greeks_ext(S0, K0, T0, v, "CE")["vomma"], V0, 1e-4) / 100
+def close(a, b): return abs(a - b) <= 0.02 * max(abs(a), abs(b), 1e-9)
+for name, an, num in (("vanna", gx["vanna"], vanna_fd), ("charm", gx["charm"], charm_fd), ("vomma", gx["vomma"], vomma_fd), ("veta", gx["veta"], veta_fd),
+                      ("speed", gx["speed"], speed_fd), ("zomma", gx["zomma"], zomma_fd), ("color", gx["color"], color_fd), ("ultima", gx["ultima"], ultima_fd)):
+    check(f"{name} matches the numerical derivative", close(an, num), (an, num))
+check("put charm equals call charm (no dividend)", abs(bs.greeks_ext(S0, K0, T0, V0, "PE")["charm"] - gx["charm"]) < 1e-12)
+check("expired/zero-vol -> zeros", all(v == 0.0 for v in bs.greeks_ext(S0, K0, 0.0, V0, "CE").values()))
+
 print("\n=== history engine ===")
 check("legs: iron condor = 4 legs, short at ±w, long at ±2w", H.legs_for("iron_condor", 24000, 50, 2) == [("CE", 24100, -1), ("PE", 23900, -1), ("CE", 24200, 1), ("PE", 23800, 1)])
 class FakeClient:

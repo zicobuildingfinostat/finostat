@@ -80,6 +80,34 @@ def greeks(spot: float, strike: float, t: float, vol: float, right: str, r: floa
     return {"delta": delta, "gamma": gamma, "theta": theta, "vega": vega, "rho": rho}
 
 
+def greeks_ext(spot: float, strike: float, t: float, vol: float, right: str, r: float = RISK_FREE) -> dict:
+    """Second- and third-order Greeks (Black-Scholes, no dividend), in desk units:
+    vanna  ∂Δ/∂σ per 1 vol point        charm  ∂Δ/∂t per calendar day (sign of the drift in delta)
+    vomma  ∂vega/∂σ per 1 vol point     veta   ∂vega/∂t per calendar day
+    speed  ∂Γ/∂S per 1 point of spot     zomma  ∂Γ/∂σ per 1 vol point
+    color  ∂Γ/∂t per calendar day        ultima ∂vomma/∂σ per 1 vol point"""
+    if t <= 0 or vol <= 0:
+        return {k: 0.0 for k in ("vanna", "charm", "vomma", "veta", "speed", "zomma", "color", "ultima")}
+    sd = vol * math.sqrt(t)
+    d1 = (math.log(spot / strike) + (r + 0.5 * vol * vol) * t) / sd
+    d2 = d1 - sd
+    pdf = _npdf(d1)
+    gamma = pdf / (spot * sd)
+    vega_raw = spot * pdf * math.sqrt(t)
+    vanna = -pdf * d2 / vol
+    charm = -pdf * (2 * r * t - d2 * sd) / (2 * t * sd)            # same for calls and puts when q = 0
+    vomma = vega_raw * d1 * d2 / vol
+    veta = -vega_raw * (r * d1 / sd - (1 + d1 * d2) / (2 * t))
+    speed = -gamma / spot * (d1 / sd + 1)
+    zomma = gamma * (d1 * d2 - 1) / vol
+    color = -pdf / (2 * spot * t * sd) * (1 + (2 * r * t - d2 * sd) * d1 / sd)
+    ultima = -vega_raw / (vol * vol) * (d1 * d2 * (1 - d1 * d2) + d1 * d1 + d2 * d2)
+    # veta and color above are ∂/∂T (time to expiry); flip them so every time Greek here is the change per
+    # calendar day that passes, the same convention as charm and theta
+    return {"vanna": vanna / 100.0, "charm": charm / 365.0, "vomma": vomma / 1e4, "veta": -veta / 365.0 / 100.0,
+            "speed": speed, "zomma": zomma / 100.0, "color": -color / 365.0, "ultima": ultima / 1e6}
+
+
 def years_to(expiry_epoch_ms: float, now_epoch: float) -> float:
     """Time to expiry in years, expiry taken at 15:30 IST on the expiry date."""
     exp = expiry_epoch_ms / 1000.0

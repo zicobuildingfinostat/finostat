@@ -135,8 +135,14 @@ class ChainManager:
                     continue
                 iv = bs.implied_vol(ltp, spot, row["strike"], t, right) if t > 0 else None
                 g = bs.greeks(spot, row["strike"], t, iv, right) if iv else None
+                gx = bs.greeks_ext(spot, row["strike"], t, iv, right) if iv else None
                 st = self._stats(key)
                 entry[right.lower()] = {
+                    "key": key,
+                    "vanna": round(gx["vanna"], 5) if gx else None, "charm": round(gx["charm"], 5) if gx else None,
+                    "vomma": round(gx["vomma"], 4) if gx else None, "veta": round(gx["veta"], 4) if gx else None,
+                    "speed": round(gx["speed"], 8) if gx else None, "zomma": round(gx["zomma"], 7) if gx else None,
+                    "color": round(gx["color"], 7) if gx else None, "ultima": round(gx["ultima"], 5) if gx else None,
                     "oi": st.get("oi"), "oi_chg": st.get("oi_chg"), "vol": st.get("vol"),
                     "bid": st.get("bid"), "ask": st.get("ask"),
                     "ltp": round(ltp, 2),
