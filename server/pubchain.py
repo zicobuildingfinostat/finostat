@@ -363,7 +363,7 @@ def render_index(pc: PublicChains) -> bytes:
     idx_lots = {SYMBOLS[s][0]: lots.get(SYMBOLS[s][0]) for s in SYMBOLS}
     cards = "".join(f'<a class="card" href="/option-chain/{s}"><b>{SYMBOLS[s][1]}</b><small>lot {idx_lots.get(SYMBOLS[s][0]) or "—"} · {(pc.get(s) or {}).get("expiry") or "nearest expiry"}</small>'
                     f'<span>PCR {((pc.get(s) or {}).get("stats") or {}).get("pcr") or "—"} · max pain {((pc.get(s) or {}).get("stats") or {}).get("max_pain") or "—"}</span></a>' for s in SYMBOLS)
-    rows = "".join(f'<tr><td><a href="/option-chain/{n.lower()}">{_esc(n)}</a></td><td>{lots.get(n) or "—"}</td><td><a href="/option-chain/{n.lower()}">chain →</a></td></tr>' for n in stocks)
+    rows = "".join(f'<tr><td><a href="/option-chain/{urllib.parse.quote(n.lower(), safe="")}">{_esc(n)}</a></td><td>{lots.get(n) or "—"}</td><td><a href="/option-chain/{urllib.parse.quote(n.lower(), safe="")}">chain →</a></td></tr>' for n in stocks)
     title = f"F&O Stock List with Lot Sizes — {len(stocks)} NSE stocks, NIFTY & BANKNIFTY option chains | Finostat"
     desc = f"Every stock in NSE's F&O segment with its current lot size, plus live option chains with OI, PCR and max pain for NIFTY, BANKNIFTY, FINNIFTY and all {len(stocks)} stocks. Free."
     ld = {"@context": "https://schema.org", "@type": "Dataset", "name": "NSE F&O stock list with lot sizes", "url": "https://finostat.com/option-chain",
@@ -401,5 +401,6 @@ table.fo{{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:
 def sitemap_entries(pc: PublicChains) -> str:
     out = ['  <url><loc>https://finostat.com/option-chain</loc><changefreq>daily</changefreq><priority>0.8</priority></url>']
     for n in pc.fo_stocks():
-        out.append(f'  <url><loc>https://finostat.com/option-chain/{n.lower()}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>')
+        slug = html.escape(urllib.parse.quote(n.lower(), safe=""), quote=True)      # M&M -> m%26m, valid in XML
+        out.append(f'  <url><loc>https://finostat.com/option-chain/{slug}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>')
     return "\n".join(out) + "\n"

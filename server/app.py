@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs, quote
+from urllib.parse import urlparse, parse_qs, quote, unquote
 
 import config
 import feeds
@@ -652,13 +652,13 @@ class Handler(BaseHTTPRequestHandler):
                 if body is not None:
                     return self._send(body, "text/html; charset=utf-8", cache="public, max-age=3600")
             if route.startswith("/option-chain/") and route.count("/") == 2:
-                body = pubchain.render(PUBCHAIN, route.rsplit("/", 1)[1].lower())
+                body = pubchain.render(PUBCHAIN, unquote(route.rsplit("/", 1)[1]).lower())
                 if body is not None:
                     return self._send(body, "text/html; charset=utf-8", cache="public, max-age=120")
             if route == "/option-chain":
                 return self._send(pubchain.render_index(PUBCHAIN), "text/html; charset=utf-8", cache="public, max-age=600")
             if route.startswith("/api/option-chain/"):
-                slug = route.rsplit("/", 1)[1].lower()
+                slug = unquote(route.rsplit("/", 1)[1]).lower()
                 d = PUBCHAIN.get(slug) if slug in pubchain.SYMBOLS else PUBCHAIN.stock(slug)
                 if d is None:
                     return self._json({"error": "unknown symbol or not loaded yet"}, 404)
