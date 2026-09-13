@@ -51,6 +51,7 @@ import upstox_rest
 import candles
 import algo
 import watchdog
+import flows
 import events
 import chains
 import contracts
@@ -213,6 +214,7 @@ def _algo_live_router(a: dict, legs: list, lots: int, closing: bool) -> list:
 
 
 WATCHDOG = watchdog.Watchdog(FEED, HOLIDAYS, notify=mailer.send_owner_note)
+FLOWS = flows.Flows(flows.Store(AUTH.path), HOLIDAYS)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
 ALGOS = algo.Store(AUTH.path)
 ALGO = algo.Engine(ALGOS, CHAINS, BOOK, FEED, lambda: CONTRACTS_OF(FEED), live_router=_algo_live_router)
@@ -320,7 +322,7 @@ def _paid(user) -> bool:
 # course keeps its live numbers.
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
-                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo"}
+                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo", "/api/flows"}
 
 
 def _gate(user, ukey: str):
@@ -698,6 +700,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": str(exc)}, 503)
                 out["label"] = label
                 return self._json(out)
+            if route == "/api/flows":
+                try:
+                    days = max(5, min(120, int(parse_qs(parsed.query).get("days", ["30"])[0])))
+                except ValueError:
+                    days = 30
+                return self._json(FLOWS.api(days))
             if route == "/api/replay/days":
                 u = parse_qs(parsed.query).get("u", ["NIFTY 50"])[0]
                 try:
@@ -980,6 +988,7 @@ class Handler(BaseHTTPRequestHandler):
             "holidays": {"count": len(HOLIDAYS.all()), "fetched": HOLIDAYS.fetched, "error": HOLIDAYS.error},
             "analytics": {"rest_token": bool(UREST.token), "history_candles": HIST.store.count()},
             "watchdog": WATCHDOG.status(),
+            "flows": dict(FLOWS.store.counts(), fetched=FLOWS.fetched, error=FLOWS.error),
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -1666,6 +1675,7 @@ def main() -> int:
     ECON.start()
     ALGO.start()
     WATCHDOG.start()
+    FLOWS.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -1688,6 +1698,7 @@ def main() -> int:
         ECON.stop()
         ALGO.stop()
         WATCHDOG.stop()
+        FLOWS.stop()
         HOLIDAYS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.
