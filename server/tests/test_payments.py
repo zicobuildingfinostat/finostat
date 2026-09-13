@@ -128,10 +128,6 @@ check("secret never reaches the page", "unit-test-secret-not-real" not in page)
 page2 = account.render(user, {"plan": "starter", "until": None, "expired": True, "lapsed_plan": "desk"}, []).decode()
 check("lapsed plan wording", "Your desk plan ended" in page2)
 
-print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
-sys.exit(1 if fails else 0)
-
-
 print("\n=== mobile-first accounts (guest checkout) ===")
 import guest
 tmp2 = pathlib.Path(tempfile.mkdtemp()); au = A.Auth(tmp2 / "acct.db") if "path" in A.Auth.__init__.__code__.co_varnames else None
@@ -154,3 +150,7 @@ check("guest page: plan cards, cycle toggle, phone + optional email, Cashfree bu
 check("guest page shows a notice when given one", "Payment received" in guest.render("desk", "monthly", notice="Payment received").decode())
 acct = account.render({"id": u1["id"], "email": "9876543210@mobile.finostat", "plan": "desk", "plan_until": time.time() + 86400}, {"plan": "desk", "until": time.time() + 86400, "days_left": 1}, [], "9876543210").decode()
 check("account page shows the mobile number instead of the placeholder email", "Mobile +91 9876543210" in acct and "mobile.finostat" not in acct)
+
+print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
+sys.exit(1 if fails else 0)
+

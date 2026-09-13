@@ -56,7 +56,7 @@ def render(plan: str, period: str, notice: str | None = None, configured: bool =
     blurb = {"desk": "live terminal, chains, builder, alerts, analytics", "pro": "everything in Desk + stock chains, replay, backtests, algos"}
     cards = []
     for p in ("desk", "pro"):
-        m, y = cat["plans"][p]["monthly"]["amount"] // 100, cat["plans"][p]["yearly"]["amount"] // 100
+        m, y = int(cat["plans"][p]["monthly"]["rupees"]), int(cat["plans"][p]["yearly"]["rupees"])
         cards.append(f'<div class="pl{" on" if p == plan else ""}" data-plan="{p}" role="button" tabindex="0"><b>{names[p]}</b>'
                      f'<span class="px" data-m="{m:,}" data-y="{y:,}">₹{(m if period == "monthly" else y):,}</span>'
                      f'<small>{"per month" if period == "monthly" else "per year"} · {blurb[p]}</small></div>')
