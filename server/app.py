@@ -695,7 +695,13 @@ class Handler(BaseHTTPRequestHandler):
                                                       pine=user is not None and AUTH.has_product(user["id"], "sovereign")),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/xau-sovereign":
-                return self._send(sovereign_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+                teaser = {}
+                for tf in ("1d", "4h", "1h"):
+                    try:
+                        teaser[tf] = GOLD.view(tf, 60).get("signal")
+                    except Exception:                               # noqa: BLE001
+                        pass
+                return self._send(sovereign_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]], teaser=teaser),
                                   "text/html; charset=utf-8", cache="public, max-age=300")
             if route == "/xau-sovereign/buy":
                 user = self._current_user()

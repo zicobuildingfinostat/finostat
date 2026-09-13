@@ -95,7 +95,7 @@ def _shot_svg() -> str:
 </svg>'''
 
 
-def render_sales(spot: float | None, configured: bool = True) -> bytes:
+def render_sales(spot: float | None, configured: bool = True, teaser: dict | None = None) -> bytes:
     title = f"{NAME} — XAU/USD gold buy sell signal indicator (web app + TradingView Pine Script) | Finostat"
     desc = (f"{NAME}: a gold (XAU/USD) buy·sell engine that blends nine published trading systems with smart-money price action — "
             f"market structure, order blocks, fair value gaps, liquidity sweeps. Non-repainting, 1H/4H/1D, live web app plus the Pine Script for TradingView. One-time ₹{PRICE:,}.")
@@ -113,6 +113,11 @@ def render_sales(spot: float | None, configured: bool = True) -> bytes:
     classic = "".join(f"<tr><td>{_esc(n)}<i>{_esc(w)}</i></td><td>{_esc(d)}</td></tr>" for n, w, d in CLASSIC)
     pa = "".join(f"<tr><td>{_esc(n)}<i>{_esc(w)}</i></td><td>{_esc(d)}</td></tr>" for n, w, d in PA)
     spot_html = f'GOLD NOW · <b>${spot:,.2f}</b> / oz' if spot else "GOLD · XAU/USD"
+    if teaser:
+        col = {"BUY": "var(--up)", "SELL": "var(--down)"}
+        words = " · ".join(f'{tf.upper()} <b style="color:{col.get(sig.split()[-1], "var(--muted)")}">{_esc(sig)}</b>' for tf, sig in teaser.items() if sig)
+        if words:
+            spot_html += f'<br>ENGINE NOW · {words} <i style="font-style:normal;color:var(--faint)">· levels and reasons inside</i>'
     buy = ('<a class="go" href="/xau-sovereign/buy">BUY NOW — ₹8,000 ONE-TIME →</a>' if configured else '<a class="go" href="/contact">PAYMENTS OPENING SOON — WRITE TO US</a>')
     doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_esc(title)}</title><meta name="description" content="{_esc(desc)}"><meta name="theme-color" content="#0c0626"><meta name="robots" content="index, follow, max-image-preview:large">

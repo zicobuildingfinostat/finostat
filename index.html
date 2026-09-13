@@ -332,6 +332,7 @@ footer{padding:56px 0 28px;font-size:14px;background:rgba(6,3,26,.6);border-top:
 /* feature cards are doors to the terminal */
 .feat{cursor:pointer;transition:transform .2s,box-shadow .2s,border-color .2s}
 .feat:hover,.feat:focus-visible{transform:translateY(-3px);border-color:var(--gold);box-shadow:0 22px 60px rgba(0,0,0,.5);outline:none}
+.feat.vip{border-color:var(--gold);box-shadow:0 0 0 1px rgba(245,200,66,.35),0 24px 60px rgba(0,0,0,.45),0 0 40px rgba(245,200,66,.12)}.feat.vip .panel-hd .s{color:var(--gold-2)}.feat.vip .unlock{background:linear-gradient(180deg,var(--gold-2),#f2b830);color:#2a1a02;border-color:var(--gold);font-weight:700}
 .feat .unlock{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(245,200,66,.45);padding:5px 9px}
 .feat:hover .unlock{background:var(--gold);color:#2a1a02}
 .plan-note{border:1px solid var(--gold);background:rgba(245,200,66,.07);padding:14px 18px;margin:-14px 0 22px;font-size:15px;color:var(--text)}
@@ -402,7 +403,7 @@ body.menu-open{overflow:hidden}
       <button type="submit">GO</button>
     </form>
     <nav class="nav-links" aria-label="Primary">
-      <a href="#tools">Tools</a><a href="#features">Features</a><a href="#strategies">Strategies</a><a href="#watch">Watch</a><a href="/global">Global</a><a href="/xau-sovereign">XAU Sovereign</a><a href="/calendar">Calendar</a><a href="/option-chain/nifty">Option chain</a><a href="/fii-dii">FII/DII</a><a href="/brief">Brief</a><a href="/finch">Finch</a><a href="/assessment" id="fa-open">Assess me</a><a href="#plans">Plans</a>
+      <a href="#tools">Tools</a><a href="#features">Features</a><a href="#strategies">Strategies</a><a href="#watch">Watch</a><a href="/global">Global</a><a href="/xau-sovereign" style="color:var(--gold)">Gold VIP</a><a href="/calendar">Calendar</a><a href="/option-chain/nifty">Option chain</a><a href="/fii-dii">FII/DII</a><a href="/brief">Brief</a><a href="/finch">Finch</a><a href="/assessment" id="fa-open">Assess me</a><a href="#plans">Plans</a>
     </nav>
     <div class="nav-cta">
       <a class="btn ghost" href="/login">Sign in</a>
@@ -418,11 +419,14 @@ body.menu-open{overflow:hidden}
   <div class="grp"><h5>Terminal</h5>
     <a class="hot" href="/dashboard">Trading terminal<small>live sheets</small></a>
     <a href="/dashboard#builder">Strategy builder<small>price any structure</small></a>
-    <a href="/global">Global / Crypto terminal<small>BTC · ETH options · world indices</small></a>
-    <a href="/xau-sovereign">XAU Sovereign<small>XAU/USD buy·sell engine · ₹8,000 once</small></a>
     <a href="/calendar">Economic calendar<small>free · IST</small></a>
     <a href="/calendar/expiry-dates">Expiry dates<small>NIFTY · BANKNIFTY · SENSEX</small></a>
     <a href="/brief">Daily expiry brief<small>09:20 IST</small></a>
+  </div>
+  <div class="grp"><h5>Global · Crypto · Gold</h5>
+    <a href="/global">Global terminal<small>S&amp;P · Nasdaq · DAX · Nikkei · DXY · TradingView charts</small></a>
+    <a href="/global#p-chain">Crypto options<small>BTC · ETH chains on Deribit · buying &amp; selling strategies · CoinDCX</small></a>
+    <a class="hot" href="/xau-sovereign">XAUUSD GOLD VIP INDICATOR<small>XAU Sovereign · buy·sell engine · ₹8,000 once, lifetime</small></a>
   </div>
   <div class="grp"><h5>Learn</h5>
     <a href="/finch">Finch course<small>12 chapters, live data</small></a>
@@ -533,6 +537,9 @@ body.menu-open{overflow:hidden}
   <div class="wrap">
     <div class="sec-head rv"><div><span class="eyebrow">What's inside</span><h2>Built for the last 30 minutes of expiry.</h2></div><p>The toolkit serious options traders in India actually use, without the institutional price tag.</p></div>
     <div class="feats">
+      <div class="panel feat wide rv vip" data-feat="XAU" data-href="/xau-sovereign" role="link" tabindex="0" aria-label="XAU Sovereign: the gold VIP indicator, one-time purchase"><div class="panel-hd"><span class="k">XAU</span><span class="s">XAU SOVEREIGN · GOLD VIP INDICATOR</span><span class="r"><span style="color:var(--gold)">₹8,000 ONCE</span></span></div>
+        <div class="body"><h3>The gold buy·sell engine</h3><p>Nine published trading systems and a full smart-money price-action read on XAU/USD, blended into one non-repainting BUY / SELL call with entry, stop and target. Live web app on 1H · 4H · 1D plus the Pine Script for your own TradingView chart.</p><a class="unlock" href="/xau-sovereign">Own it · ₹8,000 one-time · lifetime →</a></div>
+        <div class="viz" style="padding:10px 12px 8px"><svg viewBox="0 0 300 110" style="width:100%;display:block" aria-hidden="true"><rect x="150" y="18" width="150" height="16" fill="rgba(255,92,108,.12)"/><text x="154" y="15" fill="#ff8a96" font-family="IBM Plex Mono,monospace" font-size="8">OB supply</text><rect x="40" y="70" width="260" height="14" fill="rgba(106,53,240,.3)"/><text x="44" y="67" fill="#b9a6ff" font-family="IBM Plex Mono,monospace" font-size="8">OB demand</text><polyline points="10,60 40,56 70,62 100,50 130,54 160,44 190,40 220,32 250,36 280,24" fill="none" stroke="#7fe0f0" stroke-width="1.2" opacity=".9"/><g stroke-width="1.2"><line x1="20" y1="48" x2="20" y2="70" stroke="#ff5c6c"/><rect x="16" y="52" width="8" height="12" fill="#ff5c6c"/><line x1="50" y1="52" x2="50" y2="76" stroke="#ff5c6c"/><rect x="46" y="58" width="8" height="12" fill="#ff5c6c"/><line x1="80" y1="58" x2="80" y2="82" stroke="#3dd68c"/><rect x="76" y="62" width="8" height="14" fill="#3dd68c"/><line x1="110" y1="44" x2="110" y2="66" stroke="#3dd68c"/><rect x="106" y="48" width="8" height="12" fill="#3dd68c"/><line x1="140" y1="40" x2="140" y2="60" stroke="#ff5c6c"/><rect x="136" y="46" width="8" height="8" fill="#ff5c6c"/><line x1="170" y1="30" x2="170" y2="52" stroke="#3dd68c"/><rect x="166" y="34" width="8" height="14" fill="#3dd68c"/><line x1="200" y1="26" x2="200" y2="46" stroke="#3dd68c"/><rect x="196" y="30" width="8" height="10" fill="#3dd68c"/><line x1="230" y1="18" x2="230" y2="40" stroke="#3dd68c"/><rect x="226" y="22" width="8" height="12" fill="#3dd68c"/><line x1="260" y1="22" x2="260" y2="44" stroke="#ff5c6c"/><rect x="256" y="26" width="8" height="10" fill="#ff5c6c"/><line x1="285" y1="10" x2="285" y2="32" stroke="#3dd68c"/><rect x="281" y="14" width="8" height="12" fill="#3dd68c"/></g><text x="80" y="98" fill="#3dd68c" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="700" text-anchor="middle">▲ BUY</text><text x="110" y="36" fill="#f5c842" font-family="IBM Plex Mono,monospace" font-size="8" text-anchor="middle">CHoCH</text><text x="200" y="18" fill="#3dd68c" font-family="IBM Plex Mono,monospace" font-size="8" text-anchor="middle">BOS</text><line x1="10" y1="30" x2="300" y2="30" stroke="#3dd68c" stroke-dasharray="3 3" opacity=".8"/><text x="298" y="27" fill="#3dd68c" font-family="IBM Plex Mono,monospace" font-size="8" text-anchor="end">target</text><line x1="10" y1="88" x2="300" y2="88" stroke="#ff5c6c" stroke-dasharray="3 3" opacity=".8"/><text x="298" y="97" fill="#ff5c6c" font-family="IBM Plex Mono,monospace" font-size="8" text-anchor="end">SL</text></svg></div></div>
       <div class="panel feat wide rv" data-feat="MINI" role="link" tabindex="0" aria-label="MINI: inside the terminal, see plans"><div class="panel-hd"><span class="k">MINI</span><span class="s">BANKNIFTY PE · BUY/SELL</span><span class="r"><span class="live">LIVE</span></span></div>
         <div class="body"><h3>Streamed by the millisecond</h3><p>WebSocket-fed sheets refresh several times a second. Butterflies, ratios and combos, always in sync with the tape.</p><a class="unlock" href="#plans">Inside the terminal · Desk &amp; Pro →</a></div>
         <div class="viz"><table class="sheet"><thead><tr><th>STRIKE</th><th>BUY</th><th>SELL</th><th>Δ</th></tr></thead><tbody id="mini-rows"></tbody></table></div></div>
@@ -954,8 +961,8 @@ body.menu-open{overflow:hidden}
   var note=document.getElementById('plan-note'),nk=document.getElementById('plan-note-k'),nt=document.getElementById('plan-note-t');
   function show(code,title){ if(!note)return; nk.textContent=code; nt.textContent=title; note.hidden=false; try{sessionStorage.setItem('fino_feat',code+'|'+title);}catch(e){} }
   var PANEL={MINI:'mini',SURF:'surf',RPLY:'rply',CURV:'curv',BKTS:'bkts',GEX:'gex',ALRT:'alerts'};
-  if(window.FINO_PAID){ Array.prototype.forEach.call(document.querySelectorAll('.feat[data-feat] .unlock'),function(a){ var c=a.closest('.feat').getAttribute('data-feat'); a.textContent='Open in the terminal →'; a.href='/dashboard#'+(PANEL[c]||''); }); }
-  function go(card){ var code=card.getAttribute('data-feat')||''; if(window.FINO_PAID){ location.href='/dashboard#'+(PANEL[code]||''); return; } var h=card.querySelector('h3'); show(code,h?h.textContent:code); var plans=document.getElementById('plans'); if(plans){ plans.scrollIntoView({behavior:'smooth',block:'start'}); } if(history.replaceState){ history.replaceState(null,'','#plans'); } }
+  if(window.FINO_PAID){ Array.prototype.forEach.call(document.querySelectorAll('.feat[data-feat]:not([data-href]) .unlock'),function(a){ var c=a.closest('.feat').getAttribute('data-feat'); a.textContent='Open in the terminal →'; a.href='/dashboard#'+(PANEL[c]||''); }); }
+  function go(card){ var code=card.getAttribute('data-feat')||''; var href=card.getAttribute('data-href'); if(href){ location.href=href; return; } if(window.FINO_PAID){ location.href='/dashboard#'+(PANEL[code]||''); return; } var h=card.querySelector('h3'); show(code,h?h.textContent:code); var plans=document.getElementById('plans'); if(plans){ plans.scrollIntoView({behavior:'smooth',block:'start'}); } if(history.replaceState){ history.replaceState(null,'','#plans'); } }
   document.addEventListener('click',function(e){ var card=e.target.closest('.feat[data-feat]'); if(!card)return; e.preventDefault(); go(card); });
   document.addEventListener('keydown',function(e){ if(e.key!=='Enter'&&e.key!==' ')return; var card=e.target.closest&&e.target.closest('.feat[data-feat]'); if(!card)return; e.preventDefault(); go(card); });
   var q=new URLSearchParams(location.search).get('feature'); if(q){ var c=document.querySelector('.feat[data-feat="'+q.toUpperCase()+'"]'); if(c){ go(c); } }
