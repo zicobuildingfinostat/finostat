@@ -42,5 +42,9 @@ class Hol:
 fl = F.Flows(st, Hol())
 import datetime as _dt
 check("trading-day filter: weekend + holiday out", not fl._trading_day(_dt.date(2026, 9, 13)) and not fl._trading_day(_dt.date(2026, 9, 14)) and fl._trading_day(_dt.date(2026, 9, 15)))
+print("\n=== public page ===")
+import flows_page
+page = flows_page.render(fl).decode()
+check("public page: title with date and numbers, KPIs, table rows, Dataset + FAQ schema, canonical", "FII DII Data Today (11 Sep 2026)" in page and "−931" not in page and "-931" in page and 'class="kp"' in page and "11 Sep 2026" in page and '"Dataset"' in page and "FAQPage" in page and 'href="https://finostat.com/fii-dii"' in page and "/api/flows?days=60" in page)
 print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
 sys.exit(1 if fails else 0)

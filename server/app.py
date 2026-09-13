@@ -52,6 +52,7 @@ import candles
 import algo
 import watchdog
 import flows
+import flows_page
 import events
 import chains
 import contracts
@@ -322,7 +323,7 @@ def _paid(user) -> bool:
 # course keeps its live numbers.
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
-                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo", "/api/flows"}
+                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo"}
 
 
 def _gate(user, ukey: str):
@@ -648,6 +649,8 @@ class Handler(BaseHTTPRequestHandler):
                 body = econ_pages.render(route[len("/calendar/"):], holidays=HOLIDAYS, contracts=CONTRACTS_OF(FEED))
                 if body is not None:
                     return self._send(body, "text/html; charset=utf-8", cache="public, max-age=3600")
+            if route == "/fii-dii":
+                return self._send(flows_page.render(FLOWS), "text/html; charset=utf-8", cache="public, max-age=600")
             if route == "/calendar":
                 qs = parse_qs(parsed.query)
                 d = qs.get("d", [""])[0]
