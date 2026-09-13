@@ -391,6 +391,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
       <div class="layout-menu" id="layout-menu"></div>
     </details>
     <span id="who"><a href="/login">SIGN IN</a></span>
+    <a href="/global" title="BTC/ETH options, world indices, CoinDCX">GLOBAL</a>
     <a href="/">← SITE</a>
   </div>
 </header>
@@ -424,6 +425,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div><code>BOOK · CAS · CHART · CHAIN · SHEET · ALERTS · WATCH · BUILDER · BROKER · N50 · WIRE · MINI</code><span>jump to a panel (unhides it)</span></div>
 <div><code>HIDE WIRE</code> / <code>SHOW WIRE</code><span>layout without the menu</span></div>
 <div><code>BRIEF · FINCH · ACCOUNT · HOME</code><span>open a page</span></div>
+<div><code>GLOBAL · CRYPTO</code><span>the Global/Crypto terminal: BTC/ETH option chains on Deribit, buying &amp; selling builder, TradingView charts, CoinDCX</span></div>
 <h4>Keys</h4>
 <div><code>/</code><span>focus the command line</span></div>
 <div><code>Esc</code><span>close this card, the ticket, or blur</span></div>
@@ -973,6 +975,7 @@ function runCommand(raw){
   var t=raw.trim().replace(/\s+/g,' '); if(!t) return; var U=t.toUpperCase(), a=U.split(' ');
   if(U==='?'||U==='HELP'){ helpEl.hidden=false; return; }
   if(U==='BRIEF'){ window.open('/brief','_blank'); return say('opening the brief'); }
+  if(U==='GLOBAL'||U==='CRYPTO'){ location.href='/global'; return say('opening the Global/Crypto terminal'); }
   if(U==='FINCH'){ window.open('/finch','_blank'); return say('opening Finch'); }
   if(U==='ACCOUNT'||U==='PLAN'||U==='PLANS'){ location.href='/account'; return; }
   if(U==='HOME'||U==='SITE'){ location.href='/'; return; }

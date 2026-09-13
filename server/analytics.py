@@ -213,7 +213,7 @@ def distribution(rows: list[dict], spot: float, t: float, r: float = bs.RISK_FRE
             "tail_left": round(left, 4), "tail_right": round(right, 4), "atm_iv": sm["atm_iv"], "t_days": round(t * 365, 2)}
 
 
-def gex(rows: list[dict], spot: float, lot: int, t: float | None = None) -> dict | None:
+def gex(rows: list[dict], spot: float, lot: int, t: float | None = None, divisor: float = 1e7) -> dict | None:
     """Dealer gamma exposure per strike, ₹ crore per 1% move (OI in shares, as NSE reports it). Convention: dealers are long the
     calls customers sold (+) and short the puts customers bought (−); net > 0 pins, net < 0 chases."""
     out, have_oi = [], False
@@ -227,7 +227,7 @@ def gex(rows: list[dict], spot: float, lot: int, t: float | None = None) -> dict
             g_pe = g_pe if g_pe is not None else (bs.greeks(spot, k, t, ivp / 100.0, "PE")["gamma"] if ivp else None)
         oi_c, oi_p = int(ce.get("oi") or 0), int(pe.get("oi") or 0)
         have_oi = have_oi or oi_c > 0 or oi_p > 0
-        scale = spot * spot * 0.01 / 1e7                 # OI is already in shares (contracts × lot), so no lot factor
+        scale = spot * spot * 0.01 / divisor             # OI is already in shares (contracts × lot), so no lot factor; crypto passes 1e6 for $ millions
         call = (g_ce or 0.0) * oi_c * scale
         put = -(g_pe or 0.0) * oi_p * scale
         out.append({"strike": k, "call": round(call, 3), "put": round(put, 3), "net": round(call + put, 3), "oi_ce": oi_c, "oi_pe": oi_p})

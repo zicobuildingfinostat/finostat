@@ -49,6 +49,9 @@ import analytics
 import history
 import upstox_rest
 import candles
+import crypto
+import coindcx
+import pages_global
 import algo
 import watchdog
 import flows
@@ -218,6 +221,8 @@ def _algo_live_router(a: dict, legs: list, lots: int, closing: bool) -> list:
 WATCHDOG = watchdog.Watchdog(FEED, HOLIDAYS, notify=mailer.send_owner_note)
 FLOWS = flows.Flows(flows.Store(AUTH.path), HOLIDAYS)
 PUBCHAIN = pubchain.PublicChains(AUTH.path.parent, HOLIDAYS, contracts_of=lambda: CONTRACTS_OF(FEED))
+CRYPTO = crypto.Crypto()
+_DCX_CACHE: dict = {}            # user_id -> (ts, payload)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
 ALGOS = algo.Store(AUTH.path)
 ALGO = algo.Engine(ALGOS, CHAINS, BOOK, FEED, lambda: CONTRACTS_OF(FEED), live_router=_algo_live_router)
@@ -304,6 +309,39 @@ def _book_payload(user) -> dict:
             "closed": BOOK.closed_positions(user["id"], 15), "broker": client is not None}
 
 
+def _crypto_chain(cur: str, day: str | None = None) -> dict:
+    """Deribit chain for one expiry in the analytics shape (expiry as YYYY-MM-DD, t in years)."""
+    base = CRYPTO.chain(cur)
+    if "rows" not in base:
+        return {"error": base.get("error", "chain unavailable")}
+    by_day = {crypto.datetime.fromtimestamp(e / 1000, crypto.timezone.utc).strftime("%Y-%m-%d"): e for e in base["expiries"]}
+    exp_ms = by_day.get(day) if day else None
+    ch = base if (exp_ms is None or exp_ms == base["expiry"]) else CRYPTO.chain(cur, exp_ms)
+    if "rows" not in ch:
+        return {"error": ch.get("error", "chain unavailable")}
+    return {"rows": ch["rows"], "spot": ch["spot"], "t": ch["t_years"], "lot": 1, "live": True, "source": "deribit",
+            "expiry": crypto.datetime.fromtimestamp(ch["expiry"] / 1000, crypto.timezone.utc).strftime("%Y-%m-%d"), "expiries": list(by_day)[:6]}
+
+
+def _coindcx_payload(user, force: bool = False) -> dict:
+    acc = BROKERS.get(user["id"], "coindcx")
+    if not acc or not acc.get("token"):
+        return {"connected": False}
+    cached = _DCX_CACHE.get(user["id"])
+    if cached and not force and time.time() - cached[0] < 25:
+        return cached[1]
+    key, _, secret = acc["token"].partition(":")
+    out = {"connected": True, "user": acc.get("name") or acc.get("broker_uid"), "email": acc.get("email"), "connected_at": acc.get("connected")}
+    for k, fn in (("balances", coindcx.balances), ("orders", coindcx.open_orders)):
+        try:
+            out[k] = fn(key, secret)
+        except coindcx.CoinDCXError as exc:
+            out[k + "_error"] = str(exc)
+    _DCX_CACHE[user["id"]] = (time.time(), out)
+    BROKERS.touch(user["id"], "coindcx")
+    return out
+
+
 def _plan_of(user) -> str:
     """Anonymous visitors get the free tier's entitlements; the point of Starter
     being free is that people can try the index builder before signing in."""
@@ -325,7 +363,8 @@ def _paid(user) -> bool:
 # course keeps its live numbers.
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
-                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo"}
+                 "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx"}
 
 
 def _gate(user, ukey: str):
@@ -642,6 +681,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(pages.render_dashboard(FEED.snapshot(), locked=not paid, signed_in=user is not None,
                                                          plan=_plan_of(user)),
                                   "text/html; charset=utf-8", cache="no-store")
+            if route == "/global":
+                user = self._current_user()
+                return self._send(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user)),
+                                  "text/html; charset=utf-8", cache="no-store")
             if (route in TERMINAL_APIS or route.startswith("/api/alerts/")) and not _paid(self._current_user()):
                 return self._json({"error": "plan required", "need": "desk", "feature": "terminal",
                                    "signed_in": self._current_user() is not None}, 402)
@@ -717,6 +760,53 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": str(exc)}, 503)
                 out["label"] = label
                 return self._json(out)
+            if route == "/api/global/tape":
+                return self._json(CRYPTO.tape())
+            if route == "/api/global/chain":
+                qs = parse_qs(parsed.query)
+                cur = qs.get("cur", ["BTC"])[0].upper()
+                try:
+                    exp = int(qs.get("expiry", ["0"])[0] or 0) or None
+                except ValueError:
+                    exp = None
+                ch = CRYPTO.chain(cur, exp)
+                return self._json(ch, 503 if "error" in ch else 200)
+            if route in ("/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex"):
+                qs = parse_qs(parsed.query)
+                cur = qs.get("u", ["BTC"])[0].upper()
+                if cur not in crypto.CURRENCIES:
+                    return self._json({"error": "BTC or ETH"}, 400)
+                day = qs.get("expiry", [""])[0] or None
+                if route == "/api/global/surface":
+                    base = _crypto_chain(cur)
+                    if "error" in base:
+                        return self._json(base, 503)
+                    chains_ = []
+                    for e in base["expiries"][:4]:
+                        ch = base if e == base["expiry"] else _crypto_chain(cur, e)
+                        if "rows" in ch and ch["t"] > 0:
+                            chains_.append({"expiry": e, "label": econ.datetime.strptime(e, "%Y-%m-%d").strftime("%d %b"), "rows": ch["rows"], "spot": ch["spot"], "t": ch["t"]})
+                    out = analytics.surface(chains_)
+                    out.update({"underlying": cur, "spot": base["spot"], "source": "deribit", "live": True})
+                    return self._json(out)
+                ch = _crypto_chain(cur, day)
+                if "error" in ch:
+                    return self._json(ch, 503)
+                meta = {"underlying": cur, "expiry": ch["expiry"], "expiries": ch["expiries"], "spot": ch["spot"], "t_days": round(ch["t"] * 365, 2),
+                        "source": "deribit", "live": True, "lot": 1}
+                if route == "/api/global/skew":
+                    out = analytics.smile(ch["rows"], ch["spot"], ch["t"])
+                elif route == "/api/global/curve":
+                    out = analytics.distribution(ch["rows"], ch["spot"], ch["t"], r=0.0) or {"error": "not enough implied vols to build the curve"}
+                else:
+                    out = analytics.gex(ch["rows"], ch["spot"], 1, ch["t"], divisor=1e6) or {"error": "open interest not available"}
+                out.update(meta)
+                return self._json(out, 503 if "error" in out else 200)
+            if route == "/api/coindcx":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                return self._json(_coindcx_payload(user))
             if route == "/api/flows":
                 try:
                     days = max(5, min(120, int(parse_qs(parsed.query).get("days", ["30"])[0])))
@@ -1130,6 +1220,83 @@ class Handler(BaseHTTPRequestHandler):
                     fn = ALERTS.rearm if parts[4] == "rearm" else ALERTS.delete
                     return self._json({"ok": fn(user["id"], int(parts[3]))})
                 return self._json({"error": "not found"}, 404)
+            if route in ("/api/global/strategy", "/api/coindcx/connect", "/api/coindcx/disconnect"):
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "sign in first"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk"}, 402)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8") or "{}")
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if not isinstance(body, dict):
+                    return self._json({"error": "expected an object"}, 400)
+                if route == "/api/coindcx/disconnect":
+                    BROKERS.disconnect(user["id"], "coindcx")
+                    _DCX_CACHE.pop(user["id"], None)
+                    return self._json({"ok": True, "connected": False})
+                if route == "/api/coindcx/connect":
+                    key, secret = str(body.get("key", "")).strip(), str(body.get("secret", "")).strip()
+                    if not coindcx.valid_pair(key, secret):
+                        return self._json({"error": "that does not look like a CoinDCX key/secret pair"}, 400)
+                    try:
+                        info = coindcx.user_info(key, secret)
+                    except coindcx.CoinDCXError as exc:
+                        return self._json({"error": str(exc)}, 502)
+                    BROKERS.connect(user["id"], "coindcx", {"uid": info.get("uid"), "name": info.get("name"), "email": info.get("email"), "token": f"{key}:{secret}"},
+                                    time.time() + 10 * 365 * 86400)
+                    _DCX_CACHE.pop(user["id"], None)
+                    log.info("coindcx connected: user %s", user["id"])
+                    return self._json(_coindcx_payload(user, force=True))
+                # crypto strategy
+                cur = str(body.get("cur", "BTC")).upper()
+                exp = body.get("expiry")
+                exp = int(exp) if isinstance(exp, (int, float)) and exp else None
+                chain = CRYPTO.chain(cur, exp)
+                if "rows" not in chain:
+                    return self._json(chain, 503)
+                strikes = [r["strike"] for r in chain["rows"]]
+                preset = body.get("preset")
+                if preset:
+                    legs = builder.preset_legs(str(preset), chain["atm"], chain["step"], strikes)
+                    if legs is None:
+                        return self._json({"error": "preset needs strikes outside the loaded chain"}, 400)
+                else:
+                    raw = body.get("legs")
+                    if not isinstance(raw, list) or not raw or len(raw) > 8:
+                        return self._json({"error": "1-8 legs required"}, 400)
+                    legs = []
+                    for l in raw:
+                        try:
+                            right, strike, qty = str(l["right"]).upper(), int(l["strike"]), int(l["qty"])
+                        except (KeyError, TypeError, ValueError):
+                            return self._json({"error": "each leg needs right, strike, qty"}, 400)
+                        if right not in ("CE", "PE") or strike not in strikes or not (-10 <= qty <= 10) or qty == 0:
+                            return self._json({"error": f"bad leg {l}"}, 400)
+                        legs.append({"right": right, "strike": strike, "qty": qty})
+                by_strike = {r["strike"]: r for r in chain["rows"]}
+                ivs = {}
+                for l in legs:
+                    side = by_strike[l["strike"]].get(l["right"].lower())
+                    if not side:
+                        return self._json({"error": f"no mark for {l['strike']} {l['right']} on Deribit"}, 409)
+                    l["price"] = side["ltp"]
+                    l["iv"] = side.get("iv")
+                    l["delta"] = side.get("delta")
+                    if side.get("iv"):
+                        ivs[(l["right"], l["strike"])] = side["iv"] / 100.0
+                try:
+                    size = float(body.get("size") or 1)
+                except (TypeError, ValueError):
+                    size = 1.0
+                size = size if 0 < size <= 1000 else 1.0
+                metrics = builder.evaluate(chain["spot"], legs, size, chain["t_years"], ivs, r=0.0)
+                name = builder.PRESETS[str(preset)][0] if preset and str(preset) in builder.PRESETS else ""
+                return self._json({"underlying": cur, "name": name, "kind": "crypto", "spot": chain["spot"], "expiry": chain["expiry"], "expiries": chain["expiries"],
+                                   "lot": 1, "size": size, "atm": chain["atm"], "step": chain["step"], "strikes": strikes, "legs": legs, "metrics": metrics, "live": True})
             if route == "/api/strategy":
                 try:
                     body = json.loads(self._read_body().decode("utf-8"))

@@ -49,8 +49,8 @@ def payoff_at(legs: list[dict], s: float) -> float:
     return pnl
 
 
-def evaluate(spot: float, legs: list[dict], lot: int = 1, t_years: float | None = None,
-             ivs: dict | None = None, points: int = 81) -> dict:
+def evaluate(spot: float, legs: list[dict], lot: float = 1, t_years: float | None = None,
+             ivs: dict | None = None, points: int = 81, r: float = bs.RISK_FREE) -> dict:
     """Net premium, max profit/loss (or unbounded), breakevens, payoff curve, greeks.
 
     `ivs` maps (right, strike) -> implied vol, used only for greeks.
@@ -102,7 +102,7 @@ def evaluate(spot: float, legs: list[dict], lot: int = 1, t_years: float | None 
             iv = ivs.get((l["right"], l["strike"]))
             if iv is None:
                 continue
-            g = bs.greeks(spot, l["strike"], t_years, iv, l["right"])
+            g = bs.greeks(spot, l["strike"], t_years, iv, l["right"], r=r)
             for k in tot:
                 tot[k] += l["qty"] * g[k]
         out["greeks"] = {k: round(v * lot, 3) for k, v in tot.items()}
