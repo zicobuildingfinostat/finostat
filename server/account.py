@@ -47,6 +47,7 @@ _PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name
 <div class="acct"><div>
 <div class="msg" id="msg" hidden></div>
 <div class="status"><small>Current plan</small><b>__PLAN__</b><div class="sub">__PLAN_SUB__</div></div>
+__EMAILBOX__
 <h2 style="font-family:var(--display);font-size:24px;text-transform:uppercase;margin:0 0 4px">__UPGRADE_HEAD__</h2>
 <div class="toggle" id="period"><button type="button" data-period="monthly" class="on">Monthly</button><button type="button" data-period="yearly">Yearly · save 17%</button></div>
 <div class="phone" id="phone" hidden><label for="phone-in">Mobile (needed by Cashfree)</label><input id="phone-in" type="tel" inputmode="numeric" maxlength="14" placeholder="10-digit mobile" value="__PHONE__"></div>
@@ -67,6 +68,7 @@ __HISTORY__
 <script>__JS__</script></body></html>"""
 
 _JS = r"""
+(function(){ var b=document.getElementById('em-btn'); if(!b) return; b.addEventListener('click',function(){ var em=document.getElementById('em-in').value.trim(); var m=document.getElementById('em-msg'); if(!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(em)){ m.textContent='That email address does not look right.'; return; } b.disabled=true; fetch('/api/me/email',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},body:JSON.stringify({email:em}),credentials:'same-origin'}).then(function(r){ return r.json(); }).then(function(j){ b.disabled=false; m.textContent=j.ok?'Link sent to '+em+' — open it on any device to verify and sign in there.':(j.error||'Could not send the link.'); }).catch(function(){ b.disabled=false; m.textContent='network error'; }); }); })();
 (function(){
 "use strict";
 var A=window.ACCT, plansEl=document.getElementById('plans'), msg=document.getElementById('msg'), period='monthly';
@@ -141,7 +143,7 @@ def _esc(s) -> str:
     return html.escape(str(s), quote=True)
 
 
-def render(user: dict, status: dict, history: list[dict], phone: str = "") -> bytes:
+def render(user: dict, status: dict, history: list[dict], phone: str = "", notice: str | None = None, health: str | None = None) -> bytes:
     cat = pm.catalogue()
     plan = status["plan"]
     label = {"starter": "Starter", "desk": "Desk", "pro": "Pro desk"}[plan]
@@ -163,6 +165,15 @@ def render(user: dict, status: dict, history: list[dict], phone: str = "") -> by
             "Online payment is not switched on yet. Requesting a plan sends us an email and we activate it by hand, usually the same day.")
     data = json.dumps({"catalogue": cat, "status": {"plan": plan, "until": status.get("until")}}, separators=(",", ":")).replace("</", "<\\/")
     shown = ("Mobile +91 " + user["email"].split("@")[0]) if user["email"].endswith("@mobile.finostat") else user["email"]
-    doc = (_PAGE.replace("__CSS__", _CSS).replace("__EMAIL__", _esc(shown)).replace("__PLAN__", label).replace("__PLAN_SUB__", _esc(sub))
+    box = ""
+    if user["email"].endswith("@mobile.finostat"):
+        box = ('<div class="status" id="emailbox"><small>Sign in on other devices</small><div class="sub">Your account is on your mobile number. Add an email and we send a link that verifies it; after that you can sign in anywhere with the email link.</div>'
+               '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input id="em-in" type="email" placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:200px;background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;padding:8px 10px">'
+               '<button type="button" class="b" id="em-btn" style="border:1px solid var(--gold);color:var(--gold);background:none;padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;cursor:pointer">SEND VERIFY LINK</button></div><div class="sub" id="em-msg"></div></div>')
+    if notice:
+        box = f'<div class="msg ok" style="display:block">{_esc(notice)}</div>' + box
+    if health:
+        box += f'<div class="status"><small>Feed health (owner)</small><b style="font-size:16px">{_esc(health)}</b></div>'
+    doc = (_PAGE.replace("__CSS__", _CSS).replace("__EMAILBOX__", box).replace("__EMAIL__", _esc(shown)).replace("__PLAN__", label).replace("__PLAN_SUB__", _esc(sub))
            .replace("__UPGRADE_HEAD__", head).replace("__NOTE__", note).replace("__HISTORY__", hist).replace("__DATA__", data).replace("__PHONE__", _esc(phone)).replace("__JS__", _JS))
     return doc.encode("utf-8")

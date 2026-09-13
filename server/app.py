@@ -50,6 +50,7 @@ import history
 import upstox_rest
 import candles
 import algo
+import watchdog
 import events
 import chains
 import contracts
@@ -211,6 +212,8 @@ def _algo_live_router(a: dict, legs: list, lots: int, closing: bool) -> list:
     return broker.execute(client, plan)
 
 
+WATCHDOG = watchdog.Watchdog(FEED, HOLIDAYS, notify=mailer.send_owner_note)
+_OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
 ALGOS = algo.Store(AUTH.path)
 ALGO = algo.Engine(ALGOS, CHAINS, BOOK, FEED, lambda: CONTRACTS_OF(FEED), live_router=_algo_live_router)
 HIST = history.History(UREST, upstox_rest.CandleStore(recorder._data_dir() / "history.db"))
@@ -901,8 +904,22 @@ class Handler(BaseHTTPRequestHandler):
                         return self._redirect("/login?next=" + quote("/account" + (("?" + parsed.query) if parsed.query else ""), safe=""))
                     return self._send(guest.render(qs.get("plan", ["desk"])[0], qs.get("period", ["monthly"])[0], configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
                                       "text/html; charset=utf-8", cache="no-store")
-                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"]), AUTH.get_prefs(user["id"]).get("phone") or ""),
+                qs = parse_qs(parsed.query)
+                notice = "Email verified — you can now sign in on any device with the email link." if qs.get("attached") else None
+                health = None
+                if user["email"].lower() in _OWNER_EMAILS:
+                    w = WATCHDOG.status()
+                    snap = FEED.snapshot()
+                    health = ("feed live · " if snap.get("live") else "feed DOWN · ") + ("socket" if getattr(FEED, "_ws", None) is not None else "REST fallback") + (f" · trouble since {econ.datetime.fromtimestamp(w['trouble_since'], econ.IST).strftime('%H:%M')}" if w.get("trouble_since") else " · no trouble") + (" · in session" if w.get("in_session") else " · market closed")
+                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"]), AUTH.get_prefs(user["id"]).get("phone") or "", notice=notice, health=health),
                                   "text/html; charset=utf-8", cache="no-store")
+            if route == "/account/attach":
+                token = parse_qs(parsed.query).get("token", [""])[0]
+                u = AUTH.finish_email_attach(token)
+                if u is None:
+                    return self._redirect("/login?state=expired")
+                sid = AUTH.create_session(u["id"])
+                return self._redirect("/account?attached=1", [("Set-Cookie", authmod.Auth.cookie_header(sid, self._secure()))])
             if route == "/api/me":
                 user = self._current_user()
                 if user is None:
@@ -962,6 +979,7 @@ class Handler(BaseHTTPRequestHandler):
             "econ": {"fetched": ECON.fetched, "error": ECON.error},
             "holidays": {"count": len(HOLIDAYS.all()), "fetched": HOLIDAYS.fetched, "error": HOLIDAYS.error},
             "analytics": {"rest_token": bool(UREST.token), "history_candles": HIST.store.count()},
+            "watchdog": WATCHDOG.status(),
                                    "alerts": ALERTS.stats(),
                                    "universe": len(snap.get("universe") or {}),
                                    "load": _load(),
@@ -1288,6 +1306,23 @@ class Handler(BaseHTTPRequestHandler):
                 _BROKER_CACHE.pop(user["id"], None)
                 log.info("broker order: user %s %s lots=%d %s -> %s", user["id"], ukey, lots, [p["leg"] for p in plan], results)
                 return self._json({"ok": all(x["ok"] for x in results), "results": results, "sent": len(results), "planned": len(plan)})
+            if route == "/api/me/email":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                token = AUTH.start_email_attach(user["id"], str(body.get("email", "")))
+                if not token:
+                    return self._json({"error": "That email is not usable — it may already belong to another account"}, 400)
+                link = f"{self._base_url()}/account/attach?token={quote(token, safe='')}"
+                ok = mailer.send_plain(str(authmod.normalize_email(str(body.get("email", "")))), "Verify your email for Finostat",
+                                       "Tap the button to attach this email to your Finostat account. The link works once and for 30 minutes.", ["After that, sign in on any device with an email link."], link, "Verify and sign in →")
+                return self._json({"ok": ok} if ok else {"error": "could not send the email right now"}, 200 if ok else 502)
             if route == "/api/pay/guest":
                 if self.headers.get("X-Requested-With") != "fetch":
                     return self._json({"error": "bad request"}, 400)
@@ -1630,6 +1665,7 @@ def main() -> int:
     HOLIDAYS.start()
     ECON.start()
     ALGO.start()
+    WATCHDOG.start()
     FEED.start()
     NEWS.start()
     server = Server((config.HOST, config.PORT), Handler)
@@ -1651,6 +1687,7 @@ def main() -> int:
         EVENTS.stop()
         ECON.stop()
         ALGO.stop()
+        WATCHDOG.stop()
         HOLIDAYS.stop()
         # A consistent copy first, then fold the WAL: whatever happens to the
         # live file during the machine stop, the next boot can restore this.

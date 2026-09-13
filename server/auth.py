@@ -119,7 +119,9 @@ def _migrate(path: pathlib.Path) -> None:
         if cols and "phone" not in cols:
             c.execute("ALTER TABLE users ADD COLUMN phone TEXT")
             c.execute("CREATE INDEX IF NOT EXISTS users_phone ON users(phone)")
-            c.commit()
+        if cols:
+            c.execute("CREATE TABLE IF NOT EXISTS email_attach(token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, email TEXT NOT NULL, expires REAL NOT NULL)")
+        c.commit()
     finally:
         c.close()
 
@@ -296,6 +298,34 @@ class Auth:
                     uid = cur.lastrowid
                     log.info("new account by mobile: ...%s", phone[-4:])
             c.execute("UPDATE users SET last_seen=? WHERE id=?", (now, uid))
+        return self.user_by_id(uid)
+
+    def start_email_attach(self, user_id: int, email: str) -> str | None:
+        """Begin attaching a real email to an account (mobile-checkout accounts). Returns the token to mail."""
+        email = normalize_email(email)
+        if email is None or is_phone_only(email):
+            return None
+        with self._lock, self._conn() as c:
+            if c.execute("SELECT 1 FROM users WHERE email=? AND id!=?", (email, user_id)).fetchone():
+                return None
+            token = secrets.token_urlsafe(32)
+            c.execute("DELETE FROM email_attach WHERE user_id=? OR expires<?", (user_id, time.time()))
+            c.execute("INSERT INTO email_attach(token_hash,user_id,email,expires) VALUES(?,?,?,?)", (_h(token), user_id, email, time.time() + 30 * 60))
+        return token
+
+    def finish_email_attach(self, token: str) -> dict | None:
+        """Redeem the attach link: the account's email becomes the verified one. Returns the user."""
+        if not token or len(token) > 128:
+            return None
+        with self._lock, self._conn() as c:
+            row = c.execute("SELECT user_id,email,expires FROM email_attach WHERE token_hash=?", (_h(token),)).fetchone()
+            if row is None:
+                return None
+            c.execute("DELETE FROM email_attach WHERE token_hash=?", (_h(token),))
+            if row["expires"] < time.time() or c.execute("SELECT 1 FROM users WHERE email=? AND id!=?", (row["email"], row["user_id"])).fetchone():
+                return None
+            c.execute("UPDATE users SET email=?, last_seen=? WHERE id=?", (row["email"], time.time(), row["user_id"]))
+            uid = row["user_id"]
         return self.user_by_id(uid)
 
     # -- sessions -----------------------------------------------------------
