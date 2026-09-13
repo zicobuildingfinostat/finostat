@@ -18,7 +18,7 @@ check("paid render has no paywall and no lock guard", "class=\"paywall\"" not in
 check("chart panel present with our own candle chart (timeframes, volume profile toggle, candles API)", 'id="p-chart"' in open_ and 'id="ch-cv"' in open_ and 'data-tf="D"' in open_ and 'id="ch-vp"' in open_ and "/api/candles?u=" in open_ and "['chart','Chart']" in open_ and "s3.tradingview.com" not in open_)
 check("locked page never fetches candles", "if(!chart.sym||window.FINO_LOCKED) return;" in open_)
 anon = pages.render_dashboard(snap, locked=True, signed_in=False).decode()
-check("anonymous lock: card, sign-in CTA, blur css, network guard", all(x in anon for x in ('class="paywall"', "Sign in &amp; get Desk", "filter:blur(7px)", "window.FINO_LOCKED=true", 'window.fetch=function(){return Promise.reject', "window.EventSource=function()")))
+check("anonymous lock: card, sign-in CTA, blur css, network guard", all(x in anon for x in ('class="paywall"', "Get Desk — pay with your mobile", "filter:blur(7px)", "window.FINO_LOCKED=true", 'window.fetch=function(){return Promise.reject', "window.EventSource=function()")))
 check("guard runs before the app scripts", anon.index("window.FINO_LOCKED=true") < anon.index("window.SEED="))
 check("seed still present so the blurred panels have content", "24500" in anon)
 starter = pages.render_dashboard(snap, locked=True, signed_in=True, plan="starter").decode()

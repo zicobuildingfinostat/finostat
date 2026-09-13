@@ -162,6 +162,7 @@ def render(user: dict, status: dict, history: list[dict], phone: str = "") -> by
             "By paying you accept the <a href='/terms'>terms</a>." if cat["configured"] else
             "Online payment is not switched on yet. Requesting a plan sends us an email and we activate it by hand, usually the same day.")
     data = json.dumps({"catalogue": cat, "status": {"plan": plan, "until": status.get("until")}}, separators=(",", ":")).replace("</", "<\\/")
-    doc = (_PAGE.replace("__CSS__", _CSS).replace("__EMAIL__", _esc(user["email"])).replace("__PLAN__", label).replace("__PLAN_SUB__", _esc(sub))
+    shown = ("Mobile +91 " + user["email"].split("@")[0]) if user["email"].endswith("@mobile.finostat") else user["email"]
+    doc = (_PAGE.replace("__CSS__", _CSS).replace("__EMAIL__", _esc(shown)).replace("__PLAN__", label).replace("__PLAN_SUB__", _esc(sub))
            .replace("__UPGRADE_HEAD__", head).replace("__NOTE__", note).replace("__HISTORY__", hist).replace("__DATA__", data).replace("__PHONE__", _esc(phone)).replace("__JS__", _JS))
     return doc.encode("utf-8")

@@ -1351,7 +1351,7 @@ function showLock(err){
   document.getElementById('bl-lock-text').textContent=(err.feature==='builder_stocks'?'Strategy building on F&O stocks is part of the '+need+' plan. Index strategies stay free.':'This feature needs the '+need+' plan.');
   var btn=document.getElementById('bl-lock-btn'), note=document.getElementById('bl-lock-note');
   btn.disabled=false;
-  if(!err.signed_in){ btn.textContent='SIGN IN TO UPGRADE'; btn.onclick=function(){ location.href='/login?next='+encodeURIComponent('/account?plan='+need); }; note.textContent='Starter is free — sign in with your email, then pay by UPI or card.'; }
+  if(!err.signed_in){ btn.textContent='GET '+need.toUpperCase()+' — PAY WITH MOBILE'; btn.onclick=function(){ location.href='/account?plan='+need; }; note.textContent='Starter is free — sign in with your email, then pay by UPI or card.'; }
   else { btn.textContent='UPGRADE TO '+need.toUpperCase(); note.textContent='You are on '+(err.plan||'starter')+'. Pay by UPI or card; active the moment it clears.';
     btn.onclick=function(){ location.href='/account?plan='+need; }; }
 }
@@ -1807,7 +1807,7 @@ def _paywall(signed_in: bool, plan: str) -> str:
     else:
         head = "The terminal is for Desk members"
         lead = "Sign in with your email, pick Desk, and this screen unblurs the moment the payment clears. Starter stays free for Finch, the daily brief and the assessment."
-        primary = '<a class="b primary" href="/login?next=%2Faccount%3Fplan%3Ddesk">Sign in &amp; get Desk →</a>'
+        primary = '<a class="b primary" href="/account?plan=desk">Get Desk — pay with your mobile →</a>'
         secondary = '<a class="b" href="/login">Already a member? Sign in</a>'
     return f"""<div class="paywall" role="dialog" aria-label="Desk plan required"><div class="card">
 <div class="hd"><span class="k">DESK</span><span class="s">LIVE TERMINAL</span><span class="r">₹2,199 / 30 DAYS</span></div>

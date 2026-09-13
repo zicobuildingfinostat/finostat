@@ -130,3 +130,27 @@ check("lapsed plan wording", "Your desk plan ended" in page2)
 
 print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
 sys.exit(1 if fails else 0)
+
+
+print("\n=== mobile-first accounts (guest checkout) ===")
+import guest
+tmp2 = pathlib.Path(tempfile.mkdtemp()); au = A.Auth(tmp2 / "acct.db") if "path" in A.Auth.__init__.__code__.co_varnames else None
+if au is None:
+    os.environ["FINOSTAT_DATA_DIR"] = str(tmp2); au = A.Auth()
+u1 = au.find_or_create_by_phone("9876543210")
+check("new mobile account gets a placeholder email and the phone", A.is_phone_only(u1["email"]) and u1["phone"] == "9876543210" and u1["plan"] == "starter", u1)
+u1b = au.find_or_create_by_phone("9876543210")
+check("same number -> same account", u1b["id"] == u1["id"])
+u1c = au.find_or_create_by_phone("9876543210", "Buyer@Example.com")
+check("adding an email upgrades the placeholder", u1c["id"] == u1["id"] and u1c["email"] == "buyer@example.com" and not A.is_phone_only(u1c["email"]), u1c)
+uid_e = au._conn().execute("INSERT INTO users(email,created,last_seen) VALUES('old@example.com',1,1)").lastrowid if False else None
+with au._conn() as c:
+    c.execute("INSERT INTO users(email,created,last_seen) VALUES('old@example.com',1,1)")
+u2 = au.find_or_create_by_phone("9123456789", "old@example.com")
+check("existing email account gets the number attached, no duplicate", u2["email"] == "old@example.com" and u2["phone"] == "9123456789" and not A.is_phone_only(u2["email"]))
+check("user_by_id round-trips", au.user_by_id(u2["id"])["phone"] == "9123456789" and au.user_by_id(999999) is None)
+page = guest.render("pro", "yearly").decode()
+check("guest page: plan cards, cycle toggle, phone + optional email, Cashfree button, email sign-in fallback", 'data-plan="pro"' in page and 'data-p="yearly"' in page and 'id="gc-phone"' in page and 'id="gc-email"' in page and "PAY WITH CASHFREE" in page and "/login?next=%2Faccount" in page and "/api/pay/guest/verify" in page)
+check("guest page shows a notice when given one", "Payment received" in guest.render("desk", "monthly", notice="Payment received").decode())
+acct = account.render({"id": u1["id"], "email": "9876543210@mobile.finostat", "plan": "desk", "plan_until": time.time() + 86400}, {"plan": "desk", "until": time.time() + 86400, "days_left": 1}, [], "9876543210").decode()
+check("account page shows the mobile number instead of the placeholder email", "Mobile +91 9876543210" in acct and "mobile.finostat" not in acct)

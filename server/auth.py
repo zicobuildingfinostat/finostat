@@ -26,6 +26,11 @@ log = logging.getLogger("finostat.auth")
 LINK_TTL = 15 * 60                  # seconds a magic link stays valid
 SESSION_TTL = 30 * 24 * 3600        # seconds a session cookie stays valid
 COOKIE = "fino_session"
+PHONE_DOMAIN = "mobile.finostat"       # placeholder email domain for accounts created by mobile-number checkout
+
+
+def is_phone_only(email: str | None) -> bool:
+    return bool(email) and email.endswith("@" + PHONE_DOMAIN)
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$")
 
 _SCHEMA = """
@@ -111,6 +116,9 @@ def _migrate(path: pathlib.Path) -> None:
             c.commit()
         if cols and "plan_until" not in cols:      # NULL = no expiry (manual grants); paid plans carry one
             c.execute("ALTER TABLE users ADD COLUMN plan_until REAL")
+        if cols and "phone" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+            c.execute("CREATE INDEX IF NOT EXISTS users_phone ON users(phone)")
             c.commit()
     finally:
         c.close()
@@ -255,6 +263,40 @@ class Auth:
                 uid = user["id"]
                 c.execute("UPDATE users SET last_seen=? WHERE id=?", (now, uid))
             return uid
+
+    # -- mobile-first accounts (guest checkout) -------------------------------
+    def user_by_id(self, uid: int) -> dict | None:
+        with self._conn() as c:
+            row = c.execute("SELECT id,email,plan,plan_until,phone FROM users WHERE id=?", (uid,)).fetchone()
+        if row is None:
+            return None
+        return {"id": row["id"], "email": row["email"], "plan": self.effective_plan(row["plan"], row["plan_until"]),
+                "plan_until": row["plan_until"], "phone": row["phone"]}
+
+    def find_or_create_by_phone(self, phone: str, email: str | None = None) -> dict:
+        """The account a mobile number pays for. Preference: the account already carrying this
+        number; else the account with the given email (which then gets the number); else a new
+        account whose email is a placeholder until the owner adds one."""
+        now = time.time()
+        email = normalize_email(email) if email else None
+        with self._lock, self._conn() as c:
+            row = c.execute("SELECT id,email FROM users WHERE phone=?", (phone,)).fetchone()
+            if row is not None:
+                uid = row["id"]
+                if email and is_phone_only(row["email"]) and c.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone() is None:
+                    c.execute("UPDATE users SET email=? WHERE id=?", (email, uid))
+            else:
+                by_email = c.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone() if email else None
+                if by_email is not None:
+                    uid = by_email["id"]
+                    c.execute("UPDATE users SET phone=? WHERE id=?", (phone, uid))
+                else:
+                    placeholder = email or f"{phone}@{PHONE_DOMAIN}"
+                    cur = c.execute("INSERT INTO users(email,created,last_seen,phone) VALUES(?,?,?,?)", (placeholder, now, now, phone))
+                    uid = cur.lastrowid
+                    log.info("new account by mobile: ...%s", phone[-4:])
+            c.execute("UPDATE users SET last_seen=? WHERE id=?", (now, uid))
+        return self.user_by_id(uid)
 
     # -- sessions -----------------------------------------------------------
     def create_session(self, user_id: int) -> str:

@@ -32,6 +32,7 @@ import legal
 import news
 import alerts as alertsmod
 import account
+import guest
 import assessment
 import auth as authmod
 import backup
@@ -99,6 +100,54 @@ def _safe_next(raw: str) -> str:
     if raw.startswith("/") and not raw.startswith("//") and "\\" not in raw and len(raw) < 200 and re.fullmatch(r"[A-Za-z0-9/_\-?=&%.#+]*", raw):
         return raw
     return ""
+
+
+class _RateLimiter:
+    """Small per-IP window: n attempts per period."""
+    def __init__(self, n: int, period: float):
+        self.n, self.period, self._hits, self._lock = n, period, {}, threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.time()
+        with self._lock:
+            hits = [t for t in self._hits.get(key, []) if now - t < self.period]
+            if len(hits) >= self.n:
+                self._hits[key] = hits
+                return False
+            hits.append(now)
+            self._hits[key] = hits
+            return True
+
+
+_guest_limiter = _RateLimiter(12, 600.0)
+
+
+def _guest_settle(order_id: str, secure: bool):
+    """After a guest payment: confirm with Cashfree, activate, and sign the buyer in when the account
+    was created by mobile checkout. Returns (result dict, Set-Cookie value or None)."""
+    row = PAYMENTS.get(order_id) if order_id else None
+    if row is None or row.get("provider") != "cashfree":
+        return {"error": "unknown order"}, None
+    if row.get("status") != "paid":
+        try:
+            pid = PAYMENTS.confirm_cashfree(order_id)
+        except payments.PaymentError as exc:
+            return {"pending": True, "error": f"Cashfree: {exc}"}, None
+        if pid is None:
+            return {"pending": True, "error": "payment not confirmed yet"}, None
+        _grant_and_notify(order_id, pid, "guest-verify")
+    user = AUTH.user_by_id(int(row["user_id"]))
+    if user is None:
+        return {"error": "account missing"}, None
+    if authmod.is_phone_only(user["email"]):
+        sid = AUTH.create_session(user["id"])
+        return {"ok": True, "signed_in": True, "next": "/dashboard?paid=1", "plan": user["plan"]}, authmod.Auth.cookie_header(sid, secure)
+    # an existing email account: activated, and the sign-in link goes to that inbox
+    token = AUTH.create_link(user["email"])
+    sent = bool(token) and mailer.send_magic_link(user["email"], f"{PUBLIC_URL or 'https://finostat.com'}/auth/verify?token={quote(token, safe='')}&next=%2Fdashboard")
+    masked = user["email"][:2] + "***" + user["email"][user["email"].find("@"):]
+    return {"ok": True, "signed_in": False, "plan": user["plan"],
+            "message": f"Payment received and {user['plan']} is active on the account for {masked}. " + ("We've emailed your sign-in link there." if sent else "Sign in with your email link to open the terminal.")}, None
 
 
 def _grant_and_notify(order_id: str, payment_id: str, source: str):
@@ -520,8 +569,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _json(self, payload, status: int = 200):
-        self._send(_json_safe(payload), "application/json; charset=utf-8", status)
+    def _json(self, payload, status: int = 200, headers=()):
+        body = _json_safe(payload)
+        if not headers:
+            return self._send(body, "application/json; charset=utf-8", status)
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        for name, value in headers:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(body)
 
     def _redirect(self, location: str, extra_headers=()):
         self.send_response(303)
@@ -830,7 +889,18 @@ class Handler(BaseHTTPRequestHandler):
             if route in ("/account", "/upgrade"):
                 user = self._current_user()
                 if user is None:
-                    return self._redirect("/login?next=" + quote("/account" + (("?" + parsed.query) if parsed.query else ""), safe=""))
+                    qs = parse_qs(parsed.query)
+                    cf_order = qs.get("cf_order", [""])[0]
+                    if cf_order:                                   # back from Cashfree's own redirect flow
+                        result, cookie = _guest_settle(cf_order, self._secure())
+                        if result.get("signed_in") and cookie:
+                            return self._redirect(result.get("next", "/dashboard"), [("Set-Cookie", cookie)])
+                        return self._send(guest.render("desk", "monthly", notice=result.get("message") or result.get("error") or "Payment status unknown — write to hello@finostat.com"),
+                                          "text/html; charset=utf-8", cache="no-store")
+                    if not payments.any_configured():
+                        return self._redirect("/login?next=" + quote("/account" + (("?" + parsed.query) if parsed.query else ""), safe=""))
+                    return self._send(guest.render(qs.get("plan", ["desk"])[0], qs.get("period", ["monthly"])[0], configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+                                      "text/html; charset=utf-8", cache="no-store")
                 return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"]), AUTH.get_prefs(user["id"]).get("phone") or ""),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/api/me":
@@ -1218,6 +1288,44 @@ class Handler(BaseHTTPRequestHandler):
                 _BROKER_CACHE.pop(user["id"], None)
                 log.info("broker order: user %s %s lots=%d %s -> %s", user["id"], ukey, lots, [p["leg"] for p in plan], results)
                 return self._json({"ok": all(x["ok"] for x in results), "results": results, "sent": len(results), "planned": len(plan)})
+            if route == "/api/pay/guest":
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if "cashfree" not in [p["id"] for p in payments.providers() if p["configured"]]:
+                    return self._json({"error": "online payment is not switched on yet"}, 503)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                phone = assessment.clean_phone(str(body.get("phone", "")))
+                if not phone:
+                    return self._json({"error": "Enter a 10-digit Indian mobile number"}, 400)
+                email_raw = str(body.get("email", "") or "").strip()
+                email = authmod.normalize_email(email_raw) if email_raw else None
+                if email_raw and email is None:
+                    return self._json({"error": "That email address doesn't look right"}, 400)
+                plan, period = str(body.get("plan", "desk")), str(body.get("period", "monthly"))
+                if not _guest_limiter.allow(self._client_ip()):
+                    return self._json({"error": "Too many attempts — try again in a few minutes"}, 429)
+                try:
+                    user = AUTH.find_or_create_by_phone(phone, email)
+                    AUTH.set_prefs(user["id"], {"phone": phone})
+                    order = PAYMENTS.create_cashfree(user, plan, period, phone)
+                except payments.PaymentError as exc:
+                    return self._json({"error": str(exc)}, 502)
+                order["guest"] = True
+                return self._json(order)
+            if route == "/api/pay/guest/verify":
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8"))
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                oid = str(body.get("order_id", ""))[:64]
+                result, cookie = _guest_settle(oid, self._secure())
+                status = 200 if result.get("ok") or result.get("pending") else 400
+                return self._json(result, status, headers=[("Set-Cookie", cookie)] if cookie else ())
             if route == "/api/pay/order":
                 user = self._current_user()
                 if user is None:
