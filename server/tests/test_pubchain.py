@@ -30,5 +30,19 @@ page = PC.render(pc, "nifty").decode()
 check("page: title with PCR and max pain, KPIs, ATM row, walls, schema, canonical, symbol switcher", "NIFTY 50 Option Chain" in page and "max pain" in page and 'class="kp"' in page and "class=atm" in page and 'oi wall' in page and '"Dataset"' in page and "FAQPage" in page and 'href="https://finostat.com/option-chain/nifty"' in page and '/option-chain/banknifty' in page)
 check("empty symbol renders a placeholder, unknown slug -> None", "not loaded yet" in PC.render(pc, "banknifty").decode() and PC.render(pc, "nope") is None)
 check("cache file written by fetch path is optional; status lists symbols", "nifty" in pc.status())
+print("\n=== stocks + index page ===")
+class CI:
+    def stock_names(self): return ["HDFCBANK", "RELIANCE"]
+    def lots(self): return {"NIFTY": 65, "RELIANCE": 500, "HDFCBANK": 550}
+pc2 = PC.PublicChains(tmp, contracts_of=lambda: CI())
+pc2.data["nifty"] = pc.data["nifty"]
+check("is_stock from the contract master; unknown symbols rejected", pc2.is_stock("reliance") and not pc2.is_stock("nope") and PC.render(pc2, "nope") is None)
+pc2.stocks["RELIANCE"] = {"slug": "reliance", "symbol": "RELIANCE", "label": "RELIANCE", "step": 10, "expiry": "29-Sep-2026", "expiries": ["29-Sep-2026"], "spot": 1257.5, "nse_ts": "x", "fetched": time.time(), "rows": n["rows"], "stats": st, "lot": 500}
+sp = PC.render(pc2, "reliance").decode()
+check("stock page renders with lot size and the all-stocks link", "RELIANCE Option Chain" in sp and ">500<" in sp and "ALL F&amp;O STOCKS" in sp and 'href="https://finostat.com/option-chain/reliance"' in sp)
+ip = PC.render_index(pc2).decode()
+check("index page: index cards, stock rows with lots, filter box, schema", "F&amp;O Stock List with Lot Sizes" in ip and "/option-chain/reliance" in ip and ">550<" in ip and 'id="q"' in ip and '"Dataset"' in ip and "2 names" in ip)
+sm = PC.sitemap_entries(pc2)
+check("sitemap entries for the index and every stock", "/option-chain</loc>" in sm and "/option-chain/hdfcbank" in sm and sm.count("<url>") == 3)
 print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
 sys.exit(1 if fails else 0)

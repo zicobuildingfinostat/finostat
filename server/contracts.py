@@ -59,6 +59,21 @@ class ContractIndex:
     def names(self) -> list[str]:
         return sorted(self._by_name)
 
+    def lots(self) -> dict[str, int]:
+        """name -> lot size (from the nearest expiry's contracts)."""
+        out = {}
+        for name, by_exp in self._by_name.items():
+            for exp in sorted(by_exp):
+                row = next(iter(by_exp[exp].values()), None)
+                if row and row[1]:
+                    out[name] = int(row[1])
+                    break
+        return out
+
+    def stock_names(self) -> list[str]:
+        idx = {v[0] for v in INDEX_UNDERLYINGS.values()}
+        return sorted(n for n in self._by_name if n not in idx)
+
     def expiries(self, name: str, now_ms: float | None = None) -> list[int]:
         now_ms = now_ms if now_ms is not None else time.time() * 1000
         # The master stamps expiry at 23:59:59 IST on the expiry date; the

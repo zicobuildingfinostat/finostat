@@ -217,7 +217,7 @@ def _algo_live_router(a: dict, legs: list, lots: int, closing: bool) -> list:
 
 WATCHDOG = watchdog.Watchdog(FEED, HOLIDAYS, notify=mailer.send_owner_note)
 FLOWS = flows.Flows(flows.Store(AUTH.path), HOLIDAYS)
-PUBCHAIN = pubchain.PublicChains(AUTH.path.parent, HOLIDAYS)
+PUBCHAIN = pubchain.PublicChains(AUTH.path.parent, HOLIDAYS, contracts_of=lambda: CONTRACTS_OF(FEED))
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
 ALGOS = algo.Store(AUTH.path)
 ALGO = algo.Engine(ALGOS, CHAINS, BOOK, FEED, lambda: CONTRACTS_OF(FEED), live_router=_algo_live_router)
@@ -656,10 +656,10 @@ class Handler(BaseHTTPRequestHandler):
                 if body is not None:
                     return self._send(body, "text/html; charset=utf-8", cache="public, max-age=120")
             if route == "/option-chain":
-                return self._redirect("/option-chain/nifty")
+                return self._send(pubchain.render_index(PUBCHAIN), "text/html; charset=utf-8", cache="public, max-age=600")
             if route.startswith("/api/option-chain/"):
                 slug = route.rsplit("/", 1)[1].lower()
-                d = PUBCHAIN.get(slug)
+                d = PUBCHAIN.get(slug) if slug in pubchain.SYMBOLS else PUBCHAIN.stock(slug)
                 if d is None:
                     return self._json({"error": "unknown symbol or not loaded yet"}, 404)
                 return self._json(d)
@@ -874,7 +874,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(rec or {"error": "no brief yet"}, 200 if rec else 404)
             if route == "/sitemap.xml":
                 static = (config.STATIC_ROOT / "sitemap.xml").read_text(encoding="utf-8")
-                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + "</urlset>")
+                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + pubchain.sitemap_entries(PUBCHAIN) + "</urlset>")
                 return self._send(xml.encode("utf-8"), "application/xml; charset=utf-8", cache="public, max-age=3600")
             if route == "/about":
                 return self._redirect("/founders")

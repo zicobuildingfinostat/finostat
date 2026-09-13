@@ -72,12 +72,19 @@ def stats(rows: list[dict], spot: float | None) -> dict:
             "iv_atm": next((r["ce"]["iv"] for r in rows if r["strike"] == atm and r["ce"] and r["ce"].get("iv")), None)}
 
 
+STOCK_TTL = 300        # seconds a stock chain is served from cache before NSE is asked again
+CHAIN_URL_EQ = "https://www.nseindia.com/api/option-chain-v3?type=Equity&symbol={sym}&expiry={exp}"
+
+
 class PublicChains:
-    def __init__(self, cache_dir: pathlib.Path, holidays=None, clock=None):
+    def __init__(self, cache_dir: pathlib.Path, holidays=None, clock=None, contracts_of=None):
         self.cache_dir, self.holidays, self.clock = pathlib.Path(cache_dir), holidays, clock or (lambda: datetime.now(IST))
+        self.contracts_of = contracts_of or (lambda: None)
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self._fetch_gate = threading.Semaphore(2)               # crawlers hitting 180 stock pages must not become 180 NSE calls at once
         self.data: dict[str, dict] = {}
+        self.stocks: dict[str, dict] = {}
         self.error: str | None = None
         self._expiries: dict[str, tuple[float, list[str]]] = {}
         for slug in SYMBOLS:
@@ -128,6 +135,58 @@ class PublicChains:
         except OSError:
             pass
         return out
+
+    # -- stocks: fetched when a page asks, cached a few minutes ----------------
+    def fo_stocks(self) -> list[str]:
+        ci = self.contracts_of()
+        try:
+            return ci.stock_names() if ci else []
+        except Exception:                                           # noqa: BLE001
+            return []
+
+    def lots(self) -> dict[str, int]:
+        ci = self.contracts_of()
+        try:
+            return ci.lots() if ci else {}
+        except Exception:                                           # noqa: BLE001
+            return {}
+
+    def is_stock(self, sym: str) -> bool:
+        return sym.upper() in set(self.fo_stocks())
+
+    def stock(self, sym: str) -> dict | None:
+        """Chain for an F&O stock; NSE is asked at most once per STOCK_TTL, stale data served on failure."""
+        sym = sym.upper()
+        with self._lock:
+            hit = self.stocks.get(sym)
+        if hit and time.time() - hit["fetched"] < STOCK_TTL:
+            return hit
+        if not self.is_stock(sym):
+            return hit
+        with self._fetch_gate:
+            with self._lock:                                        # another request may have filled it while we waited
+                hit = self.stocks.get(sym)
+            if hit and time.time() - hit["fetched"] < STOCK_TTL:
+                return hit
+            try:
+                op, h = self._opener()
+                exps = self.expiries(op, h, sym)
+                today = self.clock().date()
+                live = [e for e in exps if datetime.strptime(e, "%d-%b-%Y").date() >= today] or exps
+                if not live:
+                    return hit
+                payload = self._get(op, h, CHAIN_URL_EQ.format(sym=sym, exp=urllib.parse.quote(live[0])))
+                n = normalize(payload)
+                ks = sorted({r["strike"] for r in n["rows"]})
+                step = min((b - a for a, b in zip(ks, ks[1:]) if b > a), default=0)
+                out = {"slug": sym.lower(), "symbol": sym, "label": sym, "step": step, "expiry": live[0], "expiries": live[:4], "spot": n["spot"], "nse_ts": n["ts"],
+                       "fetched": time.time(), "rows": n["rows"], "stats": stats(n["rows"], n["spot"]), "lot": self.lots().get(sym)}
+                with self._lock:
+                    self.stocks[sym] = out
+                return out
+            except Exception as exc:                                # noqa: BLE001
+                log.info("stock chain %s failed: %s", sym, exc)
+                return hit
 
     def refresh(self) -> bool:
         ok = True
@@ -215,10 +274,15 @@ def _k(v) -> str:
 
 
 def render(pc: PublicChains, slug: str) -> bytes | None:
-    if slug not in SYMBOLS:
+    if slug in SYMBOLS:
+        d = pc.get(slug)
+        sym, label, step = SYMBOLS[slug]
+    elif pc.is_stock(slug):
+        d = pc.stock(slug)
+        sym = label = slug.upper()
+        step = (d or {}).get("step") or 0
+    else:
         return None
-    d = pc.get(slug)
-    sym, label, step = SYMBOLS[slug]
     st = (d or {}).get("stats") or {}
     rows = (d or {}).get("rows") or []
     spot = (d or {}).get("spot")
@@ -250,7 +314,10 @@ def render(pc: PublicChains, slug: str) -> bytes | None:
                    f'<td class="k">{r["strike"]}</td><td>{_n(pe.get("ltp"), 2) if pe else "—"}</td><td class="dim">{_n(pe.get("iv"), 1) if pe and pe.get("iv") else "—"}</td><td class="dim">{_k(pe.get("vol")) if pe else "—"}</td><td class="dim">{chg(pe.get("oi_chg")) if pe else "—"}</td>{oi_td("pe", pe, r["strike"] == st.get("put_wall"))}</tr>')
     table = ('<div class="scrollx"><table class="oc"><thead><tr><th>CALL OI</th><th>ΔOI</th><th>VOL</th><th>IV</th><th>CE LTP</th><th>STRIKE</th><th>PE LTP</th><th>IV</th><th>VOL</th><th>ΔOI</th><th>PUT OI</th></tr></thead>'
              f'<tbody>{"".join(trs) or "<tr><td colspan=11>Chain not loaded yet — NSE publishes during market hours; try again in a minute.</td></tr>"}</tbody></table></div>')
-    syms = "".join(f'<a href="/option-chain/{s}"{" class=on" if s == slug else ""}>{SYMBOLS[s][1]}</a>' for s in SYMBOLS)
+    syms = "".join(f'<a href="/option-chain/{s}"{" class=on" if s == slug else ""}>{SYMBOLS[s][1]}</a>' for s in SYMBOLS) + '<a href="/option-chain">ALL F&amp;O STOCKS · LOT SIZES</a>'
+    lot = (d or {}).get("lot")
+    if lot:
+        kp_html += f'<div><small>lot size</small><b class="m">{lot}</b></div>'
     ld = {"@context": "https://schema.org", "@type": "Dataset", "name": f"{label} option chain (NSE)", "url": f"https://finostat.com/option-chain/{slug}",
           "description": f"Open interest, change in OI, volume, implied volatility and last price for every {label} strike, with PCR, max pain and OI walls. Refreshed every few minutes from NSE during market hours.",
           "creator": {"@type": "Organization", "name": "Finostat", "url": "https://finostat.com"}, "isAccessibleForFree": True, "dateModified": datetime.fromtimestamp(d["fetched"], IST).isoformat() if d else None,
@@ -286,3 +353,53 @@ def render(pc: PublicChains, slug: str) -> bytes | None:
 <p class="disc">Source: NSE option chain (public, delayed). Finostat reformats and computes PCR, max pain and walls; it does not alter the figures. Not investment advice.</p>
 </main></body></html>"""
     return doc.encode("utf-8")
+
+
+
+def render_index(pc: PublicChains) -> bytes:
+    """/option-chain — the indices plus every F&O stock with its lot size, each linking to its chain."""
+    lots = pc.lots()
+    stocks = pc.fo_stocks()
+    idx_lots = {SYMBOLS[s][0]: lots.get(SYMBOLS[s][0]) for s in SYMBOLS}
+    cards = "".join(f'<a class="card" href="/option-chain/{s}"><b>{SYMBOLS[s][1]}</b><small>lot {idx_lots.get(SYMBOLS[s][0]) or "—"} · {(pc.get(s) or {}).get("expiry") or "nearest expiry"}</small>'
+                    f'<span>PCR {((pc.get(s) or {}).get("stats") or {}).get("pcr") or "—"} · max pain {((pc.get(s) or {}).get("stats") or {}).get("max_pain") or "—"}</span></a>' for s in SYMBOLS)
+    rows = "".join(f'<tr><td><a href="/option-chain/{n.lower()}">{_esc(n)}</a></td><td>{lots.get(n) or "—"}</td><td><a href="/option-chain/{n.lower()}">chain →</a></td></tr>' for n in stocks)
+    title = f"F&O Stock List with Lot Sizes — {len(stocks)} NSE stocks, NIFTY & BANKNIFTY option chains | Finostat"
+    desc = f"Every stock in NSE's F&O segment with its current lot size, plus live option chains with OI, PCR and max pain for NIFTY, BANKNIFTY, FINNIFTY and all {len(stocks)} stocks. Free."
+    ld = {"@context": "https://schema.org", "@type": "Dataset", "name": "NSE F&O stock list with lot sizes", "url": "https://finostat.com/option-chain",
+          "description": desc, "creator": {"@type": "Organization", "name": "Finostat", "url": "https://finostat.com"}, "isAccessibleForFree": True,
+          "dateModified": datetime.now(IST).strftime("%Y-%m-%d")}
+    ld_json = json.dumps(ld, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{_esc(title)}</title><meta name="description" content="{_esc(desc)}"><meta name="theme-color" content="#0c0626"><meta name="robots" content="index, follow">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="canonical" href="https://finostat.com/option-chain">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Finostat"><meta property="og:title" content="{_esc(title)}"><meta property="og:description" content="{_esc(desc)}"><meta property="og:image" content="https://finostat.com/og.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script type="application/ld+json">{ld_json}</script>
+<style>{_CSS}
+.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0}}.card{{display:block;border:1px solid var(--line-strong);background:var(--panel);padding:12px 14px}}.card:hover{{border-color:var(--gold)}}.card b{{font-family:var(--display);font-size:20px;text-transform:uppercase;display:block;color:var(--text)}}.card small{{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin:2px 0 6px}}.card span{{font-family:var(--mono);font-size:11px;color:var(--gold)}}
+table.fo{{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}}table.fo th{{font-size:10px;letter-spacing:.1em;color:var(--faint);font-weight:500;padding:6px 8px;text-align:left;border-bottom:1px solid var(--line-strong)}}table.fo td{{padding:6px 8px;border-bottom:1px solid rgba(190,150,255,.1)}}table.fo td a{{color:var(--cyan)}}
+.filt{{width:100%;max-width:360px;background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;font-size:15px;padding:9px 12px;margin:8px 0 10px}}</style></head><body>
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a><a class="logo" href="/">FINO<b>STAT</b></a><div class="r"><a href="/fii-dii">FII/DII</a><a href="/calendar">CALENDAR</a><a href="/brief">BRIEF</a><a href="/dashboard">TERMINAL</a></div></header>
+<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · OPTION CHAINS</nav>
+<h1>Option chains &amp; F&amp;O lot sizes</h1>
+<p class="lede">Free option chains for NIFTY, BANKNIFTY, FINNIFTY and every stock in NSE's F&amp;O segment, with open interest, PCR, max pain and the OI walls, plus the current lot size for each name. Index chains refresh every few minutes in market hours; stock chains load when you open them.</p>
+<div class="cards">{cards}</div>
+<h2 style="font-family:var(--display);font-size:22px;text-transform:uppercase;color:var(--gold-2);margin:18px 0 4px">All F&amp;O stocks · {len(stocks)} names</h2>
+<input class="filt" id="q" placeholder="filter: RELIANCE, HDFC, TATA…" aria-label="Filter stocks">
+<div class="scrollx"><table class="fo" id="fo"><thead><tr><th>SYMBOL</th><th>LOT SIZE</th><th></th></tr></thead><tbody>{rows or "<tr><td colspan=3>loading the contract master…</td></tr>"}</tbody></table></div>
+<section class="faq"><h3>What is a lot size?</h3><p>The number of shares in one futures or options contract. NSE revises lot sizes every few months so that a contract's value stays in its target band; the figures here come from the live contract master, so they update when NSE does.</p>
+<h3>Which stocks are in F&amp;O?</h3><p>NSE adds and removes stocks from the derivatives segment based on liquidity criteria. This list is read from the exchange's own contract file, so it is the current segment, not a stale copy.</p></section>
+<p class="disc">Chains are NSE public data (delayed). Lot sizes from the exchange contract master. Not investment advice.</p>
+</main>
+<script>(function(){{ var q=document.getElementById('q'), rows=document.querySelectorAll('#fo tbody tr'); q.addEventListener('input',function(){{ var v=q.value.trim().toUpperCase(); Array.prototype.forEach.call(rows,function(tr){{ tr.hidden=v&&tr.textContent.toUpperCase().indexOf(v)<0; }}); }}); }})();</script>
+</body></html>"""
+    return doc.encode("utf-8")
+
+
+def sitemap_entries(pc: PublicChains) -> str:
+    out = ['  <url><loc>https://finostat.com/option-chain</loc><changefreq>daily</changefreq><priority>0.8</priority></url>']
+    for n in pc.fo_stocks():
+        out.append(f'  <url><loc>https://finostat.com/option-chain/{n.lower()}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>')
+    return "\n".join(out) + "\n"
