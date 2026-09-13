@@ -35,8 +35,13 @@ CF_API = {"sandbox": "https://sandbox.cashfree.com/pg", "production": "https://a
 CF_VERSION = "2023-08-01"
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "https://finostat.com").rstrip("/") or "https://finostat.com"
 PRICES = {"desk": {"monthly": 2199, "yearly": 21990}, "pro": {"monthly": 5599, "yearly": 55990}}   # rupees, exclusive of GST
-DAYS = {"monthly": 30, "yearly": 365}
-LABEL = {"desk": "Desk", "pro": "Pro desk"}
+DAYS = {"monthly": 30, "yearly": 365, "lifetime": 0}
+LABEL = {"desk": "Desk", "pro": "Pro desk", "aurum": "Aurum Strike · XAU/USD indicator"}
+PRODUCTS = {"aurum": 8000}          # one-time purchases, rupees, exclusive of GST; period is always "lifetime"
+
+
+def valid_item(plan: str, period: str) -> bool:
+    return (plan in PRICES and period in ("monthly", "yearly")) or (plan in PRODUCTS and period == "lifetime")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS payments(
@@ -172,7 +177,7 @@ def gst_percent() -> float:
 
 def amount_paise(plan: str, period: str) -> tuple[int, int, int]:
     """(total, base, gst) in paise."""
-    base = PRICES[plan][period] * 100
+    base = (PRODUCTS[plan] if plan in PRODUCTS else PRICES[plan][period]) * 100
     gst = int(round(base * gst_percent() / 100.0))
     return base + gst, base, gst
 
@@ -186,7 +191,11 @@ def catalogue() -> dict:
             total, base, gst = amount_paise(plan, period)
             out[plan][period] = {"rupees": PRICES[plan][period], "total_paise": total, "base_paise": base,
                                  "gst_paise": gst, "days": DAYS[period]}
-    return {"plans": out, "gst_percent": gst_percent(), "configured": any_configured(), "test_mode": test_mode(),
+    products = {}
+    for p, rupees in PRODUCTS.items():
+        total, base, gst = amount_paise(p, "lifetime")
+        products[p] = {"rupees": rupees, "total_paise": total, "base_paise": base, "gst_paise": gst, "label": LABEL[p]}
+    return {"plans": out, "products": products, "gst_percent": gst_percent(), "configured": any_configured(), "test_mode": test_mode(),
             "key_id": key_id() if configured() else "", "providers": [p for p in providers() if p["configured"]],
             "cf_env": cf_env()}
 
@@ -277,7 +286,7 @@ class Payments:
 
     def create_cashfree(self, user: dict, plan: str, period: str, phone: str, create_fn=cashfree_create_order) -> dict:
         """Our own order id, Cashfree's payment session. Returns what the SDK needs."""
-        if plan not in PRICES or period not in DAYS:
+        if not valid_item(plan, period):
             raise PaymentError("unknown plan or period")
         if not phone:
             raise PaymentError("a mobile number is needed for Cashfree")
@@ -332,9 +341,13 @@ def activate(auth, payments: Payments, order_id: str, payment_id: str, source: s
     row = payments.mark_paid(order_id, payment_id, source)
     if row is None:
         return None
-    until = auth.grant(row["user_id"], row["plan"], DAYS[row["period"]])
+    if row["plan"] in PRODUCTS:
+        auth.grant_product(row["user_id"], row["plan"], order_id)
+        until = None
+    else:
+        until = auth.grant(row["user_id"], row["plan"], DAYS[row["period"]])
     log.info("payment %s activated %s/%s for user %s until %s (via %s)", payment_id, row["plan"], row["period"], row["user_id"],
-             time.strftime("%Y-%m-%d", time.gmtime(until)), source)
+             time.strftime("%Y-%m-%d", time.gmtime(until)) if until else "lifetime", source)
     return {"user_id": row["user_id"], "plan": row["plan"], "period": row["period"], "amount": row["amount"],
             "base": row["base"], "gst": row["gst"], "until": until, "payment_id": payment_id, "order_id": order_id,
             "receipt": row["receipt"]}
@@ -385,8 +398,8 @@ class RenewalReminder:
 
 def receipt_lines(grant: dict, email: str) -> list[str]:
     rs = lambda p: f"₹{p / 100:,.2f}"
-    lines = [f"Plan: {LABEL[grant['plan']]} · {grant['period']} ({DAYS[grant['period']]} days)",
-             f"Active until: {time.strftime('%d %b %Y', time.gmtime(grant['until'] + 19800))} (IST)",
+    lines = [(f"Product: {LABEL[grant['plan']]} · one-time purchase" if grant["plan"] in PRODUCTS else f"Plan: {LABEL[grant['plan']]} · {grant['period']} ({DAYS[grant['period']]} days)"),
+             ("Access: lifetime · open it at https://finostat.com/aurum/app (Pine Script button inside)" if grant["plan"] in PRODUCTS else f"Active until: {time.strftime('%d %b %Y', time.gmtime(grant['until'] + 19800))} (IST)"),
              f"Amount: {rs(grant['base'])}" + (f" + GST {rs(grant['gst'])} = {rs(grant['amount'])}" if grant["gst"] else ""),
              f"Payment id: {grant['payment_id']}", f"Order id: {grant['order_id']}", f"Receipt: {grant['receipt']}",
              f"Account: {email}"]

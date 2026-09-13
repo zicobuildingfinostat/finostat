@@ -69,6 +69,13 @@ CREATE TABLE IF NOT EXISTS prefs(
   updated REAL NOT NULL,
   PRIMARY KEY(user_id, key)
 );
+CREATE TABLE IF NOT EXISTS products(
+  user_id  INTEGER NOT NULL,
+  product  TEXT NOT NULL,
+  granted  REAL NOT NULL,
+  order_id TEXT,
+  PRIMARY KEY(user_id, product)
+);
 """
 
 
@@ -423,6 +430,23 @@ class Auth:
         with self._lock, self._conn() as c:
             c.execute("INSERT INTO prefs(user_id,key,value,updated) VALUES(?,?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value, updated=excluded.updated",
                       (user_id, "renew_notice", json.dumps(until), time.time()))
+
+    # -- one-time products (Aurum Strike etc.) ---------------------------------
+    def grant_product(self, user_id: int, product: str, order_id: str | None = None) -> None:
+        with self._lock, self._conn() as c:
+            c.execute("INSERT OR IGNORE INTO products(user_id,product,granted,order_id) VALUES(?,?,?,?)", (user_id, product, time.time(), order_id))
+
+    def has_product(self, user_id: int, product: str) -> bool:
+        with self._conn() as c:
+            return c.execute("SELECT 1 FROM products WHERE user_id=? AND product=?", (user_id, product)).fetchone() is not None
+
+    def products_of(self, user_id: int) -> list[str]:
+        with self._conn() as c:
+            return [r[0] for r in c.execute("SELECT product FROM products WHERE user_id=? ORDER BY granted", (user_id,)).fetchall()]
+
+    def revoke_product(self, user_id: int, product: str) -> bool:
+        with self._lock, self._conn() as c:
+            return c.execute("DELETE FROM products WHERE user_id=? AND product=?", (user_id, product)).rowcount > 0
 
     def plan_status(self, user_id: int) -> dict:
         with self._conn() as c:

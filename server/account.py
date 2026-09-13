@@ -143,7 +143,7 @@ def _esc(s) -> str:
     return html.escape(str(s), quote=True)
 
 
-def render(user: dict, status: dict, history: list[dict], phone: str = "", notice: str | None = None, health: str | None = None) -> bytes:
+def render(user: dict, status: dict, history: list[dict], phone: str = "", notice: str | None = None, health: str | None = None, products: list[str] = ()) -> bytes:
     cat = pm.catalogue()
     plan = status["plan"]
     label = {"starter": "Starter", "desk": "Desk", "pro": "Pro desk"}[plan]
@@ -170,6 +170,9 @@ def render(user: dict, status: dict, history: list[dict], phone: str = "", notic
         box = ('<div class="status" id="emailbox"><small>Sign in on other devices</small><div class="sub">Your account is on your mobile number. Add an email and we send a link that verifies it; after that you can sign in anywhere with the email link.</div>'
                '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input id="em-in" type="email" placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:200px;background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;padding:8px 10px">'
                '<button type="button" class="b" id="em-btn" style="border:1px solid var(--gold);color:var(--gold);background:none;padding:8px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;cursor:pointer">SEND VERIFY LINK</button></div><div class="sub" id="em-msg"></div></div>')
+    if "aurum" in products:
+        box = ('<div class="status"><small>Aurum Strike · owned</small><b style="font-size:16px">XAU/USD buy·sell engine — lifetime</b>'
+               '<div class="sub"><a href="/aurum/app">Open the app →</a> &nbsp;·&nbsp; <a href="/aurum/pine">Download the Pine Script</a> for TradingView</div></div>') + box
     if notice:
         box = f'<div class="msg ok" style="display:block">{_esc(notice)}</div>' + box
     if health:

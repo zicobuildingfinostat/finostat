@@ -53,6 +53,7 @@ import crypto
 import gold
 import coindcx
 import pages_global
+import aurum_page
 import algo
 import watchdog
 import flows
@@ -147,15 +148,18 @@ def _guest_settle(order_id: str, secure: bool):
     user = AUTH.user_by_id(int(row["user_id"]))
     if user is None:
         return {"error": "account missing"}, None
+    product = row.get("plan") in payments.PRODUCTS
+    nxt = "/aurum/app?paid=1" if product else "/dashboard?paid=1"
     if authmod.is_phone_only(user["email"]):
         sid = AUTH.create_session(user["id"])
-        return {"ok": True, "signed_in": True, "next": "/dashboard?paid=1", "plan": user["plan"]}, authmod.Auth.cookie_header(sid, secure)
+        return {"ok": True, "signed_in": True, "next": nxt, "plan": user["plan"]}, authmod.Auth.cookie_header(sid, secure)
     # an existing email account: activated, and the sign-in link goes to that inbox
     token = AUTH.create_link(user["email"])
-    sent = bool(token) and mailer.send_magic_link(user["email"], f"{PUBLIC_URL or 'https://finostat.com'}/auth/verify?token={quote(token, safe='')}&next=%2Fdashboard")
+    sent = bool(token) and mailer.send_magic_link(user["email"], f"{PUBLIC_URL or 'https://finostat.com'}/auth/verify?token={quote(token, safe='')}&next={quote(nxt, safe='')}")
     masked = user["email"][:2] + "***" + user["email"][user["email"].find("@"):]
+    what = "Aurum Strike is unlocked" if product else f"{user['plan']} is active"
     return {"ok": True, "signed_in": False, "plan": user["plan"],
-            "message": f"Payment received and {user['plan']} is active on the account for {masked}. " + ("We've emailed your sign-in link there." if sent else "Sign in with your email link to open the terminal.")}, None
+            "message": f"Payment received and {what} on the account for {masked}. " + ("We've emailed your sign-in link there." if sent else "Sign in with your email link to open it.")}, None
 
 
 def _grant_and_notify(order_id: str, payment_id: str, source: str):
@@ -366,7 +370,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/global/gold", "/api/coindcx"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx"}
 
 
 def _gate(user, ukey: str):
@@ -608,12 +612,14 @@ class Handler(BaseHTTPRequestHandler):
         log.debug("%s %s", self.address_string(), fmt % args)
 
     # -- helpers ------------------------------------------------------------
-    def _send(self, body: bytes, ctype: str, status: int = 200, cache: str = "no-store"):
+    def _send(self, body: bytes, ctype: str, status: int = 200, cache: str = "no-store", headers=()):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in headers:
+            self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
@@ -685,8 +691,31 @@ class Handler(BaseHTTPRequestHandler):
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/global":
                 user = self._current_user()
-                return self._send(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user)),
+                return self._send(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user),
+                                                      pine=user is not None and AUTH.has_product(user["id"], "aurum")),
                                   "text/html; charset=utf-8", cache="no-store")
+            if route == "/aurum":
+                return self._send(aurum_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+                                  "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/aurum/buy":
+                user = self._current_user()
+                if user is not None and AUTH.has_product(user["id"], "aurum"):
+                    return self._redirect("/aurum/app")
+                return self._send(guest.render("aurum", "lifetime", configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+                                  "text/html; charset=utf-8", cache="no-store")
+            if route == "/aurum/app":
+                user = self._current_user()
+                owner = user is not None and AUTH.has_product(user["id"], "aurum")
+                return self._send(pages_global.render_aurum(locked=not (owner or _paid(user)), signed_in=user is not None, pine=owner),
+                                  "text/html; charset=utf-8", cache="no-store")
+            if route == "/aurum/pine":
+                user = self._current_user()
+                if user is None:
+                    return self._redirect("/login?next=%2Faurum%2Fapp")
+                if not AUTH.has_product(user["id"], "aurum"):
+                    return self._redirect("/aurum")
+                return self._send(aurum_page.pine_for(user["email"]), "text/plain; charset=utf-8", cache="no-store",
+                                  headers=[("Content-Disposition", 'attachment; filename="aurum-strike.pine"')])
             if (route in TERMINAL_APIS or route.startswith("/api/alerts/")) and not _paid(self._current_user()):
                 return self._json({"error": "plan required", "need": "desk", "feature": "terminal",
                                    "signed_in": self._current_user() is not None}, 402)
@@ -765,6 +794,9 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/global/tape":
                 return self._json(CRYPTO.tape())
             if route == "/api/global/gold":
+                user = self._current_user()
+                if not (_paid(user) or (user is not None and AUTH.has_product(user["id"], "aurum"))):
+                    return self._json({"error": "Aurum Strike is a one-time ₹8,000 purchase, or part of Desk", "need": "aurum", "signed_in": user is not None}, 402)
                 qs = parse_qs(parsed.query)
                 tf = qs.get("tf", ["1d"])[0]
                 try:
@@ -1030,7 +1062,8 @@ class Handler(BaseHTTPRequestHandler):
                         result, cookie = _guest_settle(cf_order, self._secure())
                         if result.get("signed_in") and cookie:
                             return self._redirect(result.get("next", "/dashboard"), [("Set-Cookie", cookie)])
-                        return self._send(guest.render("desk", "monthly", notice=result.get("message") or result.get("error") or "Payment status unknown — write to hello@finostat.com"),
+                        _row = PAYMENTS.get(cf_order) or {}
+                        return self._send(guest.render(_row.get("plan") or "desk", _row.get("period") or "monthly", notice=result.get("message") or result.get("error") or "Payment status unknown — write to hello@finostat.com"),
                                           "text/html; charset=utf-8", cache="no-store")
                     if not payments.any_configured():
                         return self._redirect("/login?next=" + quote("/account" + (("?" + parsed.query) if parsed.query else ""), safe=""))
@@ -1043,7 +1076,8 @@ class Handler(BaseHTTPRequestHandler):
                     w = WATCHDOG.status()
                     snap = FEED.snapshot()
                     health = ("feed live · " if snap.get("live") else "feed DOWN · ") + ("socket" if getattr(FEED, "_ws", None) is not None else "REST fallback") + (f" · trouble since {econ.datetime.fromtimestamp(w['trouble_since'], econ.IST).strftime('%H:%M')}" if w.get("trouble_since") else " · no trouble") + (" · in session" if w.get("in_session") else " · market closed")
-                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"]), AUTH.get_prefs(user["id"]).get("phone") or "", notice=notice, health=health),
+                return self._send(account.render(user, AUTH.plan_status(user["id"]), PAYMENTS.history(user["id"]), AUTH.get_prefs(user["id"]).get("phone") or "", notice=notice, health=health,
+                                                 products=AUTH.products_of(user["id"])),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/account/attach":
                 token = parse_qs(parsed.query).get("token", [""])[0]
@@ -1551,10 +1585,12 @@ class Handler(BaseHTTPRequestHandler):
                 if email_raw and email is None:
                     return self._json({"error": "That email address doesn't look right"}, 400)
                 plan, period = str(body.get("plan", "desk")), str(body.get("period", "monthly"))
+                if not payments.valid_item(plan, period):
+                    return self._json({"error": "unknown plan"}, 400)
                 if not _guest_limiter.allow(self._client_ip()):
                     return self._json({"error": "Too many attempts — try again in a few minutes"}, 429)
                 try:
-                    user = AUTH.find_or_create_by_phone(phone, email)
+                    user = self._current_user() or AUTH.find_or_create_by_phone(phone, email)
                     AUTH.set_prefs(user["id"], {"phone": phone})
                     order = PAYMENTS.create_cashfree(user, plan, period, phone)
                 except payments.PaymentError as exc:

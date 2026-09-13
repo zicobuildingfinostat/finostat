@@ -26,18 +26,18 @@ _CSS = r"""
 
 _JS = r"""
 (function(){
-  var plan=__PLAN__, period=__PERIOD__;
+  var plan=__PLAN__, period=__PERIOD__, NAMES={desk:'Desk',pro:'Pro desk',aurum:'Aurum Strike'};
   var $=function(id){ return document.getElementById(id); }; var msg=$('gc-msg');
   function show(k,t){ msg.hidden=false; msg.className='msg '+k; msg.textContent=t; }
-  function total(){ var card=document.querySelector('.pl[data-plan="'+plan+'"] .px'); if(!card) return; var amt=period==='monthly'?card.getAttribute('data-m'):card.getAttribute('data-y'); $('gc-total').innerHTML='You pay <b>₹'+amt+'</b> for '+(plan==='desk'?'Desk':'Pro desk')+' · '+(period==='monthly'?'30 days':'365 days');
+  function total(){ var card=document.querySelector('.pl[data-plan="'+plan+'"] .px'); if(!card) return; var amt=period==='monthly'?card.getAttribute('data-m'):card.getAttribute('data-y'); $('gc-total').innerHTML='You pay <b>₹'+amt+'</b> '+(period==='lifetime'?'once for '+NAMES[plan]+' · lifetime access':'for '+NAMES[plan]+' · '+(period==='monthly'?'30 days':'365 days'));
     Array.prototype.forEach.call(document.querySelectorAll('.pl'),function(el){ var px=el.querySelector('.px'); px.textContent='₹'+(period==='monthly'?px.getAttribute('data-m'):px.getAttribute('data-y')); var sm=el.querySelector('small'); sm.textContent=sm.textContent.replace(/^per (month|year)/, period==='monthly'?'per month':'per year'); }); }
   $('gc-plans').addEventListener('click',function(e){ var el=e.target.closest('.pl'); if(!el) return; plan=el.getAttribute('data-plan'); Array.prototype.forEach.call(document.querySelectorAll('.pl'),function(x){ x.classList.toggle('on',x===el); }); total(); });
-  $('gc-cyc').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; period=b.getAttribute('data-p'); Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); total(); });
+  if($('gc-cyc')) $('gc-cyc').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; period=b.getAttribute('data-p'); Array.prototype.forEach.call(this.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); total(); });
   total();
   function loadScript(src,cb){ if(window.Cashfree) return cb(); var s=document.createElement('script'); s.src=src; s.onload=cb; s.onerror=function(){ show('bad','Cashfree checkout failed to load'); $('gc-pay').disabled=false; }; document.head.appendChild(s); }
   function post(url,body,cb){ fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},body:JSON.stringify(body),credentials:'same-origin'}).then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); }).then(function(x){ cb(x.s,x.j); }).catch(function(){ cb(0,{error:'network'}); }); }
   function settle(orderId,tries){ tries=tries||0; post('/api/pay/guest/verify',{order_id:orderId},function(s,j){
-    if(s===200&&j.ok){ if(j.signed_in){ show('ok','Payment received — opening your terminal…'); location.href=j.next||'/dashboard'; } else { show('ok',j.message||'Payment received. Check your inbox for the sign-in link.'); } return; }
+    if(s===200&&j.ok){ if(j.signed_in){ show('ok',period==='lifetime'?'Payment received — opening Aurum Strike…':'Payment received — opening your terminal…'); location.href=j.next||'/dashboard'; } else { show('ok',j.message||'Payment received. Check your inbox for the sign-in link.'); } return; }
     if(j.pending&&tries<6){ show('ok','Waiting for Cashfree to confirm…'); setTimeout(function(){ settle(orderId,tries+1); },3000); return; }
     show('bad',j.error||'Could not confirm the payment yet. If money left your account it activates automatically; write to hello@finostat.com with your mobile number.'); $('gc-pay').disabled=false; }); }
   $('gc-pay').addEventListener('click',function(){ var phone=$('gc-phone').value.trim(), email=$('gc-email').value.trim(); var d=phone.replace(/\D/g,''); if(d.length===12&&d.slice(0,2)==='91') d=d.slice(2); if(!(d.length===10&&/[6-9]/.test(d[0]))){ show('bad','Enter a 10-digit Indian mobile number.'); $('gc-phone').focus(); return; }
@@ -50,9 +50,10 @@ _JS = r"""
 
 def render(plan: str, period: str, notice: str | None = None, configured: bool = True) -> bytes:
     cat = pm.catalogue()
-    plan = plan if plan in ("desk", "pro") else "desk"
-    period = period if period in ("monthly", "yearly") else "monthly"
-    names = {"desk": "Desk", "pro": "Pro desk"}
+    product = plan == "aurum"
+    plan = plan if plan in ("desk", "pro", "aurum") else "desk"
+    period = "lifetime" if product else (period if period in ("monthly", "yearly") else "monthly")
+    names = {"desk": "Desk", "pro": "Pro desk", "aurum": "Aurum Strike"}
     blurb = {"desk": "live terminal, chains, builder, alerts, analytics", "pro": "everything in Desk + stock chains, replay, backtests, algos"}
     cards = []
     for p in ("desk", "pro"):
@@ -60,12 +61,17 @@ def render(plan: str, period: str, notice: str | None = None, configured: bool =
         cards.append(f'<div class="pl{" on" if p == plan else ""}" data-plan="{p}" role="button" tabindex="0"><b>{names[p]}</b>'
                      f'<span class="px" data-m="{m:,}" data-y="{y:,}">₹{(m if period == "monthly" else y):,}</span>'
                      f'<small>{"per month" if period == "monthly" else "per year"} · {blurb[p]}</small></div>')
+    if product:
+        rupees = int(cat["products"]["aurum"]["rupees"])
+        cards = [f'<div class="pl on" data-plan="aurum" role="button" tabindex="0" style="grid-column:1/-1"><b>Aurum Strike</b><span class="px" data-m="{rupees:,}" data-y="{rupees:,}">₹{rupees:,}</span>'
+                 '<small>one-time · lifetime · XAU/USD buy·sell engine: live web app + TradingView Pine Script</small></div>']
     notice_html = f'<div class="msg ok">{account._esc(notice)}</div>' if notice else ""
-    body = (f'<div class="gc"><h1>Get {names[plan]}</h1>'
+    cyc = ("" if product else
+           f'<div class="cyc" id="gc-cyc"><button type="button" data-p="monthly"{" class=on" if period == "monthly" else ""}>MONTHLY</button>'
+           f'<button type="button" data-p="yearly"{" class=on" if period == "yearly" else ""}>YEARLY · 2 MONTHS FREE</button></div>')
+    body = (f'<div class="gc"><h1>{"Buy" if product else "Get"} {names[plan]}</h1>'
             '<p class="lede">Pay with UPI, card or net banking through Cashfree. Your account is created from the payment — no email link to wait for.</p>'
-            f'{notice_html}<div class="plans" id="gc-plans">{"".join(cards)}</div>'
-            f'<div class="cyc" id="gc-cyc"><button type="button" data-p="monthly"{" class=on" if period == "monthly" else ""}>MONTHLY</button>'
-            f'<button type="button" data-p="yearly"{" class=on" if period == "yearly" else ""}>YEARLY · 2 MONTHS FREE</button></div>'
+            f'{notice_html}<div class="plans" id="gc-plans">{"".join(cards)}</div>{cyc}'
             '<label for="gc-phone">MOBILE NUMBER</label><input id="gc-phone" type="tel" inputmode="numeric" maxlength="14" placeholder="10-digit mobile" autocomplete="tel">'
             '<label for="gc-email">EMAIL (optional — receipts and sign-in on other devices)</label><input id="gc-email" type="email" placeholder="you@example.com" autocomplete="email">'
             '<div class="total" id="gc-total"></div>'
@@ -76,5 +82,5 @@ def render(plan: str, period: str, notice: str | None = None, configured: bool =
             "<script>" + _JS.replace("__PLAN__", repr(plan)).replace("__PERIOD__", repr(period)) + "</script>")
     head, _, _tail = account._PAGE.partition("<main")
     doc = (head.replace("__CSS__", account._CSS + _CSS).replace("Your account — Finostat", f"Get {names[plan]} — pay with your mobile number | Finostat")
-           + '<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · GET ' + names[plan].upper() + "</nav>" + body + "</main></body></html>")
+           + '<main class="wrap"><nav class="crumb"><a href="/">FINO</a> · ' + ('<a href="/aurum">AURUM STRIKE</a> · BUY' if product else 'GET ' + names[plan].upper()) + "</nav>" + body + "</main></body></html>")
     return doc.encode("utf-8")

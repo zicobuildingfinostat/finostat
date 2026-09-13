@@ -107,7 +107,7 @@ BODY = r"""
   </section>
 
   <section class="panel a-wide" id="p-gold" aria-label="Gold signal">
-    <div class="panel-hd"><span class="k">GOLD</span><span class="s" id="gd-title">GOLD SIGNAL · XAU/USD · 1D</span><span class="r"><span id="gd-state">—</span></span></div>
+    <div class="panel-hd"><span class="k">AURUM</span><span class="s" id="gd-title">AURUM STRIKE · XAU/USD · 1D</span><span class="r"><a id="gd-pine" href="/aurum/pine" hidden style="color:var(--gold);border:1px solid var(--gold);padding:1px 7px;font-size:9.5px;letter-spacing:.1em" title="Download the TradingView Pine Script of this indicator">PINE SCRIPT ↓</a><span id="gd-state">—</span></span></div>
     <div class="oc-top"><span class="seg" id="gd-tf"><button type="button" data-tf="1h">1H</button><button type="button" data-tf="4h">4H</button><button type="button" data-tf="1d" class="on">1D</button></span>
       <span class="seg" id="gd-layers"><button type="button" data-l="zones" class="on">ZONES</button><button type="button" data-l="liq" class="on">LIQUIDITY</button><button type="button" data-l="struct" class="on">STRUCTURE</button><button type="button" data-l="ma" class="on">MA</button><button type="button" data-l="st" class="on">SUPERTREND</button></span>
       <span class="an-note" id="gd-note">move the pointer over the chart to read a bar</span></div>
@@ -175,7 +175,7 @@ __ANALYTICS__
 <div class="g-fkeys"><a href="#p-tv">CHART</a><a href="#p-gold">GOLD</a><a href="#p-chain">CHAIN</a><a href="#p-build">BUILD</a><a href="#p-surf">SURF</a><a href="#p-skew">SKEW</a><a href="#p-curv">CURV</a><a href="#p-gex">GEX</a><a href="#p-coindcx">COINDCX</a><a href="/dashboard">INDIA TERMINAL</a></div>
 """
 
-JS = r"""
+JS_HELPERS = r"""
 (function(){
   function $(id){ return document.getElementById(id); }
   function nf(x,d){ if(x==null||isNaN(x)) return '—'; d=d==null?1:d; return Number(x).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
@@ -196,6 +196,9 @@ JS = r"""
   tick(); setInterval(tick,1000);
   if(!locked){ getJSON('/api/me',function(m){ $('who').innerHTML='<a href="/account">'+(m.email||'ACCOUNT').replace('@mobile.finostat','').toUpperCase()+'</a>'; },function(){}); }
 
+"""
+
+JS_MAIN = r"""
   /* tape + vol */
   var inr=null;
   function loadTape(){ if(locked) return; getJSON('/api/global/tape',function(d){
@@ -260,14 +263,17 @@ JS = r"""
     (m.breakevens||[]).forEach(function(b){ c.fillStyle=C.gold; c.textAlign='center'; c.fillText('BE '+nf(b,0),sx(b),sy(0)-4); }); }
   window.addEventListener('resize',function(){ drawPayoff(); });
 
+"""
+
+JS_GOLD = r"""
   /* GOLD signal */
   var gd={tf:'1d',data:null,layers:{zones:true,liq:true,struct:true,ma:true,st:true},hover:null};
   segInit($('gd-tf'),'data-tf',function(tf){ gd.tf=tf; loadGold(); });
   $('gd-layers').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; var k=b.getAttribute('data-l'); gd.layers[k]=!gd.layers[k]; b.classList.toggle('on',gd.layers[k]); drawGold(); });
   function loadGold(){ if(locked) return; $('gd-state').textContent='loading…'; var cvw=($('gd-cv').getBoundingClientRect().width||900); getJSON('/api/global/gold?tf='+gd.tf+'&bars='+Math.max(80,Math.min(240,Math.floor(cvw/4.2))),function(d){ gd.data=d; renderGold(d); drawGold(); },function(e){ $('gd-state').textContent=e; }); }
-  function renderGold(d){ var dir=d.direction; var cls=dir>0?'buy':dir<0?'sell':'neutral'; var conf=d.confluence==='CONFLUENCE'?'ok':d.confluence==='CONFLICT'?'bad':'mid';
+  function renderGold(d){ var dir=d.direction; if($('conn')&&$('conn').textContent==='—'){ $('conn').textContent='LIVE'; $('conn').className='live'; } var cls=dir>0?'buy':dir<0?'sell':'neutral'; var conf=d.confluence==='CONFLUENCE'?'ok':d.confluence==='CONFLICT'?'bad':'mid';
     var pos=((d.score+1)/2*100).toFixed(1);
-    $('gd-title').textContent='GOLD SIGNAL · XAU/USD · '+gd.tf.toUpperCase()+' · '+(d.regime||'').toUpperCase();
+    $('gd-title').textContent='AURUM STRIKE · XAU/USD · '+gd.tf.toUpperCase()+' · '+(d.regime||'').toUpperCase();
     $('gd-sig').innerHTML='<div class="lbl '+cls+'">'+d.signal+'</div><div><div class="meter"><b class="l">STRONG SELL</b><b class="m">0</b><b class="r">STRONG BUY</b><i style="left:'+pos+'%"></i></div><div class="sub">score <b>'+(d.score>=0?'+':'')+nf(d.score,2)+'</b> · classic systems <b>'+(d.classic_score>=0?'+':'')+nf(d.classic_score,2)+'</b> · price action <b>'+(d.pa_score>=0?'+':'')+nf(d.pa_score,2)+'</b>'+(d.since?' · '+(dir?d.since.side+' since ':'last signal '+d.since.side+' ')+new Date(d.since.t).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+(gd.tf!=='1d'?' '+new Date(d.since.t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):'')+' @ '+usd(d.since.price,0)+(dir?'':' (exited)'):'')+'</div></div><div class="conf '+conf+'">'+d.confluence+'<br><small style="letter-spacing:0;font-size:9px">'+(d.confluence==='CONFLUENCE'?'systems and structure agree':d.confluence==='CONFLICT'?'systems and structure disagree':'one side is neutral')+'</small></div>';
     var st=d.stats||{}; var av=st.avg_pct!=null&&Math.abs(st.avg_pct)<0.005?0:st.avg_pct;
     var items=[['gold (PAXG close)',usd(d.entry,2),'c'],['XAU spot',d.spot_xau?usd(d.spot_xau,2):'—','m'],['₹ / 10 g',d.inr_10g?'₹'+nf(d.inr_10g,0):'—','m'],['stop',d.stop?usd(d.stop,0)+'<i>'+(d.risk_pct!=null?nf(d.risk_pct,2)+'% risk':'')+'</i>':'—',dir?'down':'m'],['target (2R)',d.target?usd(d.target,0):'—',dir?'up':'m'],['ADX / RSI',nf(d.adx,0)+' / '+nf(d.rsi,0),'m'],['ATR',usd(d.atr,1),'m'],['past flips hit',st.n?nf(st.hit_rate,0)+'%<i>'+st.n+' · avg '+(av>=0?'+':'')+nf(av,2)+'% / '+st.horizon+' bars</i>':'—',st.hit_rate>=50?'up':'down']];
@@ -313,8 +319,12 @@ JS = r"""
   $('gd-cv').addEventListener('pointermove',function(e){ if(!gd.geom) return; var r=e.currentTarget.getBoundingClientRect(); var i=Math.floor((e.clientX-r.left-gd.geom.pad.l)/gd.geom.bw); if(i!==gd.hover){ gd.hover=i; drawGold(); } });
   $('gd-cv').addEventListener('pointerleave',function(){ gd.hover=null; drawGold(); $('gd-note').textContent='move the pointer over the chart to read a bar'; });
   window.addEventListener('resize',function(){ drawGold(); });
+  if(window.FINO_PINE&&$('gd-pine')) $('gd-pine').hidden=false;
   if(!locked){ loadGold(); setInterval(function(){ if(visible('p-gold')) loadGold(); },60000); }
 
+"""
+
+JS_DCX = r"""
   /* CoinDCX */
   var dcx={timer:null};
   function dcxRender(d){ var on=!!d.connected; $('dcx-pill').textContent=on?'CONNECTED':'NOT CONNECTED'; $('dcx-pill').className='pill'+(on?' on':''); $('dcx-who').textContent=on?(d.user||'')+(d.email?' · '+d.email:''):''; $('dcx-connect').hidden=on; $('dcx-connected').hidden=!on; $('dcx-state').textContent=on?'CONNECTED':'—';
@@ -324,11 +334,99 @@ JS = r"""
   $('dcx-off').addEventListener('click',function(){ postJSON('/api/coindcx/disconnect',{},function(){ $('dcx-bal').innerHTML='<tr><td colspan="3" style="text-align:left;color:var(--faint)">connect to see balances</td></tr>'; $('dcx-ord').innerHTML=''; dcxRender({connected:false}); },function(e){ $('dcx-msg2').textContent=e; $('dcx-msg2').className='dcx-msg bad'; }); });
   $('dcx-refresh').addEventListener('click',dcxLoad);
   if(!locked){ dcxLoad(); setInterval(function(){ if(visible('p-coindcx')&&!$('dcx-connected').hidden) dcxLoad(); },30000); }
-})();
 """
+
+JS = JS_HELPERS + JS_MAIN + JS_GOLD + JS_DCX + "\n})();\n"
 
 _BUY = [("long-straddle", "Long straddle"), ("long-strangle", "Long strangle"), ("bull-call-spread", "Bull call spread"), ("bear-put-spread", "Bear put spread"), ("butterfly", "Call butterfly")]
 _SELL = [("short-straddle", "Short straddle"), ("short-strangle", "Short strangle"), ("iron-condor", "Iron condor"), ("iron-fly", "Iron fly"), ("ratio-spread", "Call ratio 1×2")]
+
+
+def _gold_panel() -> str:
+    start = BODY.index('  <section class="panel a-wide" id="p-gold"')
+    end = BODY.index("  <section ", start + 10)
+    return BODY[start:end]
+
+
+AURUM_BODY = r"""
+<header class="top"><a class="home-ic" href="/" aria-label="Finostat home" title="Finostat — home"><img src="/favicon-96.png" alt="Finostat" width="30" height="30"></a>
+  <a class="logo" href="/aurum/app">AURUM<b>·</b>STRIKE</a>
+  <span class="sym" id="t-sym">XAU/USD BUY · SELL ENGINE · BY FINOSTAT</span>
+  <div class="r">
+    <span class="live off" id="conn">—</span>
+    <span id="clock">--:--:-- IST</span>
+    <span id="who"><a href="/login?next=%2Faurum%2Fapp">SIGN IN</a></span>
+    <a href="/global">GLOBAL TERMINAL</a>
+    <a href="/">← SITE</a>
+  </div>
+</header>
+<main class="desk" style="grid-template-columns:minmax(0,1fr)">
+__GOLD__
+  <section class="panel" id="p-pine" aria-label="TradingView Pine Script">
+    <div class="panel-hd"><span class="k">PINE</span><span class="s">RUN IT ON YOUR TRADINGVIEW CHART</span></div>
+    <div style="padding:12px 14px;font-size:12.5px;line-height:1.6;color:var(--muted)">
+      <p><b style="color:var(--text)">1.</b> Press <b style="color:var(--gold)">PINE SCRIPT ↓</b> in the panel header to download <code>aurum-strike.pine</code> (your licensed copy).</p>
+      <p><b style="color:var(--text)">2.</b> In TradingView open <b style="color:var(--text)">Pine Editor</b> (bottom of the chart) → <b style="color:var(--text)">Open → New indicator</b>, replace everything with the file's contents, press <b style="color:var(--text)">Add to chart</b>. Save it as private.</p>
+      <p><b style="color:var(--text)">3.</b> Open XAUUSD (OANDA / FXCM / FOREXCOM) or GC1! on 1H, 4H or 1D. Layers, swing length and the enter/exit thresholds are in the indicator's settings.</p>
+      <p><b style="color:var(--text)">4.</b> Alerts: <b style="color:var(--text)">Alerts → Condition → Aurum Strike → BUY / SELL / EXIT</b>, then route them to the TradingView app on your phone.</p>
+      <p style="color:var(--faint);font-size:11px">The script is licensed to your account for personal use — please don't publish or share it. It is the same engine as this app; small differences can appear because TradingView's gold feed and Finostat's PAXG candles are not identical.</p>
+    </div>
+  </section>
+</main>
+<div class="g-fkeys"><a href="#p-gold">SIGNAL</a><a href="#p-pine">PINE SCRIPT</a><a href="/aurum">ABOUT AURUM STRIKE</a><a href="/global">GLOBAL TERMINAL</a><a href="/account">ACCOUNT</a></div>
+"""
+
+
+_AURUM_DOC = None
+
+
+def render_aurum(locked: bool = False, signed_in: bool = False, pine: bool = False) -> bytes:
+    """The buyer's page: the gold panel alone (plus Pine instructions). Locked = not a buyer and not on Desk."""
+    global _AURUM_DOC
+    if _AURUM_DOC is None:
+        css = pages.DASHBOARD.split("<style>", 1)[1].split("</style>", 1)[0]
+        body = AURUM_BODY.replace("__GOLD__", _gold_panel())
+        js = JS_HELPERS + JS_GOLD + "\n})();\n"
+        _AURUM_DOC = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurum Strike · XAU/USD engine</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0c0626">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png"><link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>{css}{CSS}</style>
+</head>
+<body>
+__GUARD__{body}
+<script>{js}</script>
+__PAYWALL__
+</body>
+</html>"""
+    doc = _AURUM_DOC
+    pine_tag = "<script>window.FINO_PINE=true;</script>" if pine else ""
+    if locked:
+        guard = ('<script>window.FINO_LOCKED=true;window.fetch=function(){return Promise.reject(new Error("locked"));};'
+                 'document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("locked");});</script>')
+        primary = '<a class="b primary" href="/aurum/buy">Buy Aurum Strike — ₹8,000 one-time →</a>'
+        secondary = '<a class="b" href="/aurum">What is Aurum Strike?</a>' if signed_in else '<a class="b" href="/login?next=%2Faurum%2Fapp">Already bought? Sign in</a>'
+        wall = f"""<div class="paywall" role="dialog" aria-label="Aurum Strike purchase required"><div class="card">
+<div class="hd"><span class="k">AURUM STRIKE</span><span class="s">XAU/USD BUY · SELL ENGINE</span><span class="r">₹8,000 · ONE-TIME</span></div>
+<div class="bd"><h2>{"This account has not bought Aurum Strike" if signed_in else "Aurum Strike is a one-time purchase"}</h2>
+<p>Nine published trading systems and a full smart-money price-action read on gold, blended into one non-repainting BUY / SELL call with entry, stop and target. Lifetime access to this app plus the Pine Script for your own TradingView chart.</p>
+<ul><li>1H · 4H · 1D gold, live</li><li>Every vote explained</li><li>Order blocks, FVGs, liquidity, BOS/CHoCH</li><li>Entry, stop, 2R target</li><li>TradingView Pine Script with alerts</li><li>Nothing recurring</li></ul>
+<div class="price">₹8,000 <i>once · lifetime · exclusive of GST</i></div>
+<div class="row">{primary}{secondary}</div>
+<small>Desk members already have it inside the <a href="/global" style="color:var(--cyan)">Global terminal</a>.</small>
+</div></div></div>"""
+        doc = doc.replace("__GUARD__", pages._PAYWALL_CSS + guard + pine_tag, 1).replace("__PAYWALL__", wall, 1)
+    else:
+        doc = doc.replace("__GUARD__", pine_tag, 1).replace("__PAYWALL__", "", 1)
+    return doc.encode("utf-8")
 
 
 def _doc() -> str:
@@ -365,11 +463,13 @@ __PAYWALL__
 _DOC = None
 
 
-def render(locked: bool = False, signed_in: bool = False, plan: str = "starter") -> bytes:
+def render(locked: bool = False, signed_in: bool = False, plan: str = "starter", pine: bool = False) -> bytes:
     global _DOC
     if _DOC is None:
         _DOC = _doc()
     doc = _DOC
+    if pine:
+        doc = doc.replace("__GUARD__", "<script>window.FINO_PINE=true;</script>__GUARD__", 1)
     if locked:
         guard = ('<script>window.FINO_LOCKED=true;window.fetch=function(){return Promise.reject(new Error("locked"));};'
                  'document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("locked");});</script>')
