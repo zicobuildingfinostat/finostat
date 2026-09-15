@@ -31,7 +31,7 @@ SNIPPET = r"""
   <div class="hd"><i>V</i><b>VEGA</b><span>TRADING CO-PILOT</span><small>site guide · not advice</small><button type="button" id="vega-x" aria-label="Close">×</button></div>
   <div class="log" id="vega-log"></div>
   <div class="chips" id="vega-chips"></div>
-  <form id="vega-form" autocomplete="off"><input id="vega-in" placeholder="Ask about Nifty, gold, a panel, a plan…" maxlength="2000" aria-label="Message Vega"><button type="submit" id="vega-send">SEND</button></form>
+  <form id="vega-form" autocomplete="off"><input id="vega-in" placeholder="How can I help you today..." maxlength="2000" aria-label="Message Vega"><button type="submit" id="vega-send">SEND</button></form>
   <div class="fine">Vega points you to the right page and quotes the numbers the site already shows. Not a SEBI-registered adviser; never tells you what to buy.</div>
 </section>
 <script>
