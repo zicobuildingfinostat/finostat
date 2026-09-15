@@ -3,6 +3,14 @@ import sys, pathlib, tempfile, json, time
 from datetime import date, datetime, timedelta
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import econ as E
+# Freeze the clock at 13 Sep 2026 12:00 IST: the fixtures below are written around that week and
+# must not rot as the real date moves past them.
+class _FrozenDT(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 9, 13, 12, 0, tzinfo=tz or E.IST)
+E.datetime = _FrozenDT
+E.time.time = lambda: _FrozenDT.now(E.IST).timestamp()
 fails = 0
 def check(label, ok, extra=""):
     global fails

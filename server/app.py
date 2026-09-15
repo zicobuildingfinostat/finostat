@@ -518,8 +518,10 @@ class Page:
                 self._mtime = mtime
             return self._raw
 
-    def render(self, paid: bool = False) -> bytes:
+    def render(self, paid: bool = False, signed_in: bool = False) -> bytes:
         doc = self._raw_html()
+        if signed_in:
+            doc = doc.replace('id="auth-btn" href="/login" title="One button for both: enter your email or mobile and you are in">Log in / Sign up</a>', 'id="auth-btn" href="/account">My account</a>', 1)
         snap = FEED.snapshot()
         live = bool(snap.get("live"))
 
@@ -682,7 +684,8 @@ class Handler(BaseHTTPRequestHandler):
         route = parsed.path.rstrip("/") or "/"
         try:
             if route in ("/", "/index.html"):
-                return self._send(PAGE.render(paid=_paid(self._current_user())), "text/html; charset=utf-8")
+                _u = self._current_user()
+                return self._send(PAGE.render(paid=_paid(_u), signed_in=_u is not None), "text/html; charset=utf-8")
             if route == "/dashboard":
                 user = self._current_user()
                 paid = _paid(user)

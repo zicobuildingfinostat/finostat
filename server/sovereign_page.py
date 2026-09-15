@@ -213,8 +213,10 @@ bbU   = basis + dev
 bbL   = basis - dev
 tenkan = math.avg(ta.highest(high, 9),  ta.lowest(low, 9))
 kijun  = math.avg(ta.highest(high, 26), ta.lowest(low, 26))
-spanA  = math.avg(tenkan, kijun)[26]
-spanB  = math.avg(ta.highest(high, 52), ta.lowest(low, 52))[26]
+spanA0 = math.avg(tenkan, kijun)
+spanB0 = math.avg(ta.highest(high, 52), ta.lowest(low, 52))
+spanA  = spanA0[26]
+spanB  = spanB0[26]
 
 var int turtle = 0
 if close > hh20
@@ -426,13 +428,19 @@ if vZone == 0 and array.size(fvgBoxes) > 0
         inside = low <= box.get_top(bx) and high >= box.get_bottom(bx)
         if inside and d == structure
             vZone := d
-vLiq  = not na(sweepBar) and bar_index - sweepBar <= 3 ? sweepDir : 0
+vLiq = 0
+if not na(sweepBar)
+    if bar_index - sweepBar <= 3
+        vLiq := sweepDir
 vRange = 0
 posPct = 0.5
 if not na(lastSH) and not na(lastSL) and lastSH > lastSL
     posPct := (close - lastSL) / (lastSH - lastSL)
     vRange := structure == 1 and posPct < 0.5 ? 1 : structure == -1 and posPct > 0.5 ? -1 : 0
-vDisp = not na(dispBar) and bar_index - dispBar <= 3 ? dispDir : 0
+vDisp = 0
+if not na(dispBar)
+    if bar_index - dispBar <= 3
+        vDisp := dispDir
 pa = (2.0 * vStruct + 1.5 * vZone + 1.5 * vLiq + 1.0 * vRange + 1.0 * vDisp + 0.5 * vCandle) / 7.5
 
 // ───────── composite, hysteresis, signals
@@ -489,17 +497,17 @@ if showTable and barstate.islast
     table.cell(tbl, 0, 0, "XAU SOVEREIGN", text_color=cGold, text_size=size.small, text_halign=text.align_left)
     table.cell(tbl, 1, 0, sig, text_color=sigCol, text_size=size.normal)
     table.cell(tbl, 0, 1, "score", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(tbl, 1, 1, str.tostring(score, "+0.00;-0.00"), text_color=sigCol, text_size=size.small)
+    table.cell(tbl, 1, 1, (score >= 0 ? "+" : "") + str.tostring(score, "0.00"), text_color=sigCol, text_size=size.small)
     table.cell(tbl, 0, 2, "classic", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(tbl, 1, 2, str.tostring(classic, "+0.00;-0.00"), text_color=#f1edff, text_size=size.small)
+    table.cell(tbl, 1, 2, (classic >= 0 ? "+" : "") + str.tostring(classic, "0.00"), text_color=#f1edff, text_size=size.small)
     table.cell(tbl, 0, 3, "price action", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(tbl, 1, 3, str.tostring(pa, "+0.00;-0.00"), text_color=#f1edff, text_size=size.small)
+    table.cell(tbl, 1, 3, (pa >= 0 ? "+" : "") + str.tostring(pa, "0.00"), text_color=#f1edff, text_size=size.small)
     table.cell(tbl, 0, 4, "structure", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
     table.cell(tbl, 1, 4, structure == 1 ? "bullish " + lastEvType : structure == -1 ? "bearish " + lastEvType : "none", text_color=structure == 1 ? cUp : structure == -1 ? cDown : #a89ccf, text_size=size.small)
     table.cell(tbl, 0, 5, "range", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(tbl, 1, 5, (posPct < 0.5 ? "discount " : "premium ") + str.tostring(posPct * 100, "0") + "%", text_color=#f1edff, text_size=size.small)
+    table.cell(tbl, 1, 5, (posPct < 0.5 ? "discount " : "premium ") + str.tostring(math.round(posPct * 100)) + "%", text_color=#f1edff, text_size=size.small)
     table.cell(tbl, 0, 6, "ADX / RSI", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(tbl, 1, 6, str.tostring(adx, "0") + " / " + str.tostring(rsi, "0") + (adx < 20 ? "  range" : adx >= 25 ? "  trend" : ""), text_color=#f1edff, text_size=size.small)
+    table.cell(tbl, 1, 6, str.tostring(math.round(adx)) + " / " + str.tostring(math.round(rsi)) + (adx < 20 ? "  range" : adx >= 25 ? "  trend" : ""), text_color=#f1edff, text_size=size.small)
     table.cell(tbl, 0, 7, "agreement", text_color=#a89ccf, text_size=size.tiny, text_halign=text.align_left)
     table.cell(tbl, 1, 7, agree, text_color=agree == "CONFLUENCE" ? cUp : agree == "CONFLICT" ? cDown : cGold, text_size=size.small)
 
