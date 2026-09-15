@@ -19,6 +19,7 @@ import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 
+import blog_art
 import blog_content
 
 log = logging.getLogger("finostat.blog")
@@ -90,6 +91,9 @@ def daily_read(sources: dict, day: date) -> dict | None:
     # closes
     rows = "".join(f"<tr><td>{_esc(s)}</td><td>{_n(q.get('price'), 1)}</td><td class=\"{'up' if (q.get('change') or 0) >= 0 else 'down'}\">{_sg(q.get('change'))}%</td></tr>"
                    for s, q in quotes.items() if s in ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX", "INDIA VIX") and q.get("price"))
+    mvn = _src(sources, "move", "NIFTY 50") or {}
+    hero = blog_art.daily_hero("NIFTY", (mvn.get("realised") or {}).get("path") or [], (mvn.get("realised") or {}).get("prev_close"), (mvn.get("expected") or {}).get("em_day"), nifty.get("price"), nifty.get("change"))
+    parts.insert(0, f'<figure class="hero">{hero}<figcaption>NIFTY today against the expected move band from the ATM straddle.</figcaption></figure>')
     parts.append(f"<h2>The close</h2><table><thead><tr><th>Index</th><th>Close</th><th>Day</th></tr></thead><tbody>{rows}</tbody></table>")
     vix = quotes.get("INDIA VIX")
     tone = "a down day" if (nifty.get("change") or 0) < -0.5 else "an up day" if (nifty.get("change") or 0) > 0.5 else "a flat day"
@@ -106,6 +110,8 @@ def daily_read(sources: dict, day: date) -> dict | None:
                      + (f", ATM {_n(st.get('atm'))}" if st.get("atm") else "") + ". "
                      + ("Puts outnumber calls by open interest, a market that has bought protection." if (st.get("pcr") or 0) >= 1.2 else "Calls outnumber puts by open interest, a market leaning long." if (st.get("pcr") or 1) <= 0.7 else "Open interest is balanced between the two sides.")
                      + f" The live chain is free at <a href=\"/option-chain/{slug}\">/option-chain/{slug}</a>.</p>")
+        if slug == "nifty" and (st.get("call_wall") or st.get("put_wall")):
+            parts.append(f'<figure>{blog_art.daily_walls(label, nifty.get("price") or 0, st.get("call_wall"), st.get("put_wall"), st.get("max_pain"), st.get("pcr"))}<figcaption>Where the open interest sits around the close: put wall, max pain, call wall.</figcaption></figure>')
         oi = _src(sources, "oiscan", "NIFTY 50" if slug == "nifty" else "BANKNIFTY") or {}
         if oi.get("read") and oi["read"].get("text"):
             parts.append(f"<p><b>OI build-up on the day:</b> {_esc(oi['read']['text'])}. Call OI changed by {_sg(oi.get('ce_d'), 0)} contracts and put OI by {_sg(oi.get('pe_d'), 0)}; PCR moved from {_n(oi.get('pcr_then'), 2)} to {_n(oi.get('pcr'), 2)}.</p>")
@@ -313,6 +319,8 @@ article.post ul{color:var(--muted);line-height:1.6;padding-left:20px;margin:0 0 
 .meta{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}.tags a{font-family:var(--mono);font-size:10px;letter-spacing:.08em;border:1px solid var(--line-strong);padding:2px 7px;margin-right:6px;color:var(--muted)}
 .cta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:22px 0}.cta-card{border:1px solid var(--gold);background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:4px;color:var(--text);text-decoration:none;box-shadow:0 0 24px rgba(245,200,66,.08)}.cta-card:hover{background:var(--panel-hd)}
 .cta-card small{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--gold)}.cta-card b{font-family:var(--display);font-size:20px;text-transform:uppercase;line-height:1.05}.cta-card span{color:var(--muted);font-size:12.5px;line-height:1.45}
+figure{margin:14px 0 20px}figure.hero{margin:6px 0 22px}figure svg{display:block;width:100%;height:auto;border:1px solid var(--line-strong);border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.45)}figure figcaption{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--faint);margin-top:6px}
+.bl-card .thumb{margin:-16px -18px 10px;overflow:hidden;border-bottom:1px solid var(--line-strong)}.bl-card .thumb svg{display:block;width:100%;height:auto}
 .disc{border-left:2px solid var(--down);padding:8px 12px;color:var(--faint);font-size:12px;line-height:1.55;margin:24px 0}
 """
 
@@ -335,7 +343,7 @@ def _ld(obj) -> str:
 
 
 def render_index(blog: Blog) -> bytes:
-    guides = "".join(f'<a class="bl-card" href="/blog/{g["slug"]}"><small>guide · {_esc(" · ".join(g["tags"][:2]))}</small><b>{_esc(g["title"])}</b><span>{_esc(g["summary"])}</span></a>' for g in blog_content.GUIDES)
+    guides = "".join(f'<a class="bl-card" href="/blog/{g["slug"]}"><div class="thumb">{blog_art.guide_hero(g["slug"])}</div><small>guide · {_esc(" · ".join(g["tags"][:2]))}</small><b>{_esc(g["title"])}</b><span>{_esc(g["summary"])}</span></a>' for g in blog_content.GUIDES)
     posts = blog.recent(40)
     items = "".join(f'<li><small>{_esc(p["kind"])} · {_esc(datetime.strptime(p["day"], "%Y-%m-%d").strftime("%d %b %Y"))}</small><a href="/blog/{p["slug"]}">{_esc(p["title"])}</a><span>{_esc(p["summary"])}</span></li>' for p in posts) or '<li><span>The first desk read publishes after the next close at 18:30 IST.</span></li>'
     ld = _ld({"@context": "https://schema.org", "@type": "Blog", "name": "Finostat blog", "url": "https://finostat.com/blog", "description": "Options trading guides and a daily desk read on NIFTY, BANKNIFTY and gold from Finostat.",
@@ -355,6 +363,8 @@ def render_post(blog: Blog, slug: str) -> bytes | None:
         return None
     day = datetime.strptime(p["day"], "%Y-%m-%d")
     body = p["body"]
+    if p["kind"] == "guide":
+        body = f'<figure class="hero">{blog_art.guide_hero(slug)}</figure>' + body
     # CTA in the middle (after the second h2) and at the end
     parts = body.split("<h2>")
     if len(parts) > 3:
