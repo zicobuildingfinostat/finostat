@@ -61,6 +61,7 @@ import move
 import strdhist
 import structure
 import blog
+import heat
 import shop as shopmod
 import shop_catalog
 import oiscan
@@ -679,7 +680,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move", "/api/strdhist"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move", "/api/strdhist", "/api/heat"}
 
 
 def _gate(user, ukey: str):
@@ -1649,6 +1650,15 @@ class Handler(BaseHTTPRequestHandler):
                                    "indices": {"nifty50": CONSTITUENTS.stats()},
                                    "chains": CHAINS.stats(),
                                    "time": time.time()})
+            if route == "/api/heat":
+                qs = parse_qs(parsed.query)
+                try:
+                    limit = max(50, min(800, int(qs.get("n", ["400"])[0])))
+                except ValueError:
+                    limit = 400
+                out = heat.rows(FEED.snapshot().get("universe") or {}, qs.get("u", ["fo"])[0], qs.get("mode", ["all"])[0], limit)
+                out["live"] = bool(FEED.snapshot().get("live"))
+                return self._json(out)
             if route == "/api/symbols":
                 qs = parse_qs(parsed.query)
                 snap = FEED.snapshot()

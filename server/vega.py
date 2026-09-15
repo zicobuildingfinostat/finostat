@@ -192,6 +192,7 @@ INTENTS = [
     (("vip indicator", "nifty vip", "indian indicator", "nifty indicator", "banknifty indicator", "12,999", "12999"), "vip"),
     (("market structure", "structure", "smc", "smart money", "choch", "bos ", "break of structure", "liquidity sweep", "premium discount"), "struct"),
     (("iv percentile", "iv rank", "ivp", "ivr", "straddle history", "is premium rich", "premium rich", "premium cheap", "vix rank"), "ivp"),
+    (("heatmap", "heat map", "top gainers", "top losers", "gainers", "losers", "breadth", "advance decline", "which stocks are up", "which stocks are down"), "heat"),
     (("expected move", "realised", "realized", "implied move", "1 sigma", "one sigma", "how much will nifty move"), "move"),
     (("risk board", "risk", "greeks board", "my limits", "hedge", "margin"), "risk"),
     (("oiscan", "oi scan", "build-up", "buildup", "build up", "screener", "short covering", "long unwinding", "oi change"), "oiscan"),
@@ -250,6 +251,8 @@ def answer_local(question: str, ctx: dict) -> str:
         return ("The STRUCT panel in the terminal runs the XAU Sovereign engine on NIFTY, BANKNIFTY, FINNIFTY, SENSEX or any F&O stock on 5m, 15m, 1h and daily candles: market structure with BOS/CHoCH, order blocks, fair value gaps, liquidity sweeps, premium/discount, plus the classic-systems score and entry/stop/target. Type STRUCT in the terminal command line (Desk). Alerts can fire on a structure flip.")
     if intent == "ivp":
         return ("The IVP panel in the terminal ranks today's ATM straddle and implied vol against the same clock time on the last 20 expiry cycles at the same distance to expiry, and shows the 1-year India VIX rank — the quick answer to whether premium is rich or cheap right now. Type IVP in the terminal command line (Desk).")
+    if intent == "heat":
+        return ("The HEAT panel in the terminal is the market heatmap: every NSE stock tiled and coloured by today's move, switchable between NIFTY 50, F&O stocks and all NSE, with gainers, losers, advance/decline breadth and click-to-chart. Type HEAT in the terminal command line (Desk).")
     if intent == "move":
         return ("The MOVE panel in the terminal shows the expected day and week move from ATM IV, what the straddle charges to expiry, and today's realised range and move against them, with the 1σ band on the day's path. Type MOVE in the terminal command line (Desk). The daily brief at /brief carries the expected move each morning too.")
     if intent == "risk":
