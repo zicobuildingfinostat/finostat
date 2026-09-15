@@ -48,6 +48,21 @@ ITEMS = [
      "750 ml single-wall stainless steel bottle, matte indigo, gold print, bamboo lid. Light enough for the gym bag, honest enough for the desk."),
     ("Long Gamma Tote", "tote", "LONG GAMMA", "heavy canvas · 40 × 38 cm", 499, 699, [],
      "Heavy 12 oz canvas tote, natural with an indigo print: LONG GAMMA on one side, the Finostat mark on the other. Long handles, inside pocket. Carries the journal, the tumbler and the week's groceries."),
+    # -- bags
+    ("Carry The Desk Laptop Bag", "laptopbag", "CARRY\nTHE DESK", "fits 15.6 inch · padded · water-resistant", 2499, 2999, [],
+     "A slim laptop bag for the trader who works from anywhere. Fits up to 15.6 inch laptops in a padded sleeve, a second compartment for the journal and charger, front pocket for the phone, trolley strap on the back. Water-resistant indigo twill, gold embroidered mark, padded shoulder strap."),
+    ("Risk On Backpack", "backpack", "RISK ON", "22 L · laptop sleeve · USB pass-through", 2299, 2899, [],
+     "22 litres, a padded 15.6 inch laptop sleeve, a hidden back pocket for the wallet, bottle holder each side and a USB pass-through for the power bank. Water-resistant indigo with a gold RISK ON across the front panel and reflective piping for the late ride home."),
+    ("Premium Collected Handbag", "handbag", "PREMIUM\nCOLLECTED", "structured · vegan leather · gold hardware", 1999, 2499, [],
+     "A structured handbag in indigo vegan leather with gold hardware. Fits a tablet, the journal and everything else; zip top, inside zip pocket, detachable shoulder strap. PREMIUM COLLECTED debossed on the front in gold foil, the Finostat mark on the lining."),
+    ("Small Wins Trader Purse", "purse", "SMALL WINS\nADD UP", "zip-around · 8 card slots", 899, 1199, [],
+     "Zip-around purse in indigo vegan leather: eight card slots, two note sections, a coin pocket and a phone slot. Gold foil SMALL WINS ADD UP on the front; the mark inside. Fits the back pocket of the jeans or the front of the bag."),
+    ("Keep The Premium Wallet", "wallet", "KEEP THE\nPREMIUM", "bifold · RFID-blocking · 6 cards", 799, 999, [],
+     "A slim bifold in indigo vegan leather with RFID-blocking lining: six card slots, a note section and an ID window. KEEP THE PREMIUM in gold foil on the inside flap where only you see it. Comes in a gift box."),
+    ("Quick Scalp Sling Bag", "sling", "QUICK SCALP", "cross-body · 3 L · phone + wallet + keys", 1199, 1499, [],
+     "A 3 litre cross-body sling for the phone, wallet, keys and earphones, with a quick-release buckle and an adjustable strap. Water-resistant indigo, gold QUICK SCALP on the front, a soft-lined pocket for sunglasses."),
+    ("Gamma Pocket Bum Bag", "bumbag", "GAMMA POCKET", "waist / cross-body · 2 L", 899, 1099, [],
+     "Wear it on the waist or across the chest: a 2 litre bum bag with a main zip, a front pocket and a hidden back pocket. Water-resistant indigo, gold GAMMA POCKET print, adjustable strap up to 110 cm."),
 ]
 
 
@@ -101,6 +116,18 @@ def mockup(name: str, kind: str, phrase: str, sub: str) -> str:
         body.append(f'<circle cx="450" cy="660" r="34" fill="{GOLD}"/>')
     elif kind == "sleeve":
         body.append(f'<rect x="160" y="300" width="580" height="360" rx="24" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><line x1="200" y1="340" x2="700" y2="340" stroke="{GOLD}" stroke-width="6" stroke-dasharray="12 8"/>')
+    elif kind == "laptopbag":
+        body.append(f'<rect x="150" y="300" width="600" height="380" rx="26" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><path d="M330 300 Q450 220 570 300" fill="none" stroke="{GOLD}" stroke-width="10"/><rect x="150" y="380" width="600" height="14" fill="{GOLD}"/><rect x="600" y="430" width="110" height="80" rx="10" fill="none" stroke="{GOLD}" stroke-width="4"/>')
+    elif kind == "backpack":
+        body.append(f'<path d="M270 260 Q270 190 450 190 Q630 190 630 260 L650 690 Q450 730 250 690 Z" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><path d="M360 200 Q450 150 540 200" fill="none" stroke="{GOLD}" stroke-width="12"/><rect x="330" y="520" width="240" height="130" rx="14" fill="none" stroke="{GOLD}" stroke-width="5"/>')
+    elif kind == "handbag":
+        body.append(f'<path d="M230 400 L670 400 L640 700 Q450 730 260 700 Z" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><path d="M340 400 Q340 250 450 250 Q560 250 560 400" fill="none" stroke="{GOLD}" stroke-width="12"/><rect x="230" y="400" width="440" height="16" fill="{GOLD}"/>')
+    elif kind in ("purse", "wallet"):
+        body.append(f'<rect x="220" y="330" width="460" height="300" rx="22" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><rect x="220" y="330" width="460" height="60" rx="22" fill="{GOLD}" opacity=".9"/><rect x="560" y="470" width="90" height="60" rx="8" fill="none" stroke="{GOLD}" stroke-width="4"/>')
+    elif kind == "sling":
+        body.append(f'<path d="M300 380 Q300 300 450 300 Q600 300 600 380 L600 620 Q450 660 300 620 Z" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><path d="M150 720 Q300 200 750 180" fill="none" stroke="{GOLD}" stroke-width="12"/>')
+    elif kind == "bumbag":
+        body.append(f'<path d="M180 470 Q450 330 720 470 Q450 610 180 470 Z" fill="{INDIGO}" stroke="{GOLD}" stroke-width="6"/><path d="M60 470 L180 470 M720 470 L840 470" stroke="{GOLD}" stroke-width="12"/><rect x="380" y="430" width="140" height="10" rx="5" fill="{GOLD}"/>')
     elif kind == "tote":
         body.append(f'<rect x="230" y="330" width="440" height="400" rx="12" fill="#efe6cf" stroke="{INDIGO}" stroke-width="6"/><path d="M330 330 Q330 200 450 200 Q570 200 570 330" fill="none" stroke="{INDIGO}" stroke-width="16"/>')
     # phrase overlay
@@ -118,14 +145,16 @@ def mockup(name: str, kind: str, phrase: str, sub: str) -> str:
 
 
 def seed(shop) -> int:
-    """Create the starter catalogue if the shop has no products. Returns how many were created."""
-    if shop.products(active_only=False):
-        return 0
+    """Create any starter-catalogue item the shop does not have yet (matched by slug). Returns how many were created."""
+    from shop import slugify
+    have = {p["slug"] for p in shop.products(active_only=False)}
     n = 0
     for name, kind, phrase, sub, price, compare, sizes, desc in ITEMS:
+        if slugify(name) in have:
+            continue
         img = f"{secrets.token_hex(8)}.svg"
         (shop.img_dir / img).write_text(mockup(name, kind, phrase, sub), encoding="utf-8")
         shop.save_product({"name": name, "description": desc + "\n\nPhoto shown is the design mockup; the product ships in the printed colours.", "price": price, "compare_price": compare,
-                           "stock": 25, "sizes": sizes, "images": [img], "active": True, "sort": n})
+                           "stock": 25, "sizes": sizes, "images": [img], "active": True, "sort": len(have) + n})
         n += 1
     return n
