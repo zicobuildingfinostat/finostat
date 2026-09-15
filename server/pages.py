@@ -1977,6 +1977,7 @@ def render_dashboard(snapshot: dict, locked: bool = False, signed_in: bool = Fal
 # RISK + OISCAN panels (panels_desk.py) spliced into the terminal template
 DASHBOARD = (DASHBOARD.replace("</style>", panels_desk.CSS + "</style>", 1)
              .replace("</main>", panels_desk.MARKUP + "</main>", 1)
+             .replace('  <section class="panel" id="p-watch"', panels_desk.HEAT_MARKUP + '  <section class="panel" id="p-watch"', 1)
              .replace("</body>", "<script>" + chart_pa.JS + "</script>\n<script>" + panels_desk.JS + "</script>\n</body>", 1))
 
 

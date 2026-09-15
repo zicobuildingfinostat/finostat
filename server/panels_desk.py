@@ -2,6 +2,20 @@
 self-contained script that pages.py splices into the dashboard. Charts are canvas in the terminal
 palette; nothing animates on its own."""
 
+HEAT_MARKUP = r"""
+  <section class="panel a-wide an" id="p-heat" aria-label="Market heatmap">
+    <div class="panel-hd"><span class="k">HEAT</span><span class="s" id="ht-title">MARKET HEATMAP · F&amp;O STOCKS · TOP 20 GAINERS · TOP 20 LOSERS</span><span class="r"><span class="an-state" id="ht-state">—</span></span></div>
+    <div class="stx-top"><span class="seg" id="ht-u"><button type="button" data-u="n50">NIFTY 50</button><button type="button" data-u="fo" class="on">F&amp;O</button><button type="button" data-u="all">ALL NSE</button></span>
+      <span class="seg" id="ht-mode"><button type="button" data-m="top" class="on">TOP 20 · 20</button><button type="button" data-m="all">ALL</button><button type="button" data-m="gainers">GAINERS</button><button type="button" data-m="losers">LOSERS</button></span>
+      <span class="seg" id="ht-size"><button type="button" data-z="move" class="on">SIZE BY MOVE</button><button type="button" data-z="flat">UNIFORM</button></span>
+      <label class="an-lbl">FIND <input class="an-in" id="ht-q" placeholder="symbol" maxlength="20" style="width:110px;text-transform:uppercase" aria-label="Filter symbols"></label>
+      <span class="an-note" id="ht-note">click a tile to chart it</span></div>
+    <div class="an-kpi" id="ht-kpi"></div>
+    <div class="ht-map" id="ht-map"></div>
+    <div class="an-foot">Live through the session (refreshes every 10 seconds while the market is open, then holds the close). Default view: the 20 top gainers and 20 top losers of the chosen universe, coloured by today's change versus the previous close — deeper green and red for bigger moves, tile size by the size of the move. ALL tiles every name (ALL NSE: the 400 biggest movers among 6,900 listed). F&amp;O = the 200+ stocks with options. Click any tile to load it in the CHART panel; type a symbol to find it.</div>
+  </section>
+"""
+
 MARKUP = r"""
   <section class="panel a-wide an" id="p-risk" aria-label="Risk board">
     <div class="panel-hd"><span class="k">RISK</span><span class="s">RISK BOARD · WHOLE BOOK · ₹ GREEKS · SHOCKS · LIMITS</span><span class="r"><span class="an-state" id="rk-state">—</span></span></div>
@@ -22,17 +36,6 @@ MARKUP = r"""
     <div class="an-kpi" id="mv-kpi"></div>
     <div class="an-cvw" style="height:210px"><canvas class="an-cv" id="mv-cv"></canvas></div>
     <div class="an-foot">Expected day move = spot × ATM IV × √(1/252), a 1σ band around the previous close (shaded). Realised = today's high–low range against the 2σ-wide expected range, and the move from the previous close in sigmas. The straddle figure is what the market charges for the move to expiry. Refreshes every 30 s.</div>
-  </section>
-  <section class="panel a-wide an" id="p-heat" aria-label="Market heatmap">
-    <div class="panel-hd"><span class="k">HEAT</span><span class="s" id="ht-title">MARKET HEATMAP · F&amp;O STOCKS · TOP 20 GAINERS · TOP 20 LOSERS</span><span class="r"><span class="an-state" id="ht-state">—</span></span></div>
-    <div class="stx-top"><span class="seg" id="ht-u"><button type="button" data-u="n50">NIFTY 50</button><button type="button" data-u="fo" class="on">F&amp;O</button><button type="button" data-u="all">ALL NSE</button></span>
-      <span class="seg" id="ht-mode"><button type="button" data-m="top" class="on">TOP 20 · 20</button><button type="button" data-m="all">ALL</button><button type="button" data-m="gainers">GAINERS</button><button type="button" data-m="losers">LOSERS</button></span>
-      <span class="seg" id="ht-size"><button type="button" data-z="move" class="on">SIZE BY MOVE</button><button type="button" data-z="flat">UNIFORM</button></span>
-      <label class="an-lbl">FIND <input class="an-in" id="ht-q" placeholder="symbol" maxlength="20" style="width:110px;text-transform:uppercase" aria-label="Filter symbols"></label>
-      <span class="an-note" id="ht-note">click a tile to chart it</span></div>
-    <div class="an-kpi" id="ht-kpi"></div>
-    <div class="ht-map" id="ht-map"></div>
-    <div class="an-foot">Live through the session (refreshes every 10 seconds while the market is open, then holds the close). Default view: the 20 top gainers and 20 top losers of the chosen universe, coloured by today's change versus the previous close — deeper green and red for bigger moves, tile size by the size of the move. ALL tiles every name (ALL NSE: the 400 biggest movers among 6,900 listed). F&amp;O = the 200+ stocks with options. Click any tile to load it in the CHART panel; type a symbol to find it.</div>
   </section>
   <section class="panel a-wide an vipx" id="p-struct" aria-label="VIP engines">
     <div class="panel-hd"><span class="k">VIP</span><span class="s" id="stx-title">VIP INDICATOR · STRUCTURE · NIFTY 15M</span><span class="r"><a id="stx-pine" href="/vip-indicator/pine" hidden style="color:var(--gold);border:1px solid var(--gold);padding:1px 7px;font-size:9.5px;letter-spacing:.1em">PINE ↓</a><span class="an-state" id="stx-state">—</span></span></div>
