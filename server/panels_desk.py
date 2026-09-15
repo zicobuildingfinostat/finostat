@@ -1,0 +1,107 @@
+"""Terminal panels RISK (whole-book risk board) and OISCAN (OI build-up screener): markup, CSS and a
+self-contained script that pages.py splices into the dashboard. Charts are canvas in the terminal
+palette; nothing animates on its own."""
+
+MARKUP = r"""
+  <section class="panel a-wide an" id="p-risk" aria-label="Risk board">
+    <div class="panel-hd"><span class="k">RISK</span><span class="s">RISK BOARD · WHOLE BOOK · ₹ GREEKS · SHOCKS · LIMITS</span><span class="r"><span class="an-state" id="rk-state">—</span></span></div>
+    <div class="an-kpi" id="rk-kpi"></div>
+    <div class="rk-breach" id="rk-breach" hidden></div>
+    <div class="rk-grid">
+      <div><h5>BY UNDERLYING · HEDGE TO FLAT</h5><div class="scroll rk-tbl"><table class="an-table"><thead><tr><th>UNDERLYING</th><th>SPOT · DAY</th><th>POS · LOTS</th><th>Δ ₹/1%</th><th>Γ ₹/1%</th><th>VEGA /pt</th><th>THETA /day</th><th>HEDGE</th></tr></thead><tbody id="rk-u"></tbody></table></div></div>
+      <div><h5>BY EXPIRY · PAYOFF AT EXPIRY (±6%)</h5><div class="scroll rk-tbl"><table class="an-table"><thead><tr><th>UNDERLYING</th><th>EXPIRY</th><th>DTE</th><th>Δ ₹/1%</th><th>VEGA</th><th>THETA</th><th>MAX LOSS</th><th>MAX PROFIT</th><th>BREAKEVENS</th></tr></thead><tbody id="rk-e"></tbody></table></div></div>
+    </div>
+    <div class="an-top"><span class="seg" id="rk-day"><button type="button" data-d="0" class="on">TODAY</button><button type="button" data-d="1">TOMORROW</button></span><span class="an-note">book P&amp;L vs now for a spot shift (columns) × IV shift (rows) · worst cell boxed in gold</span></div>
+    <div class="an-cvw" style="height:200px"><canvas class="an-cv" id="rk-cv"></canvas></div>
+    <div class="rk-limits" id="rk-limits"></div>
+    <div class="an-foot">Every open position — paper, ALGO and your connected broker — priced off the live chains. ₹ Greeks: Δ ₹/1% is the P&amp;L of a 1% spot move, Γ ₹/1% the extra P&amp;L from convexity over that move, vega per 1 IV point, theta per calendar day. Hedge = futures lots that flatten delta (or the ATM-option equivalent at ~0.5Δ). Limits are yours; breaches show in red.</div>
+  </section>
+  <section class="panel a-wide an" id="p-oiscan" aria-label="OI build-up screener">
+    <div class="panel-hd"><span class="k">OISCAN</span><span class="s">OI BUILD-UP SCREENER · NEAREST EXPIRY</span><span class="r"><span class="an-state" id="oi-state">—</span></span></div>
+    <div class="an-top"><span class="seg" id="oi-u"><button type="button" data-u="NIFTY 50" class="on">NIFTY</button><button type="button" data-u="BANKNIFTY">BANKNIFTY</button><button type="button" data-u="FINNIFTY">FINNIFTY</button><button type="button" data-u="SENSEX">SENSEX</button></span>
+      <span class="seg" id="oi-w"><button type="button" data-w="5">5 MIN</button><button type="button" data-w="15" class="on">15 MIN</button><button type="button" data-w="60">60 MIN</button><button type="button" data-w="day">DAY</button></span>
+      <span class="an-note" id="oi-note">OI sampled every 3 minutes in session · tags: price↑OI↑ long build-up · price↓OI↑ short build-up · price↑OI↓ short covering · price↓OI↓ long unwinding</span></div>
+    <div class="an-kpi" id="oi-kpi"></div>
+    <div class="oi-read" id="oi-read">—</div>
+    <div class="an-split"><div class="an-cvw"><canvas class="an-cv" id="oi-cv"></canvas></div>
+      <div class="scroll an-tbl-wrap"><table class="an-table"><thead><tr><th>STRIKE</th><th>SIDE</th><th>OI</th><th>Δ OI</th><th>Δ PX</th><th>TAG</th></tr></thead><tbody id="oi-rows"></tbody></table></div></div>
+    <div class="an-top" style="border-top:1px solid var(--line)"><b style="color:var(--gold);font-size:10.5px;letter-spacing:.1em">F&amp;O STOCKS · DAY BASIS</b><span class="an-note" id="oi-snote">total option OI change vs previous close against the spot move since the first sample · refreshed every 15 min</span></div>
+    <div class="scroll rk-tbl" style="max-height:260px"><table class="an-table"><thead><tr><th>STOCK</th><th>SPOT</th><th>CHG</th><th>Δ OI %</th><th>CALL Δ OI</th><th>PUT Δ OI</th><th>PCR</th><th>TAG</th></tr></thead><tbody id="oi-stocks"></tbody></table></div>
+    <div class="an-foot">Index chains from Upstox REST every 3 minutes during the session, kept for the day. Δ OI over the chosen window; DAY = versus previous close. The read weighs call and put writing/covering near the money: call writing above spot is supply, put writing below is support, writers covering is fuel for a move. Stocks: NIFTY 50 F&amp;O names, nearest expiry.</div>
+  </section>
+"""
+
+CSS = r"""
+.rk-breach{margin:0;padding:7px 10px;border-bottom:1px solid var(--line);background:rgba(255,92,108,.08);color:var(--down);font-size:11px;line-height:1.5}.rk-breach b{letter-spacing:.1em;font-size:10px}
+.rk-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--line)}.rk-grid>div{min-width:0}.rk-grid>div:first-child{border-right:1px solid var(--line)}
+.rk-grid h5{font-size:9.5px;letter-spacing:.14em;color:var(--faint);padding:6px 10px 2px;text-transform:uppercase}
+.rk-tbl{max-height:200px;flex:0 0 auto}.rk-tbl td.hedge{color:var(--gold);white-space:nowrap}.rk-tbl td.src{color:var(--faint);font-size:9.5px}
+.rk-limits{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:8px 10px;border-top:1px solid var(--line);font-size:10.5px}
+.rk-limits label{display:flex;flex-direction:column;gap:3px;color:var(--faint);letter-spacing:.08em;font-size:9.5px}.rk-limits input{width:110px;background:#06031a;border:1px solid var(--line-strong);color:var(--text);font:inherit;font-size:11px;padding:3px 6px}.rk-limits input.bad{border-color:var(--down);color:var(--down)}
+.rk-limits button{font-size:10px;letter-spacing:.1em;padding:5px 11px;border:1px solid var(--gold);color:var(--gold);background:none;cursor:pointer}.rk-limits button:hover{background:var(--gold);color:#2a1a02}.rk-limits .msg{color:var(--faint);margin-left:auto}
+.oi-read{padding:6px 10px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--text)}.oi-read b{letter-spacing:.1em;font-size:10px;padding:1px 6px;border:1px solid var(--line-strong);margin-right:8px}.oi-read b.bullish{color:var(--up);border-color:var(--up)}.oi-read b.bearish{color:var(--down);border-color:var(--down)}.oi-read b.balanced,.oi-read b.quiet{color:var(--muted)}
+.tag{font-size:9.5px;letter-spacing:.08em;padding:1px 5px;border:1px solid var(--line-strong);white-space:nowrap}.tag.lb{color:var(--up);border-color:var(--up)}.tag.sb{color:var(--down);border-color:var(--down)}.tag.sc{color:var(--cyan);border-color:var(--cyan)}.tag.lu{color:var(--pink);border-color:var(--pink)}.tag.flat{color:var(--faint)}
+@media(max-width:980px){.rk-grid{grid-template-columns:1fr}.rk-grid>div:first-child{border-right:0;border-bottom:1px solid var(--line)}}
+"""
+
+JS = r"""
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function css(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||'#fff'; }
+  var C={gold:css('--gold'),cyan:css('--cyan'),pink:css('--pink'),up:css('--up'),down:css('--down'),faint:css('--faint'),text:css('--text')};
+  function nf(x,d){ if(x==null||isNaN(x)) return '—'; d=d==null?0:d; return Number(x).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function inr(x){ if(x==null||isNaN(x)) return '—'; var a=Math.abs(x); var s=a>=1e7?(a/1e7).toFixed(2)+' cr':a>=1e5?(a/1e5).toFixed(2)+' L':nf(a,0); return (x<0?'−':'')+'₹'+s; }
+  function sg(x,d){ if(x==null||isNaN(x)) return '—'; return (x>0?'+':'')+nf(x,d); }
+  function ctx2d(cv){ var r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1; var w=Math.max(200,Math.floor(r.width)), h=Math.max(120,Math.floor(r.height)); if(cv.width!==Math.floor(w*dpr)||cv.height!==Math.floor(h*dpr)){ cv.width=Math.floor(w*dpr); cv.height=Math.floor(h*dpr); } var c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h); c.font='10px IBM Plex Mono,monospace'; return {c:c,w:w,h:h}; }
+  function kpi(el,items){ el.innerHTML=items.map(function(k){ return '<div><small>'+k[0]+'</small><b'+(k[2]?' class="'+k[2]+'"':'')+'>'+k[1]+'</b></div>'; }).join(''); }
+  function state(id,txt,cls){ var e=$(id); if(!e) return; e.textContent=txt; e.className='an-state'+(cls?' '+cls:''); }
+  function getJSON(url,ok,fail){ fetch(url,{credentials:'same-origin'}).then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); }).then(function(x){ if(x.s>=400){ fail(x.j&&x.j.error?x.j.error:(x.s===402?'Desk plan required':'HTTP '+x.s)); } else ok(x.j); }).catch(function(){ fail('network'); }); }
+  function postJSON(url,body,ok,fail){ fetch(url,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},body:JSON.stringify(body)}).then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); }).then(function(x){ if(x.s>=400){ fail(x.j&&x.j.error?x.j.error:'HTTP '+x.s); } else ok(x.j); }).catch(function(){ fail('network'); }); }
+  function segInit(el,attr,onChange){ if(!el) return; el.addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; Array.prototype.forEach.call(el.querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); onChange(b.getAttribute(attr)); }); }
+  function visible(id){ var el=$(id); return el&&!el.hidden&&!document.hidden; }
+  function expLabel(ms){ var d=new Date(ms); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}); }
+  var LIMIT_LABELS={delta_inr_1pct:'MAX |Δ| ₹ PER 1%',gamma_inr_1pct:'MAX |Γ| ₹ PER 1%',vega:'MAX |VEGA| ₹/pt',theta:'MAX |THETA| ₹/day',day_loss:'DAY LOSS STOP ₹'};
+
+  /* ---------- RISK ---------- */
+  var rk={data:null,day:'0'}, rkPanel=$('p-risk');
+  segInit($('rk-day'),'data-d',function(d){ rk.day=d; drawRisk(); });
+  function loadRisk(){ if(!rkPanel||window.FINO_LOCKED) return; getJSON('/api/risk',function(d){ rk.data=d; renderRisk(d); drawRisk(); state('rk-state',(d.positions?d.positions+' POSITIONS':'NO POSITIONS')+(d.unpriced?' · '+d.unpriced+' unpriced':'')+(d.margin?' · MARGIN LIVE':''),d.breaches&&d.breaches.length?'err':'ok'); },function(e){ state('rk-state',e,'err'); }); }
+  function renderRisk(d){ var i=d.inr||{}, m=d.margin;
+    kpi($('rk-kpi'),[['net Δ ₹ / 1%',inr(i.delta_inr_1pct),i.delta_inr_1pct>=0?'up':'down'],['Γ ₹ / 1%',inr(i.gamma_inr_1pct),i.gamma_inr_1pct>=0?'up':'down'],['vega ₹ / pt',inr(i.vega),i.vega>=0?'up':'down'],['theta ₹ / day',inr(i.theta),i.theta>=0?'up':'down'],['day P&L',inr(d.day_pnl),d.day_pnl>=0?'up':'down'],['open P&L',inr(d.pnl),d.pnl>=0?'up':'down'],['worst shock',inr(d.shocks&&d.shocks.worst),'down'],['margin used',m?(m.used_pct!=null?nf(m.used_pct,0)+'%':inr(m.used))+'<i style="font-style:normal;font-size:10px;color:var(--muted)"> · free '+inr(m.available)+'</i>':'connect broker','m']]);
+    var br=$('rk-breach'); if(d.breaches&&d.breaches.length){ br.hidden=false; br.innerHTML='<b>LIMIT BREACH</b> '+d.breaches.map(function(b){ return (LIMIT_LABELS[b.key]||b.key)+' '+inr(b.value)+' vs '+inr(b.limit)+' — '+b.note; }).join(' · '); } else { br.hidden=true; }
+    $('rk-u').innerHTML=(d.underlyings||[]).map(function(u){ var h=u.hedge; var hs=h?(h.futures_lots?h.futures_side+' '+Math.abs(h.futures_lots)+' fut':'')+(h.atm_option&&h.atm_option_lots?(h.futures_lots?' · or ':'')+h.atm_option+' ×'+Math.abs(h.atm_option_lots):''):'flat'; return '<tr><td style="text-align:left">'+u.u+'<span class="src"> '+(u.sources||[]).join('+')+'</span></td><td>'+nf(u.spot,1)+(u.day_move_pct!=null?' <span class="'+(u.day_move_pct>=0?'up':'down')+'">'+sg(u.day_move_pct,2)+'%</span>':'')+'</td><td>'+u.positions+' · '+u.lots+'</td><td class="'+(u.delta_inr_1pct>=0?'up':'down')+'">'+inr(u.delta_inr_1pct)+'</td><td>'+inr(u.gamma_inr_1pct)+'</td><td>'+inr(u.vega)+'</td><td>'+inr(u.theta)+'</td><td class="hedge">'+(hs||'flat')+'</td></tr>'; }).join('')||'<tr><td colspan="8" style="text-align:left;color:var(--faint)">no open positions — paper a strategy in the builder, run an ALGO, or connect your broker</td></tr>';
+    $('rk-e').innerHTML=(d.expiries||[]).map(function(e){ var p=e.payoff||{}; return '<tr><td style="text-align:left">'+e.u+'</td><td>'+(e.expiry?expLabel(e.expiry):'—')+'</td><td>'+(e.dte!=null?nf(e.dte,1)+'d':'—')+'</td><td class="'+(e.delta_inr_1pct>=0?'up':'down')+'">'+inr(e.delta_inr_1pct)+'</td><td>'+inr(e.vega)+'</td><td>'+inr(e.theta)+'</td><td class="down">'+inr(p.max_loss)+'</td><td class="up">'+inr(p.max_profit)+'</td><td>'+((p.breakevens||[]).map(function(b){ return nf(b,0); }).join(' · ')||'—')+'</td></tr>'; }).join('')||'<tr><td colspan="9" style="text-align:left;color:var(--faint)">—</td></tr>';
+    var lim=d.limits||{}, bad={}; (d.breaches||[]).forEach(function(b){ bad[b.key]=true; });
+    if(!$('rk-limits').children.length||$('rk-limits').getAttribute('data-dirty')!=='1'){ $('rk-limits').innerHTML=Object.keys(LIMIT_LABELS).map(function(k){ return '<label>'+LIMIT_LABELS[k]+'<input type="number" min="0" step="1000" data-k="'+k+'" value="'+(lim[k]||'')+'" class="'+(bad[k]?'bad':'')+'"></label>'; }).join('')+'<button type="button" id="rk-save">SAVE LIMITS</button><span class="msg" id="rk-msg">breaches also show as a red state on the panel header</span>';
+      $('rk-save').addEventListener('click',function(){ var body={}; Array.prototype.forEach.call($('rk-limits').querySelectorAll('input'),function(i){ body[i.getAttribute('data-k')]=Number(i.value); }); postJSON('/api/risk',{limits:body},function(){ $('rk-limits').setAttribute('data-dirty','0'); $('rk-msg').textContent='saved'; loadRisk(); },function(e){ $('rk-msg').textContent=e; }); });
+      $('rk-limits').addEventListener('input',function(){ $('rk-limits').setAttribute('data-dirty','1'); }); } }
+  function drawRisk(){ var d=rk.data, cv=$('rk-cv'); if(!d||!cv||!d.shocks) return; var g=ctx2d(cv), c=g.c, sh=d.shocks, grid=sh.grid[rk.day]||sh.grid['0']; if(!grid) return; var cols=sh.spot_shifts, rows=sh.iv_shifts; var pad={l:58,t:22,r:8,b:6}; var cw=(g.w-pad.l-pad.r)/cols.length, ch=(g.h-pad.t-pad.b)/rows.length; var m=0; rows.forEach(function(_,ri){ cols.forEach(function(_,ci){ m=Math.max(m,Math.abs(grid[ri][ci])); }); }); var worst={v:Infinity,ri:0,ci:0};
+    rows.forEach(function(iv,ri){ cols.forEach(function(sp,ci){ var v=grid[ri][ci]; var t=m?v/m:0; var col=t>=0?'rgba(61,214,140,'+(0.12+0.6*t)+')':'rgba(255,92,108,'+(0.12+0.6*(-t))+')'; c.fillStyle=col; c.fillRect(pad.l+ci*cw+1,pad.t+ri*ch+1,cw-2,ch-2); c.fillStyle=C.text; c.textAlign='center'; if(cw>=46||ci%2===0) c.fillText(cw<60?inr(v).replace('₹',''):inr(v),pad.l+ci*cw+cw/2,pad.t+ri*ch+ch/2+4); if(v<worst.v){ worst={v:v,ri:ri,ci:ci}; } }); c.fillStyle=C.faint; c.textAlign='right'; c.fillText('IV '+(iv>=0?'+':'')+iv,pad.l-6,pad.t+ri*ch+ch/2+4); });
+    c.fillStyle=C.faint; c.textAlign='center'; cols.forEach(function(sp,ci){ if(cw<46&&ci%2) return; c.fillText((cw<70?'':'spot ')+(sp>=0?'+':'')+sp+'%',pad.l+ci*cw+cw/2,pad.t-7); });
+    if(isFinite(worst.v)&&d.positions){ c.strokeStyle=C.gold; c.lineWidth=2; c.strokeRect(pad.l+worst.ci*cw+1,pad.t+worst.ri*ch+1,cw-2,ch-2); c.lineWidth=1; } }
+  window.addEventListener('resize',function(){ drawRisk(); drawOi(); });
+  if(rkPanel&&!window.FINO_LOCKED){ loadRisk(); setInterval(function(){ if(visible('p-risk')) loadRisk(); },10000); }
+
+  /* ---------- OISCAN ---------- */
+  var oi={u:'NIFTY 50',w:'15',data:null,stocks:null}, oiPanel=$('p-oiscan');
+  var TAGC={'long build-up':'lb','short build-up':'sb','short covering':'sc','long unwinding':'lu','flat':'flat'};
+  function tag(t){ return t?'<span class="tag '+(TAGC[t]||'')+'">'+t.toUpperCase()+'</span>':'—'; }
+  segInit($('oi-u'),'data-u',function(u){ oi.u=u; loadOi(); }); segInit($('oi-w'),'data-w',function(w){ oi.w=w; loadOi(); });
+  function loadOi(){ if(!oiPanel||window.FINO_LOCKED) return; state('oi-state','loading…'); getJSON('/api/oiscan?u='+encodeURIComponent(oi.u)+'&w='+oi.w,function(d){ oi.data=d; renderOi(d); drawOi(); },function(e){ oi.data=null; state('oi-state',e,'err'); $('oi-read').innerHTML='<b class="quiet">WAITING</b>'+e; $('oi-rows').innerHTML=''; drawOi(); }); }
+  function renderOi(d){ var t=new Date(d.ts*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); state('oi-state','SAMPLED '+t+' · '+d.samples+' TODAY · EXP '+d.expiry,'ok');
+    var dsp=d.spot_then?(d.spot-d.spot_then):null;
+    kpi($('oi-kpi'),[['spot',nf(d.spot,1)+(dsp!=null?' <i style="font-style:normal;font-size:11px" class="'+(dsp>=0?'up':'down')+'">'+sg(dsp,1)+'</i>':''),'c'],['call OI Δ',sg(d.ce_d,0),d.ce_d>0?'down':'up'],['put OI Δ',sg(d.pe_d,0),d.pe_d>0?'up':'down'],['PCR',nf(d.pcr,2)+(d.pcr_then!=null?' <i style="font-style:normal;font-size:11px;color:var(--muted)">from '+nf(d.pcr_then,2)+'</i>':''),'m'],['call wall',d.walls&&d.walls.call?nf(d.walls.call.strike,0):'—','m'],['put wall',d.walls&&d.walls.put?nf(d.walls.put.strike,0):'—','m'],['window',(d.window==='day'?'since prev close':nf(d.window_actual_min,0)+' min'),'m']]);
+    var r=d.read||{}; $('oi-read').innerHTML='<b class="'+r.lean+'">'+(r.lean||'').toUpperCase()+'</b>'+(r.text||'');
+    $('oi-rows').innerHTML=(d.top||[]).map(function(x){ return '<tr'+(x.itm?' style="opacity:.75"':'')+'><td>'+nf(x.strike,0)+'</td><td class="'+(x.side==='CE'?'cyan':'')+'" style="color:'+(x.side==='CE'?'var(--cyan)':'var(--pink)')+'">'+x.side+'</td><td>'+nf(x.oi,0)+'</td><td class="'+(x.d_oi>=0?'up':'down')+'">'+sg(x.d_oi,0)+'</td><td class="'+(x.d_px_pct>=0?'up':'down')+'">'+(x.d_px_pct!=null?sg(x.d_px_pct,1)+'%':'—')+'</td><td>'+tag(x.tag)+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="text-align:left;color:var(--faint)">no OI change worth tagging in this window</td></tr>'; }
+  function drawOi(){ var cv=$('oi-cv'); if(!cv) return; var g=ctx2d(cv), c=g.c, d=oi.data; if(!d||!d.rows||!d.rows.length){ c.fillStyle=C.faint; c.fillText('OI change by strike appears here once the session has samples',12,24); return; }
+    var byK={}; d.rows.forEach(function(r){ var o=byK[r.strike]||(byK[r.strike]={ce:0,pe:0}); o[r.side==='CE'?'ce':'pe']=r.d_oi; }); var ks=Object.keys(byK).map(Number).sort(function(a,b){ return a-b; }); var n=ks.length; var pad={l:52,r:10,t:16,b:22}; var m=1; ks.forEach(function(k){ m=Math.max(m,Math.abs(byK[k].ce),Math.abs(byK[k].pe)); }); var pw=g.w-pad.l-pad.r, ph=g.h-pad.t-pad.b, bw=pw/n, y0=pad.t+ph/2;
+    function sx(i){ return pad.l+i*bw; } function sy(v){ return y0-v/m*(ph/2); }
+    c.strokeStyle='rgba(190,150,255,.14)'; c.beginPath(); c.moveTo(pad.l,y0); c.lineTo(g.w-pad.r,y0); c.stroke();
+    ks.forEach(function(k,i){ var o=byK[k]; c.fillStyle='rgba(127,224,240,.85)'; c.fillRect(sx(i)+bw*.12,Math.min(y0,sy(o.ce)),bw*.34,Math.abs(y0-sy(o.ce))||1); c.fillStyle='rgba(255,110,199,.85)'; c.fillRect(sx(i)+bw*.54,Math.min(y0,sy(o.pe)),bw*.34,Math.abs(y0-sy(o.pe))||1); });
+    var spotI=null; ks.forEach(function(k,i){ if(spotI==null&&k>=d.spot) spotI=i; }); if(spotI!=null){ var x=sx(spotI); c.strokeStyle=C.gold; c.setLineDash([4,3]); c.beginPath(); c.moveTo(x,pad.t); c.lineTo(x,g.h-pad.b); c.stroke(); c.setLineDash([]); c.fillStyle=C.gold; c.textAlign='left'; c.fillText('spot '+nf(d.spot,0),x+3,pad.t+8); }
+    c.fillStyle=C.faint; c.textAlign='center'; var step=Math.max(1,Math.round(n/8)); ks.forEach(function(k,i){ if(i%step===0) c.fillText(nf(k,0),sx(i)+bw/2,g.h-6); }); c.textAlign='right'; c.fillText(sg(m,0),pad.l-4,pad.t+10); c.fillText(sg(-m,0),pad.l-4,g.h-pad.b-2);
+    c.textAlign='left'; c.fillStyle='rgba(127,224,240,.9)'; c.fillText('CALL Δ OI',pad.l+4,pad.t-4); c.fillStyle='rgba(255,110,199,.9)'; c.fillText('PUT Δ OI',pad.l+70,pad.t-4); }
+  function loadStocks(){ if(!oiPanel||window.FINO_LOCKED) return; getJSON('/api/oiscan/stocks',function(d){ oi.stocks=d; var rows=(d.rows||[]).slice(0,40); $('oi-stocks').innerHTML=rows.map(function(s){ return '<tr><td style="text-align:left">'+s.sym+'</td><td>'+nf(s.spot,1)+'</td><td class="'+(s.spot_chg_pct>=0?'up':'down')+'">'+(s.spot_chg_pct!=null?sg(s.spot_chg_pct,2)+'%':'—')+'</td><td class="'+(s.d_oi_pct>=0?'up':'down')+'">'+(s.d_oi_pct!=null?sg(s.d_oi_pct,1)+'%':'—')+'</td><td>'+sg(s.ce_d,0)+'</td><td>'+sg(s.pe_d,0)+'</td><td>'+nf(s.pcr,2)+'</td><td>'+tag(s.tag)+'</td></tr>'; }).join('')||'<tr><td colspan="8" style="text-align:left;color:var(--faint)">stock screen fills in ~15 minutes into the session</td></tr>'; if(d.ts) $('oi-snote').textContent=d.count+' stocks · sampled '+new Date(d.ts*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); },function(){}); }
+  if(oiPanel&&!window.FINO_LOCKED){ loadOi(); loadStocks(); setInterval(function(){ if(visible('p-oiscan')) loadOi(); },60000); setInterval(function(){ if(visible('p-oiscan')) loadStocks(); },300000); }
+})();
+"""

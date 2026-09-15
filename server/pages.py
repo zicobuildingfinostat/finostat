@@ -10,6 +10,8 @@ from __future__ import annotations
 import html
 import json
 
+import panels_desk
+
 
 def _seed(snapshot: dict) -> str:
     payload = {
@@ -407,6 +409,8 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div><code>BSE:RELIANCE</code><span>the BSE listing</span></div>
 <div><code>W TCS</code> <span>add to the watchlist (<code>UNW TCS</code> removes)</span></div>
 <h4>Flows</h4>
+<div><code>RISK</code><span>whole-book risk board: ₹ Greeks per underlying and expiry, spot × IV shocks, hedge-to-flat, margin, your limits</span></div>
+<div><code>OISCAN · OI</code><span>OI build-up screener: long/short build-up, covering and unwinding per strike over 5/15/60 min or the day; F&amp;O stocks on a day basis</span></div>
 <div><code>FLOWS · FII</code><span>FII/DII cash flows and participant-wise index futures &amp; options positioning from NSE</span></div>
 <h4>Algo</h4>
 <div><code>ALGO</code><span>rule-based strategies: expiry straddle/strangle, OI-wall strangle, iron fly/condor — paper first, live through the broker</span></div>
@@ -952,11 +956,11 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['chain','Option chain'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet'],['surf','IV surface'],['skew','Vol skew'],['curv','Implied distribution'],['gex','Gamma exposure'],['rply','Replay'],['bkts','Backtest'],['algo','Algo strategies'],['flows','FII/DII flows']];
+var PANELS=[['sheet','BFLY sheet'],['chain','Option chain'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet'],['surf','IV surface'],['skew','Vol skew'],['curv','Implied distribution'],['gex','Gamma exposure'],['rply','Replay'],['bkts','Backtest'],['algo','Algo strategies'],['flows','FII/DII flows'],['risk','Risk board'],['oiscan','OI screener']];
 /* ---------- command line ---------- */
 var tcmdIn=document.getElementById('tcmd-in'), tcmdMsg=document.getElementById('tcmd-msg'), helpEl=document.getElementById('help');
 var PRESET_ALIAS={IC:'iron-condor',CONDOR:'iron-condor',IF:'iron-fly',IRONFLY:'iron-fly',SS:'short-straddle',STRADDLE:'short-straddle',LS:'long-straddle',SG:'short-strangle',STRANGLE:'short-strangle',LSG:'long-strangle',BCS:'bull-call-spread',BPS:'bear-put-spread',FLY:'butterfly',BFLY:'butterfly',BUTTERFLY:'butterfly',RATIO:'ratio-spread'};
-var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',OC:'chain',OPTCHAIN:'chain',OPTIONCHAIN:'chain',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini',SURF:'surf',SURFACE:'surf',IVS:'surf',SKEW:'skew',SMILE:'skew',MONEY:'skew',MONEYNESS:'skew',CURV:'curv',CURVE:'curv',BELL:'curv',DIST:'curv',GEX:'gex',GAMMA:'gex',RPLY:'rply',REPLAY:'rply',BKTS:'bkts',BACKTEST:'bkts',BT:'bkts',ALGO:'algo',ALGOS:'algo',BOT:'algo',FLOWS:'flows',FLOW:'flows',FII:'flows',DII:'flows'};
+var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',OC:'chain',OPTCHAIN:'chain',OPTIONCHAIN:'chain',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini',SURF:'surf',SURFACE:'surf',IVS:'surf',SKEW:'skew',SMILE:'skew',MONEY:'skew',MONEYNESS:'skew',CURV:'curv',CURVE:'curv',BELL:'curv',DIST:'curv',GEX:'gex',GAMMA:'gex',RPLY:'rply',REPLAY:'rply',BKTS:'bkts',BACKTEST:'bkts',BT:'bkts',ALGO:'algo',ALGOS:'algo',BOT:'algo',FLOWS:'flows',FLOW:'flows',FII:'flows',DII:'flows',RISK:'risk',RSK:'risk',LIMITS:'risk',OISCAN:'oiscan',OI:'oiscan',BUILDUP:'oiscan',SCAN:'oiscan',SCREENER:'oiscan'};
 var INDEX_ALIAS={NIFTY:'NIFTY 50','NIFTY50':'NIFTY 50','NIFTY 50':'NIFTY 50',BN:'BANKNIFTY',BANKNIFTY:'BANKNIFTY',NIFTYBANK:'BANKNIFTY',SENSEX:'SENSEX',SX:'SENSEX',FIN:'FINNIFTY',FINNIFTY:'FINNIFTY',VIX:'INDIA VIX',INDIAVIX:'INDIA VIX'};
 function say(msg,kind){ tcmdMsg.textContent=msg; tcmdMsg.className='tcmd-msg '+(kind||''); tcmdMsg.hidden=false; clearTimeout(say.t); say.t=setTimeout(function(){ tcmdMsg.hidden=true; },3500); }
 function goPanel(id){ var el=document.getElementById('p-'+id); if(!el) return false; if(el.hidden){ var hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[]; var i=hide.indexOf(id); if(i>=0) hide.splice(i,1); applyLayout(); savePrefs(); } el.scrollIntoView({behavior:'smooth',block:'start'}); return true; }
@@ -1935,6 +1939,12 @@ def render_dashboard(snapshot: dict, locked: bool = False, signed_in: bool = Fal
         doc = doc.replace("<script>window.SEED=", _PAYWALL_CSS + guard + "<script>window.SEED=", 1)
         doc = doc.replace("</body>", _paywall(signed_in, plan) + "\n</body>", 1)
     return doc.encode("utf-8")
+
+
+# RISK + OISCAN panels (panels_desk.py) spliced into the terminal template
+DASHBOARD = (DASHBOARD.replace("</style>", panels_desk.CSS + "</style>", 1)
+             .replace("</main>", panels_desk.MARKUP + "</main>", 1)
+             .replace("</body>", "<script>" + panels_desk.JS + "</script>\n</body>", 1))
 
 
 STRATEGY = r"""<!DOCTYPE html>

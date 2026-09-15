@@ -55,6 +55,8 @@ import coindcx
 import pages_global
 import sovereign_page
 import vega
+import risk
+import oiscan
 import vega_widget
 import algo
 import watchdog
@@ -230,6 +232,21 @@ FLOWS = flows.Flows(flows.Store(AUTH.path), HOLIDAYS)
 PUBCHAIN = pubchain.PublicChains(AUTH.path.parent, HOLIDAYS, contracts_of=lambda: CONTRACTS_OF(FEED))
 CRYPTO = crypto.Crypto()
 GOLD = gold.Gold()
+
+
+def _fo_stock_keys() -> list[tuple[str, str]]:
+    """NIFTY 50 members that have options -> (symbol, Upstox instrument key) from the feed's instrument meta."""
+    meta = getattr(FEED, "_meta", None) or {}
+    names = set(CONTRACTS_OF(FEED).stock_names()) & set(CONSTITUENTS.members)
+    out = []
+    for key, m in meta.items():
+        if m.get("kind") == "stock" and str(m.get("label", "")).startswith("NSE:") and m.get("symbol") in names:
+            out.append((m["symbol"], key))
+    return sorted(out)
+
+
+OISCAN = oiscan.Sampler(UREST, AUTH.path, WATCHDOG.in_session, stock_keys_fn=_fo_stock_keys, step_fn=lambda u: upstox_rest.STEP.get(u))
+OISCAN.start()
 VEGA = vega.Vega(AUTH.path)
 _DCX_CACHE: dict = {}            # user_id -> (ts, payload)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
@@ -425,7 +442,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks"}
 
 
 def _gate(user, ukey: str):
@@ -1052,6 +1069,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"templates": algo.TEMPLATES, "algos": [ALGO.view(a) for a in ALGOS.list(user["id"])],
                                    "engine": {"in_session": in_session, "last_tick": ALGO.last_tick},
                                    "broker": bool(acc and acc.get("token") and not acc.get("expired")), "trade_allowed": broker.trade_allowed(user["email"])})
+            if route == "/api/risk":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                bp = _book_payload(user)
+                funds = None
+                client, _acc = _broker_client(user)
+                if client is not None:
+                    cached = _BROKER_CACHE.get(user["id"])
+                    if cached and time.time() - cached[0] < 30 and cached[1].get("funds"):
+                        funds = cached[1]["funds"]
+                    else:
+                        try:
+                            funds = client.funds()
+                        except broker.BrokerError:
+                            funds = None
+                limits = AUTH.get_prefs(user["id"]).get("risk_limits")
+                out = risk.board(bp["positions"], FEED.snapshot().get("quotes") or [], funds=funds, limits=limits)
+                out["broker"] = client is not None
+                return self._json(out)
+            if route == "/api/oiscan":
+                qs = parse_qs(parsed.query)
+                out = OISCAN.view(qs.get("u", ["NIFTY 50"])[0], qs.get("w", ["15"])[0])
+                return self._json(out, 503 if "error" in out else 200)
+            if route == "/api/oiscan/stocks":
+                return self._json(OISCAN.stocks_view())
             if route == "/api/book":
                 user = self._current_user()
                 if user is None:
@@ -1335,6 +1378,21 @@ class Handler(BaseHTTPRequestHandler):
                     fn = ALERTS.rearm if parts[4] == "rearm" else ALERTS.delete
                     return self._json({"ok": fn(user["id"], int(parts[3]))})
                 return self._json({"error": "not found"}, 404)
+            if route == "/api/risk":
+                user = self._current_user()
+                if user is None:
+                    return self._json({"error": "not signed in"}, 401)
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                if not _paid(user):
+                    return self._json({"error": "plan required", "need": "desk"}, 402)
+                try:
+                    body = json.loads(self._read_body().decode("utf-8") or "{}")
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                limits = risk.clean_limits(body.get("limits") if isinstance(body, dict) else None)
+                AUTH.set_prefs(user["id"], {"risk_limits": limits})
+                return self._json({"ok": True, "limits": limits})
             if route == "/api/vega":
                 if self.headers.get("X-Requested-With") != "fetch":
                     return self._json({"error": "bad request"}, 400)

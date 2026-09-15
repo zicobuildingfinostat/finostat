@@ -186,6 +186,8 @@ INTENTS = [
     (("global", "world", "s&p", "spx", "nasdaq", "dow", "dax", "nikkei", "dxy", "crude", "us10y", "hang seng", "ftse"), "world"),
     (("plan", "price", "pricing", "cost", "subscri", "desk", "pro desk", "how much", "pay", "upi", "cashfree", "refund", "gst"), "plans"),
     (("login", "log in", "sign in", "signin", "sign up", "signup", "account", "otp", "password", "magic link", "register"), "login"),
+    (("risk board", "risk", "greeks board", "my limits", "hedge", "margin"), "risk"),
+    (("oiscan", "oi scan", "build-up", "buildup", "build up", "screener", "short covering", "long unwinding", "oi change"), "oiscan"),
     (("option chain", "chain", "oi ", "open interest", "pcr", "max pain", "put call"), "chain"),
     (("builder", "strateg", "straddle", "strangle", "condor", "iron fly", "butterfly", "spread", "payoff", "breakeven"), "builder"),
     (("alert",), "alerts"),
@@ -233,6 +235,10 @@ def answer_local(question: str, ctx: dict) -> str:
     if intent == "pine":
         return ("XAU Sovereign buyers get the TradingView Pine Script: open /xau-sovereign/app and press PINE SCRIPT ↓. In TradingView: Pine Editor → select all → paste → Add to chart; alerts under Alerts → Condition → XAU Sovereign. "
                 "Not a buyer yet? It's ₹8,000 once at /xau-sovereign/buy.")
+    if intent == "risk":
+        return ("The RISK panel in the terminal is the whole-book risk board: ₹ Greeks per underlying and expiry, a spot × IV shock grid, payoff at expiry, a hedge-to-flat suggestion, broker margin, and your own limits with breach flags. Type RISK in the terminal command line (Desk). It reads paper, ALGO and connected-broker positions.")
+    if intent == "oiscan":
+        return ("OISCAN in the terminal tags every strike as long build-up, short build-up, short covering or long unwinding over 5, 15 or 60 minutes or the day, with call/put walls, PCR drift and a one-line read — plus a day-basis screen of NIFTY 50 F&O stocks. Type OISCAN in the terminal command line (Desk). It fills in from about 09:18 IST each session.")
     if intent == "chain":
         return ("Free, delayed NSE chains with OI, PCR, max pain and walls: /option-chain/nifty, /option-chain/banknifty, /option-chain/finnifty and /option-chain/<stock> (216 F&O stocks). "
                 "Live chains with Greeks to third order and premium charts are the OPTION CHAIN panel in the terminal — type OC in its command line (Desk).")
