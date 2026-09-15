@@ -186,6 +186,7 @@ INTENTS = [
     (("global", "world", "s&p", "spx", "nasdaq", "dow", "dax", "nikkei", "dxy", "crude", "us10y", "hang seng", "ftse"), "world"),
     (("plan", "price", "pricing", "cost", "subscri", "desk", "pro desk", "how much", "pay", "upi", "cashfree", "refund", "gst"), "plans"),
     (("login", "log in", "sign in", "signin", "sign up", "signup", "account", "otp", "password", "magic link", "register"), "login"),
+    (("expected move", "realised", "realized", "implied move", "1 sigma", "one sigma", "how much will nifty move"), "move"),
     (("risk board", "risk", "greeks board", "my limits", "hedge", "margin"), "risk"),
     (("oiscan", "oi scan", "build-up", "buildup", "build up", "screener", "short covering", "long unwinding", "oi change"), "oiscan"),
     (("option chain", "chain", "oi ", "open interest", "pcr", "max pain", "put call"), "chain"),
@@ -235,6 +236,8 @@ def answer_local(question: str, ctx: dict) -> str:
     if intent == "pine":
         return ("XAU Sovereign buyers get the TradingView Pine Script: open /xau-sovereign/app and press PINE SCRIPT ↓. In TradingView: Pine Editor → select all → paste → Add to chart; alerts under Alerts → Condition → XAU Sovereign. "
                 "Not a buyer yet? It's ₹8,000 once at /xau-sovereign/buy.")
+    if intent == "move":
+        return ("The MOVE panel in the terminal shows the expected day and week move from ATM IV, what the straddle charges to expiry, and today's realised range and move against them, with the 1σ band on the day's path. Type MOVE in the terminal command line (Desk). The daily brief at /brief carries the expected move each morning too.")
     if intent == "risk":
         return ("The RISK panel in the terminal is the whole-book risk board: ₹ Greeks per underlying and expiry, a spot × IV shock grid, payoff at expiry, a hedge-to-flat suggestion, broker margin, and your own limits with breach flags. Type RISK in the terminal command line (Desk). It reads paper, ALGO and connected-broker positions.")
     if intent == "oiscan":

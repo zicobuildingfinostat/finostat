@@ -28,6 +28,33 @@ log = logging.getLogger("finostat.alerts")
 # feed currently quotes, so widening the universe (F&O stocks, all of NSE) needs
 # no change here.
 FIXED_METRICS = {"straddle", "bfly", "net"}
+# Extra families answered by app-registered providers (kind -> fn(metric, strike, user_id) -> float|None):
+#   book:<delta|gamma|vega|theta|daypnl>   the user's own book, ₹ terms (RISK board)
+#   oi:<U>:<CE|PE> @strike / oichg:<U>:<CE|PE> @strike   open interest now / change over 15 min (OISCAN)
+#   pcr:<U>   put-call ratio     gexflip:<U>   dealer gamma flip level     xau:<1d|4h|1h>   XAU Sovereign score −1..+1
+EXTRA_KINDS = ("book", "oi", "oichg", "pcr", "gexflip", "xau")
+BOOK_KEYS = ("delta", "gamma", "vega", "theta", "daypnl")
+OI_UNDERLYINGS = ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX")
+XAU_TFS = ("1d", "4h", "1h")
+
+
+def parse_extra(metric: str):
+    """'kind:rest' -> (kind, parts) if it is a well-formed extra metric, else None."""
+    if not isinstance(metric, str) or ":" not in metric:
+        return None
+    kind, rest = metric.split(":", 1)
+    if kind not in EXTRA_KINDS:
+        return None
+    parts = rest.split(":")
+    if kind == "book" and parts == [parts[0]] and parts[0] in BOOK_KEYS:
+        return kind, parts
+    if kind in ("oi", "oichg") and len(parts) == 2 and parts[0] in OI_UNDERLYINGS and parts[1] in ("CE", "PE"):
+        return kind, parts
+    if kind in ("pcr", "gexflip") and len(parts) == 1 and parts[0] in OI_UNDERLYINGS:
+        return kind, parts
+    if kind == "xau" and len(parts) == 1 and parts[0] in XAU_TFS:
+        return kind, parts
+    return None
 DEFAULT_SYMBOLS = {"NIFTY 50", "BANKNIFTY", "SENSEX", "FINNIFTY", "INDIA VIX"}
 STRIKE_METRICS = {"bfly", "net"}
 CMPS = {">=", "<="}
@@ -64,6 +91,21 @@ def metric_label(metric: str, strike) -> str:
         return metric[5:] + " spot"
     if metric == "straddle":
         return "ATM straddle"
+    ex = parse_extra(metric)
+    if ex:
+        kind, parts = ex
+        if kind == "book":
+            return {"delta": "Book net Δ ₹/1%", "gamma": "Book Γ ₹/1%", "vega": "Book vega ₹/pt", "theta": "Book theta ₹/day", "daypnl": "Book day P&L"}[parts[0]]
+        if kind == "oi":
+            return f"{parts[0]} {strike} {parts[1]} OI"
+        if kind == "oichg":
+            return f"{parts[0]} {strike} {parts[1]} ΔOI 15m"
+        if kind == "pcr":
+            return f"{parts[0]} PCR"
+        if kind == "gexflip":
+            return f"{parts[0]} gamma flip"
+        if kind == "xau":
+            return f"XAU Sovereign {parts[0].upper()} score"
     return f"{metric.upper()} {strike}"
 
 
@@ -94,10 +136,11 @@ def validate(payload: dict, symbols=None) -> tuple[dict | None, str | None]:
     if metric.startswith("spot:"):
         if metric[5:] not in (symbols if symbols is not None else DEFAULT_SYMBOLS):
             return None, "unknown symbol"
-    elif metric not in FIXED_METRICS:
+    elif metric not in FIXED_METRICS and parse_extra(metric) is None:
         return None, "unknown metric"
     strike = payload.get("strike")
-    if metric in STRIKE_METRICS:
+    ex = parse_extra(metric)
+    if metric in STRIKE_METRICS or (ex and ex[0] in ("oi", "oichg")):
         try:
             strike = int(strike)
         except (TypeError, ValueError):
@@ -128,6 +171,7 @@ class AlertEngine:
         self._user_email = user_email
         self._lock = threading.Lock()
         self._latest: queue.Queue = queue.Queue(maxsize=1)
+        self.providers: dict = {}          # kind -> fn(metric, strike, user_id) -> float | None
         self._stop = threading.Event()
         self._fired_total = 0
         self._evaluations = 0
@@ -218,7 +262,18 @@ class AlertEngine:
             else:
                 armed = c.execute("SELECT * FROM alerts WHERE state='armed' AND id=?", (only_id,)).fetchall()
             for a in armed:
-                cur = metric_value(snap, a["metric"], a["strike"])
+                ex = parse_extra(a["metric"])
+                if ex:
+                    fn = self.providers.get(ex[0])
+                    if fn is None:
+                        continue
+                    try:
+                        cur = fn(a["metric"], a["strike"], a["user_id"])
+                    except Exception:                                   # noqa: BLE001 - one bad provider must not stop the sweep
+                        log.exception("alert provider %s failed", ex[0])
+                        cur = None
+                else:
+                    cur = metric_value(snap, a["metric"], a["strike"])
                 if cur is None:
                     continue
                 hit = cur >= a["value"] if a["cmp"] == ">=" else cur <= a["value"]

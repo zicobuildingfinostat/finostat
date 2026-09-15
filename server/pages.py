@@ -410,6 +410,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div><code>W TCS</code> <span>add to the watchlist (<code>UNW TCS</code> removes)</span></div>
 <h4>Flows</h4>
 <div><code>RISK</code><span>whole-book risk board: ₹ Greeks per underlying and expiry, spot × IV shocks, hedge-to-flat, margin, your limits</span></div>
+<div><code>MOVE · EM</code><span>expected move (IV and straddle) against today's realised range and move, with the 1σ band on the day's path</span></div>
 <div><code>OISCAN · OI</code><span>OI build-up screener: long/short build-up, covering and unwinding per strike over 5/15/60 min or the day; F&amp;O stocks on a day basis</span></div>
 <div><code>FLOWS · FII</code><span>FII/DII cash flows and participant-wise index futures &amp; options positioning from NSE</span></div>
 <h4>Algo</h4>
@@ -776,7 +777,24 @@ var METRICS=[
   {id:'straddle', label:'ATM straddle', strike:false},
   {id:'bfly', label:'BFLY @ strike', strike:true},
   {id:'net', label:'NET @ strike', strike:true},
-  {id:'stock', label:'Stock spot (search)', strike:false, stock:true}
+  {id:'stock', label:'Stock spot (search)', strike:false, stock:true},
+  {id:'book:delta', label:'My book · net Δ ₹/1%', strike:false, server:true},
+  {id:'book:vega', label:'My book · vega ₹/pt', strike:false, server:true},
+  {id:'book:theta', label:'My book · theta ₹/day', strike:false, server:true},
+  {id:'book:daypnl', label:'My book · day P&L ₹', strike:false, server:true},
+  {id:'oi:NIFTY 50:CE', label:'NIFTY CE OI @ strike', strike:true, server:true},
+  {id:'oi:NIFTY 50:PE', label:'NIFTY PE OI @ strike', strike:true, server:true},
+  {id:'oichg:NIFTY 50:CE', label:'NIFTY CE ΔOI 15m @ strike', strike:true, server:true},
+  {id:'oichg:NIFTY 50:PE', label:'NIFTY PE ΔOI 15m @ strike', strike:true, server:true},
+  {id:'oi:BANKNIFTY:CE', label:'BANKNIFTY CE OI @ strike', strike:true, server:true},
+  {id:'oi:BANKNIFTY:PE', label:'BANKNIFTY PE OI @ strike', strike:true, server:true},
+  {id:'pcr:NIFTY 50', label:'NIFTY PCR', strike:false, server:true},
+  {id:'pcr:BANKNIFTY', label:'BANKNIFTY PCR', strike:false, server:true},
+  {id:'gexflip:NIFTY 50', label:'NIFTY gamma flip level', strike:false, server:true},
+  {id:'gexflip:BANKNIFTY', label:'BANKNIFTY gamma flip level', strike:false, server:true},
+  {id:'xau:1d', label:'XAU Sovereign 1D score (−1…+1)', strike:false, server:true},
+  {id:'xau:4h', label:'XAU Sovereign 4H score (−1…+1)', strike:false, server:true},
+  {id:'xau:1h', label:'XAU Sovereign 1H score (−1…+1)', strike:false, server:true}
 ];
 alMetric.innerHTML=METRICS.map(function(m){ return '<option value="'+m.id+'">'+m.label+'</option>'; }).join('');
 var alStockWrap=document.getElementById('al-stock-wrap');
@@ -847,6 +865,7 @@ alForm.addEventListener('submit',function(e){
     if(!hit){ document.getElementById('al-stock-q').focus(); return; }
     metricId='spot:'+hit.key;
   }
+  if(m.server&&!serverAlerts){ logAlert('This alert type runs on the server engine — sign in with a Desk plan.'); return; }
   if(serverAlerts){
     srvPost('/api/alerts',{metric:metricId,strike:m.strike?Number(alStrike.value):null,cmp:alCmp.value,value:v,email:alEmail.checked})
       .then(function(r){ if(r&&r.error){ logAlert('Not armed: '+r.error); } alValue.value=''; if(m.stock) alStockSearch.clear(); loadServerAlerts(); pollStocks(); });
@@ -956,11 +975,11 @@ function searchWidget(input, list, onPick){
 }
 
 /* ---------- account, prefs, watchlist, layout ---------- */
-var PANELS=[['sheet','BFLY sheet'],['chain','Option chain'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet'],['surf','IV surface'],['skew','Vol skew'],['curv','Implied distribution'],['gex','Gamma exposure'],['rply','Replay'],['bkts','Backtest'],['algo','Algo strategies'],['flows','FII/DII flows'],['risk','Risk board'],['oiscan','OI screener']];
+var PANELS=[['sheet','BFLY sheet'],['chain','Option chain'],['events','Events'],['book','Positions book'],['cas','Closing auction'],['chart','Chart'],['straddle','Straddle chart'],['alerts','Alerts'],['watch','Watchlist'],['builder','Strategy builder'],['broker','Broker'],['n50','Nifty 50'],['wire','News wire'],['mini','Mini sheet'],['surf','IV surface'],['skew','Vol skew'],['curv','Implied distribution'],['gex','Gamma exposure'],['rply','Replay'],['bkts','Backtest'],['algo','Algo strategies'],['flows','FII/DII flows'],['risk','Risk board'],['oiscan','OI screener'],['move','Expected move']];
 /* ---------- command line ---------- */
 var tcmdIn=document.getElementById('tcmd-in'), tcmdMsg=document.getElementById('tcmd-msg'), helpEl=document.getElementById('help');
 var PRESET_ALIAS={IC:'iron-condor',CONDOR:'iron-condor',IF:'iron-fly',IRONFLY:'iron-fly',SS:'short-straddle',STRADDLE:'short-straddle',LS:'long-straddle',SG:'short-strangle',STRANGLE:'short-strangle',LSG:'long-strangle',BCS:'bull-call-spread',BPS:'bear-put-spread',FLY:'butterfly',BFLY:'butterfly',BUTTERFLY:'butterfly',RATIO:'ratio-spread'};
-var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',OC:'chain',OPTCHAIN:'chain',OPTIONCHAIN:'chain',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini',SURF:'surf',SURFACE:'surf',IVS:'surf',SKEW:'skew',SMILE:'skew',MONEY:'skew',MONEYNESS:'skew',CURV:'curv',CURVE:'curv',BELL:'curv',DIST:'curv',GEX:'gex',GAMMA:'gex',RPLY:'rply',REPLAY:'rply',BKTS:'bkts',BACKTEST:'bkts',BT:'bkts',ALGO:'algo',ALGOS:'algo',BOT:'algo',FLOWS:'flows',FLOW:'flows',FII:'flows',DII:'flows',RISK:'risk',RSK:'risk',LIMITS:'risk',OISCAN:'oiscan',OI:'oiscan',BUILDUP:'oiscan',SCAN:'oiscan',SCREENER:'oiscan'};
+var PANEL_ALIAS={EVENTS:'events',EVENT:'events',CAL:'events',CALENDAR:'events',ECO:'events',BOOK:'book',CAS:'cas',CHART:'chart',CHRT:'chart',SHEET:'sheet',BFLY:'sheet',OC:'chain',OPTCHAIN:'chain',OPTIONCHAIN:'chain',STRADDLE:'straddle',ALERTS:'alerts',ALERT:'alerts',ALRT:'alerts',WATCH:'watch',WL:'watch',BUILDER:'builder',BLDR:'builder',STRAT:'builder',BROKER:'broker',BRKR:'broker',N50:'n50',NIFTY50:'n50',WIRE:'wire',NEWS:'wire',MINI:'mini',SURF:'surf',SURFACE:'surf',IVS:'surf',SKEW:'skew',SMILE:'skew',MONEY:'skew',MONEYNESS:'skew',CURV:'curv',CURVE:'curv',BELL:'curv',DIST:'curv',GEX:'gex',GAMMA:'gex',RPLY:'rply',REPLAY:'rply',BKTS:'bkts',BACKTEST:'bkts',BT:'bkts',ALGO:'algo',ALGOS:'algo',BOT:'algo',FLOWS:'flows',FLOW:'flows',FII:'flows',DII:'flows',RISK:'risk',RSK:'risk',LIMITS:'risk',OISCAN:'oiscan',OI:'oiscan',BUILDUP:'oiscan',SCAN:'oiscan',SCREENER:'oiscan',MOVE:'move',EM:'move',EXPECTED:'move'};
 var INDEX_ALIAS={NIFTY:'NIFTY 50','NIFTY50':'NIFTY 50','NIFTY 50':'NIFTY 50',BN:'BANKNIFTY',BANKNIFTY:'BANKNIFTY',NIFTYBANK:'BANKNIFTY',SENSEX:'SENSEX',SX:'SENSEX',FIN:'FINNIFTY',FINNIFTY:'FINNIFTY',VIX:'INDIA VIX',INDIAVIX:'INDIA VIX'};
 function say(msg,kind){ tcmdMsg.textContent=msg; tcmdMsg.className='tcmd-msg '+(kind||''); tcmdMsg.hidden=false; clearTimeout(say.t); say.t=setTimeout(function(){ tcmdMsg.hidden=true; },3500); }
 function goPanel(id){ var el=document.getElementById('p-'+id); if(!el) return false; if(el.hidden){ var hide=(prefs.layout=prefs.layout||{hide:[]}).hide=prefs.layout.hide||[]; var i=hide.indexOf(id); if(i>=0) hide.splice(i,1); applyLayout(); savePrefs(); } el.scrollIntoView({behavior:'smooth',block:'start'}); return true; }

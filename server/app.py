@@ -56,6 +56,7 @@ import pages_global
 import sovereign_page
 import vega
 import risk
+import move
 import oiscan
 import vega_widget
 import algo
@@ -247,6 +248,71 @@ def _fo_stock_keys() -> list[tuple[str, str]]:
 
 OISCAN = oiscan.Sampler(UREST, AUTH.path, WATCHDOG.in_session, stock_keys_fn=_fo_stock_keys, step_fn=lambda u: upstox_rest.STEP.get(u))
 OISCAN.start()
+
+_PROV_CACHE: dict = {}
+
+
+def _cached(key: str, ttl: float, fn):
+    hit = _PROV_CACHE.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    val = fn()
+    _PROV_CACHE[key] = (time.time(), val)
+    return val
+
+
+def _prov_book(metric: str, strike, user_id: int):
+    key = metric.split(":", 1)[1]
+    def calc():
+        user = AUTH.user_by_id(int(user_id))
+        if user is None:
+            return None
+        bp = _book_payload(user)
+        return risk.board(bp["positions"], FEED.snapshot().get("quotes") or [])
+    b = _cached(f"book:{user_id}", 30.0, calc)
+    if not b:
+        return None
+    return b["day_pnl"] if key == "daypnl" else b["inr"].get({"delta": "delta_inr_1pct", "gamma": "gamma_inr_1pct", "vega": "vega", "theta": "theta"}[key])
+
+
+def _prov_oi(metric: str, strike, user_id: int):
+    kind, u, side = metric.split(":")
+    if kind == "oi":
+        hist = OISCAN.samples.get(u)
+        if not hist:
+            return None
+        v = hist[-1]["data"].get(int(strike))
+        return None if v is None else v[0 if side == "CE" else 2]
+    view = _cached(f"oiview:{u}", 20.0, lambda: OISCAN.view(u, "15"))
+    if "rows" not in view:
+        return None
+    return next((r["d_oi"] for r in view["rows"] if r["strike"] == int(strike) and r["side"] == side), None)
+
+
+def _prov_pcr(metric: str, strike, user_id: int):
+    u = metric.split(":", 1)[1]
+    view = _cached(f"oiview:{u}", 20.0, lambda: OISCAN.view(u, "15"))
+    return view.get("pcr") if "rows" in view else None
+
+
+def _prov_gexflip(metric: str, strike, user_id: int):
+    u = metric.split(":", 1)[1]
+    def calc():
+        ch = _analytics_chain(u)
+        if "rows" not in ch:
+            return None
+        g = analytics.gex(ch["rows"], ch["spot"], ch.get("lot") or 1, ch["t"])
+        return g.get("flip") if g else None
+    return _cached(f"gexflip:{u}", 60.0, calc)
+
+
+def _prov_xau(metric: str, strike, user_id: int):
+    tf = metric.split(":", 1)[1]
+    v = GOLD.view(tf, 60)
+    return v.get("score") if "error" not in v else None
+
+
+ALERTS.providers.update({"book": _prov_book, "oi": _prov_oi, "oichg": _prov_oi, "pcr": _prov_pcr, "gexflip": _prov_gexflip, "xau": _prov_xau})
 VEGA = vega.Vega(AUTH.path)
 _DCX_CACHE: dict = {}            # user_id -> (ts, payload)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
@@ -442,7 +508,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move"}
 
 
 def _gate(user, ukey: str):
@@ -1088,6 +1154,32 @@ class Handler(BaseHTTPRequestHandler):
                 limits = AUTH.get_prefs(user["id"]).get("risk_limits")
                 out = risk.board(bp["positions"], FEED.snapshot().get("quotes") or [], funds=funds, limits=limits)
                 out["broker"] = client is not None
+                return self._json(out)
+            if route == "/api/move":
+                qs = parse_qs(parsed.query)
+                u = qs.get("u", ["NIFTY 50"])[0]
+                ch = _analytics_chain(u)
+                if "error" in ch:
+                    return self._json(ch, 503)
+                spot = float(ch["spot"])
+                atm = min(ch["rows"], key=lambda r: abs(r["strike"] - spot))
+                ce, pe = atm.get("ce") or {}, atm.get("pe") or {}
+                straddle = (ce.get("ltp") or 0) + (pe.get("ltp") or 0) if ce.get("ltp") is not None and pe.get("ltp") is not None else None
+                ivs = [x for x in (ce.get("iv"), pe.get("iv")) if x]
+                iv = sum(ivs) / len(ivs) if ivs else None
+                prev_close = None
+                for q in FEED.snapshot().get("quotes") or []:
+                    if q.get("symbol") == u and q.get("price") and q.get("change") is not None and q["change"] > -100:
+                        prev_close = q["price"] / (1 + q["change"] / 100.0)
+                cands = []
+                key = candles.resolve_key(u, getattr(FEED, "_meta", None))
+                if key:
+                    try:
+                        cands = CANDLES.series(key, "5m").get("candles") or []
+                    except upstox_rest.RestError as exc:
+                        log.info("move: candles unavailable for %s: %s", u, exc)
+                out = move.build(u, spot, iv, straddle, ch["t"], prev_close, cands, expiry=ch.get("expiry"))
+                out.update({"atm": atm["strike"], "live": ch.get("live"), "source": ch.get("source")})
                 return self._json(out)
             if route == "/api/oiscan":
                 qs = parse_qs(parsed.query)
