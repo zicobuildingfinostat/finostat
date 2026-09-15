@@ -680,7 +680,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move", "/api/strdhist", "/api/heat"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move", "/api/strdhist", "/api/heat", "/api/global/heat"}
 
 
 def _gate(user, ukey: str):
@@ -1656,8 +1656,20 @@ class Handler(BaseHTTPRequestHandler):
                     limit = max(50, min(800, int(qs.get("n", ["400"])[0])))
                 except ValueError:
                     limit = 400
-                out = heat.rows(FEED.snapshot().get("universe") or {}, qs.get("u", ["fo"])[0], qs.get("mode", ["all"])[0], limit)
+                out = heat.rows(FEED.snapshot().get("universe") or {}, qs.get("u", ["fo"])[0], qs.get("mode", ["top"])[0], limit)
                 out["live"] = bool(FEED.snapshot().get("live"))
+                out["open"] = WATCHDOG.in_session()
+                return self._json(out)
+            if route == "/api/global/heat":
+                qs = parse_qs(parsed.query)
+                mode = qs.get("mode", ["top"])[0]
+                try:
+                    if qs.get("m", ["crypto"])[0] == "world":
+                        out = heat.from_cnbc(CRYPTO.world_quotes(), crypto.WORLD, mode)
+                    else:
+                        out = heat.from_markets(CRYPTO.crypto_markets(), mode)
+                except Exception as exc:                                    # noqa: BLE001
+                    return self._json({"error": "source unavailable: " + str(exc)[:80]}, 503)
                 return self._json(out)
             if route == "/api/symbols":
                 qs = parse_qs(parsed.query)

@@ -27,6 +27,26 @@ GLOBAL = [(".SPX", "S&P 500"), (".IXIC", "NASDAQ"), (".DJI", "DOW"), (".GDAXI", 
           (".FTSE", "FTSE 100"), (".DXY", "DXY"), ("@GC.1", "GOLD"), ("@CL.1", "CRUDE"), ("US10Y", "US 10Y")]
 CNBC_URL = ("https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=" + urllib.parse.quote("|".join(s for s, _ in GLOBAL), safe="")
             + "&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json")
+WORLD = [("AAPL", "Apple"), ("MSFT", "Microsoft"), ("NVDA", "NVIDIA"), ("AMZN", "Amazon"), ("GOOGL", "Alphabet"), ("META", "Meta"), ("TSLA", "Tesla"), ("BRK.B", "Berkshire"),
+         ("AVGO", "Broadcom"), ("LLY", "Eli Lilly"), ("JPM", "JPMorgan"), ("V", "Visa"), ("MA", "Mastercard"), ("UNH", "UnitedHealth"), ("XOM", "Exxon"), ("COST", "Costco"), ("WMT", "Walmart"),
+         ("PG", "P&G"), ("JNJ", "J&J"), ("HD", "Home Depot"), ("ABBV", "AbbVie"), ("NFLX", "Netflix"), ("BAC", "Bank of America"), ("KO", "Coca-Cola"), ("CRM", "Salesforce"), ("ORCL", "Oracle"),
+         ("AMD", "AMD"), ("CVX", "Chevron"), ("MRK", "Merck"), ("PEP", "PepsiCo"), ("ADBE", "Adobe"), ("CSCO", "Cisco"), ("TMO", "Thermo Fisher"), ("MCD", "McDonald's"), ("ACN", "Accenture"),
+         ("INTC", "Intel"), ("IBM", "IBM"), ("GS", "Goldman Sachs"), ("MS", "Morgan Stanley"), ("DIS", "Disney"), ("NKE", "Nike"), ("BA", "Boeing"), ("CAT", "Caterpillar"), ("PFE", "Pfizer"),
+         ("UBER", "Uber"), ("PLTR", "Palantir"), ("COIN", "Coinbase"), ("MSTR", "Strategy"), ("QCOM", "Qualcomm"), ("TXN", "Texas Instruments"), ("MU", "Micron"), ("ARM", "Arm"), ("SMCI", "Supermicro"),
+         ("SNOW", "Snowflake"), ("SHOP", "Shopify"), ("PYPL", "PayPal"), ("SQ", "Block"), ("ABNB", "Airbnb"), ("GE", "GE Aerospace"), ("RTX", "RTX"), ("LMT", "Lockheed"), ("HON", "Honeywell"),
+         ("SBUX", "Starbucks"), ("T", "AT&T"), ("VZ", "Verizon"), ("C", "Citigroup"), ("WFC", "Wells Fargo"), ("BLK", "BlackRock"), ("SCHW", "Schwab"), ("AXP", "American Express"),
+         ("TSM", "TSMC"), ("ASML", "ASML"), ("BABA", "Alibaba"), ("PDD", "PDD"), ("JD", "JD.com"), ("NIO", "NIO"), ("NVO", "Novo Nordisk"), ("AZN", "AstraZeneca"), ("SAP", "SAP"),
+         ("SHEL", "Shell"), ("BP", "BP"), ("TTE", "TotalEnergies"), ("HSBC", "HSBC"), ("UL", "Unilever"), ("RIO", "Rio Tinto"), ("BHP", "BHP"), ("TM", "Toyota"), ("SONY", "Sony"),
+         ("MUFG", "MUFG"), ("SE", "Sea"), ("MELI", "MercadoLibre"), ("SPOT", "Spotify"), ("INFY", "Infosys ADR"), ("WIT", "Wipro ADR"), ("HDB", "HDFC Bank ADR"), ("IBN", "ICICI Bank ADR"),
+         ("RDY", "Dr. Reddy's ADR"), ("MMYT", "MakeMyTrip"), ("NVS", "Novartis"), ("LVMUY", "LVMH")]
+GECKO_MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h"
+
+
+def cnbc_url(codes) -> str:
+    return ("https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=" + urllib.parse.quote("|".join(codes), safe="")
+            + "&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json")
+
+
 KRAKEN_URL = "https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD,SOLUSD"
 GECKO_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd,inr&include_24hr_change=true"
 WINDOW = 15
@@ -197,6 +217,21 @@ class Crypto:
             return [{"symbol": label, "code": code, "price": _num((by.get(code) or {}).get("last")), "change": _num((by.get(code) or {}).get("change_pct")),
                      "status": (by.get(code) or {}).get("curmktstatus")} for code, label in GLOBAL]
         return self.c.get("tape:global", 60.0, fn)
+
+    def crypto_markets(self) -> list[dict]:
+        """Top 100 coins by market cap with 24h change (CoinGecko, keyless)."""
+        return self.c.get("heat:crypto", 30.0, lambda: _get(GECKO_MARKETS_URL))
+
+    def world_quotes(self) -> list[dict]:
+        """CNBC quotes for the WORLD universe, fetched in batches of 40."""
+        def fn():
+            codes = [c for c, _ in WORLD]
+            out = []
+            for i in range(0, len(codes), 40):
+                d = _get(cnbc_url(codes[i:i + 40]))
+                out.extend(((d.get("FormattedQuoteResult") or {}).get("FormattedQuote")) or [])
+            return out
+        return self.c.get("heat:world", 30.0, fn)
 
     def tape(self) -> dict:
         out = {"crypto": [], "global": [], "vol": {}}

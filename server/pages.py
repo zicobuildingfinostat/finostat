@@ -411,7 +411,7 @@ td.flash-down{background:rgba(255,92,108,.2);color:var(--down)}
 <div><code>W TCS</code> <span>add to the watchlist (<code>UNW TCS</code> removes)</span></div>
 <h4>Flows</h4>
 <div><code>RISK</code><span>whole-book risk board: ₹ Greeks per underlying and expiry, spot × IV shocks, hedge-to-flat, margin, your limits</span></div>
-<div><code>HEAT · MAP</code><span>market heatmap: every NSE stock tiled by today's move — NIFTY 50, F&amp;O or all NSE, gainers/losers, breadth; click a tile to chart it</span></div>
+<div><code>HEAT · MAP</code><span>market heatmap, live through the session: 20 top gainers + 20 top losers by default — NIFTY 50, F&amp;O or all NSE, gainers/losers, breadth; click a tile to chart it</span></div>
 <div><code>STRUCT · SCALP · SELLER</code><span>the VIP engines on NIFTY, BANKNIFTY, FINNIFTY, SENSEX or any F&amp;O stock: market structure (BOS/CHoCH, order blocks, FVGs, liquidity), the fast-trend scalper (EMA/VWAP/Supertrend), and the option-selling engine (regime, side, strikes) — with volume footprint, delta/CVD and profile</span></div>
 <div><code>IVP · IVR</code><span>today's ATM straddle and IV against the same clock time on the last 20 cycles at this DTE, with percentiles and the 1-year VIX rank</span></div>
 <div><code>MOVE · EM</code><span>expected move (IV and straddle) against today's realised range and move, with the 1σ band on the day's path</span></div>

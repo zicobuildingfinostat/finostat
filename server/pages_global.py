@@ -107,6 +107,26 @@ BODY = r"""
     <div class="g-foot">DVOL is Deribit's 30-day implied volatility index (like VIX for BTC/ETH). Funding is the perpetual's current 8-hour rate: positive means longs pay shorts. Spot in ₹ via CoinGecko.</div>
   </section>
 
+  <section class="panel a-wide an" id="p-cheat" aria-label="Crypto heatmap">
+    <div class="panel-hd"><span class="k">HEAT</span><span class="s" id="ch-title">CRYPTO HEATMAP · TOP 100 BY MARKET CAP · 24H</span><span class="r"><span class="an-state" id="ch-state">—</span></span></div>
+    <div class="oc-top"><span class="seg" id="ch-mode"><button type="button" data-m="top" class="on">TOP 20 · 20</button><button type="button" data-m="all">ALL 100</button><button type="button" data-m="gainers">GAINERS</button><button type="button" data-m="losers">LOSERS</button></span>
+      <label class="an-lbl">FIND <input class="an-in" id="ch-q" placeholder="coin" maxlength="12" style="width:90px;text-transform:uppercase" aria-label="Filter coins"></label>
+      <span class="an-note" id="ch-note">click a tile to chart it on TradingView</span></div>
+    <div class="an-kpi" id="ch-kpi"></div>
+    <div class="ht-map" id="ch-map"></div>
+    <div class="g-foot">Crypto never closes: 24-hour change in USD for the top 100 coins by market cap (stablecoins and wrapped assets dropped), via CoinGecko, refreshed every 30 seconds. Default view: the 20 biggest gainers and 20 biggest losers. Colour and tile size scale with the move; click a tile to load it on the chart above.</div>
+  </section>
+
+  <section class="panel a-wide an" id="p-wheat" aria-label="World stocks heatmap">
+    <div class="panel-hd"><span class="k">HEAT</span><span class="s" id="wh-title">WORLD STOCKS HEATMAP · 100 GLOBAL LEADERS · TODAY</span><span class="r"><span class="an-state" id="wh-state">—</span></span></div>
+    <div class="oc-top"><span class="seg" id="wh-mode"><button type="button" data-m="top" class="on">TOP 20 · 20</button><button type="button" data-m="all">ALL</button><button type="button" data-m="gainers">GAINERS</button><button type="button" data-m="losers">LOSERS</button></span>
+      <label class="an-lbl">FIND <input class="an-in" id="wh-q" placeholder="ticker" maxlength="12" style="width:90px;text-transform:uppercase" aria-label="Filter tickers"></label>
+      <span class="an-note" id="wh-note">click a tile to chart it on TradingView</span></div>
+    <div class="an-kpi" id="wh-kpi"></div>
+    <div class="ht-map" id="wh-map"></div>
+    <div class="g-foot">100 global leaders on US exchanges — the megacaps, Dow and Nasdaq names, and the ADRs of TSMC, ASML, Alibaba, Novo, Toyota, Sony, Shell, HSBC, Infosys, HDFC Bank, ICICI and more — by today's regular-session change, live through the US session (19:00–01:30 IST) and holding the close otherwise. Refreshes every 30 seconds. Default view: the 20 biggest gainers and 20 biggest losers.</div>
+  </section>
+
   <section class="panel a-wide" id="p-gold" aria-label="Gold signal">
     <div class="panel-hd"><span class="k">XAU</span><span class="s" id="gd-title">XAU SOVEREIGN · XAU/USD · 1D</span><span class="r"><a id="gd-pine" href="/xau-sovereign/pine" hidden style="color:var(--gold);border:1px solid var(--gold);padding:1px 7px;font-size:9.5px;letter-spacing:.1em" title="Download the TradingView Pine Script of this indicator">PINE SCRIPT ↓</a><span id="gd-state">—</span></span></div>
     <div class="oc-top"><span class="seg" id="gd-tf"><button type="button" data-tf="1h">1H</button><button type="button" data-tf="4h">4H</button><button type="button" data-tf="1d" class="on">1D</button></span>
@@ -215,6 +235,7 @@ JS_MAIN = r"""
 
   /* TradingView */
   var TV=__TV_MAP__, tvSym='BINANCE:BTCUSDT', tvWidget=null;
+  function tvGo(sym){ tvSym=sym; $('tv-sym').textContent=sym; Array.prototype.forEach.call($('tv-top').querySelectorAll('button'),function(x){ x.classList.remove('on'); }); mountTV(); var p=$('p-tv'); if(p) p.scrollIntoView({behavior:'smooth',block:'start'}); }
   function mountTV(){ if(locked||!window.TradingView){ return; } $('tv').innerHTML=''; try{ tvWidget=new TradingView.widget({container_id:'tv',autosize:true,symbol:tvSym,interval:'15',timezone:'Asia/Kolkata',theme:'dark',style:'1',locale:'en',toolbar_bg:'#0c0626',enable_publishing:false,hide_side_toolbar:false,allow_symbol_change:true,withdateranges:true,details:false,studies:['Volume@tv-basicstudies'],overrides:{'paneProperties.background':'#0c0626','paneProperties.backgroundType':'solid'}}); $('tv-state').textContent='TradingView'; }catch(e){ $('tv-state').textContent='chart blocked'; } }
   if(!locked){ var s=document.createElement('script'); s.src='https://s3.tradingview.com/tv.js'; s.async=true; s.onload=mountTV; s.onerror=function(){ $('tv-state').textContent='TradingView unreachable'; $('tv').innerHTML='<div style="padding:20px;color:var(--faint)">TradingView could not load (ad-blocker or network). The chain, builder and analytics below do not depend on it.</div>'; }; document.head.appendChild(s); }
   $('tv-top').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; Array.prototype.forEach.call($('tv-top').querySelectorAll('button'),function(x){ x.classList.toggle('on',x===b); }); tvSym=TV[b.getAttribute('data-tv')]||tvSym; $('tv-sym').textContent=tvSym; mountTV(); });
@@ -303,7 +324,26 @@ JS_DCX = r"""
   if(!locked){ dcxLoad(); setInterval(function(){ if(visible('p-coindcx')&&!$('dcx-connected').hidden) dcxLoad(); },30000); }
 """
 
-JS = JS_HELPERS + JS_MAIN + JS_GOLD + JS_DCX + "\n})();\n"
+JS_HEAT = r"""
+  /* heatmaps: crypto + world */
+  function kpi(el,items){ el.innerHTML=items.map(function(k){ return '<div><small>'+k[0]+'</small><b'+(k[2]?' class="'+k[2]+'"':'')+'>'+k[1]+'</b></div>'; }).join(''); }
+  function state(id,txt,cls){ var e=$(id); if(!e) return; e.textContent=txt; e.className='an-state'+(cls?' '+cls:''); }
+  function sg(x,d){ if(x==null||isNaN(x)) return '—'; return (x>=0?'+':'−')+nf(Math.abs(x),d); }
+  function heatColor(ch,span){ var a=Math.min(1,Math.abs(ch)/span); if(ch>0.05) return 'rgb('+Math.round(20+8*a)+','+Math.round(70+120*a)+','+Math.round(50+40*a)+')'; if(ch<-0.05) return 'rgb('+Math.round(110+120*a)+','+Math.round(30+20*a)+','+Math.round(40+20*a)+')'; return 'rgb(58,52,88)'; }
+  function heatPanel(p,url,panelId,titleFn,onTile,span){ var st={mode:'top',q:'',data:null}; if(!$(p+'-map')) return; segInit($(p+'-mode'),'data-m',function(m){ st.mode=m; load(); }); $(p+'-q').addEventListener('input',function(e){ st.q=e.target.value.trim().toUpperCase(); draw(); });
+    function load(){ if(locked) return; getJSON(url+'&mode='+st.mode,function(d){ st.data=d; head(d); draw(); },function(e){ state(p+'-state',e,'err'); }); }
+    function head(d){ $(p+'-title').textContent=titleFn(d); var tot=d.adv+d.dec+d.unch||1; var mut='<i style="font-style:normal;font-size:10px;color:var(--muted)"> ';
+      kpi($(p+'-kpi'),[['advances',d.adv+mut+Math.round(100*d.adv/tot)+'%</i>','up'],['declines',d.dec+mut+Math.round(100*d.dec/tot)+'%</i>','down'],['average move',d.avg!=null?sg(d.avg,2)+'%':'—',d.avg>=0?'up':'down'],['top gainer',d.top?d.top.symbol+mut+sg(d.top.change,2)+'%</i>':'—','up'],['top loser',d.bottom?d.bottom.symbol+mut+sg(d.bottom.change,2)+'%</i>':'—','down'],['breadth',d.adv+d.dec?(d.adv>d.dec*1.5?'BROAD UP':d.dec>d.adv*1.5?'BROAD DOWN':'MIXED'):'—',d.adv>d.dec*1.5?'up':d.dec>d.adv*1.5?'down':'m']]); }
+    function draw(){ var d=st.data, el=$(p+'-map'); if(!d) return; if(!d.rows.length){ el.innerHTML='<div style="color:var(--faint);padding:10px">no quotes yet</div>'; return; } var maxAbs=Math.max(0.5,Math.max.apply(null,d.rows.map(function(r){ return Math.abs(r.change); }))); var n=d.rows.length; var base=n>60?84:110;
+      el.innerHTML=d.rows.map(function(r){ var a=Math.abs(r.change)/maxAbs; var w=Math.round(base*(0.7+0.9*a)), h=Math.round(w*0.62); var fs=Math.max(8,Math.min(13,Math.round(w/8))); var dim=st.q&&r.symbol.indexOf(st.q)!==0; return '<div class="ht-t'+(dim?' dim':'')+'" style="width:'+w+'px;height:'+h+'px;background:'+heatColor(r.change,span)+'" data-key="'+r.key+'" data-sym="'+r.symbol+'" title="'+(r.name||r.symbol)+' · $'+nf(r.price,r.price<10?4:2)+' · '+sg(r.change,2)+'%"><b style="font-size:'+fs+'px">'+r.symbol+'</b><i style="font-size:'+Math.max(8,fs-2)+'px">'+sg(r.change,2)+'%</i></div>'; }).join(''); }
+    $(p+'-map').addEventListener('click',function(e){ var t=e.target.closest('.ht-t'); if(!t) return; onTile(t.getAttribute('data-sym'),t.getAttribute('data-key')); $(p+'-note').textContent='charting '+t.getAttribute('data-sym'); });
+    if(!locked){ load(); setInterval(function(){ if(visible(panelId)) load(); },30000); } }
+  var MODES={top:function(d){ return 'TOP '+d.n+' GAINERS · TOP '+d.n+' LOSERS'; },all:function(d){ return 'ALL '+d.universe; },gainers:function(){ return 'ALL GAINERS'; },losers:function(){ return 'ALL LOSERS'; }};
+  heatPanel('ch','/api/global/heat?m=crypto','p-cheat',function(d){ state('ch-state','LIVE 24H · '+d.count+' TILES','ok'); return 'CRYPTO HEATMAP · TOP 100 BY MARKET CAP · '+MODES[d.mode](d); },function(sym){ tvGo('BINANCE:'+sym+'USDT'); },8);
+  heatPanel('wh','/api/global/heat?m=world','p-wheat',function(d){ var s=d.session; state('wh-state',(s==='REG_MKT'?'US SESSION OPEN · LIVE':s==='PRE_MKT'?'US PRE-MARKET · LAST CLOSE':s==='POST_MKT'?'US AFTER HOURS · CLOSE':'US CLOSED · LAST CLOSE')+' · '+d.count+' TILES',s==='REG_MKT'?'ok':''); return 'WORLD STOCKS HEATMAP · 100 GLOBAL LEADERS · '+MODES[d.mode](d); },function(sym){ tvGo(sym); },4);
+"""
+
+JS = JS_HELPERS + JS_MAIN + JS_HEAT + JS_GOLD + JS_DCX + "\n})();\n"
 
 _BUY = [("long-straddle", "Long straddle"), ("long-strangle", "Long strangle"), ("bull-call-spread", "Bull call spread"), ("bear-put-spread", "Bear put spread"), ("butterfly", "Call butterfly")]
 _SELL = [("short-straddle", "Short straddle"), ("short-strangle", "Short strangle"), ("iron-condor", "Iron condor"), ("iron-fly", "Iron fly"), ("ratio-spread", "Call ratio 1×2")]

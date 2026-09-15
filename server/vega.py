@@ -252,7 +252,7 @@ def answer_local(question: str, ctx: dict) -> str:
     if intent == "ivp":
         return ("The IVP panel in the terminal ranks today's ATM straddle and implied vol against the same clock time on the last 20 expiry cycles at the same distance to expiry, and shows the 1-year India VIX rank — the quick answer to whether premium is rich or cheap right now. Type IVP in the terminal command line (Desk).")
     if intent == "heat":
-        return ("The HEAT panel in the terminal is the market heatmap: every NSE stock tiled and coloured by today's move, switchable between NIFTY 50, F&O stocks and all NSE, with gainers, losers, advance/decline breadth and click-to-chart. Type HEAT in the terminal command line (Desk).")
+        return ("The HEAT panel in the terminal is the market heatmap: every NSE stock tiled and coloured by today's move, switchable between NIFTY 50, F&O stocks and all NSE, defaulting to the 20 top gainers and 20 top losers, live every 10 seconds through the session, with breadth and click-to-chart. Type HEAT in the terminal command line. The Global terminal has two more: a crypto heatmap (top 100 coins, 24h) and a world-stocks heatmap (100 global leaders on US exchanges). All three are part of Desk.")
     if intent == "move":
         return ("The MOVE panel in the terminal shows the expected day and week move from ATM IV, what the straddle charges to expiry, and today's realised range and move against them, with the 1σ band on the day's path. Type MOVE in the terminal command line (Desk). The daily brief at /brief carries the expected move each morning too.")
     if intent == "risk":
