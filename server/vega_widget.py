@@ -28,11 +28,11 @@ SNIPPET = r"""
 </style>
 <button type="button" id="vega-btn" aria-controls="vega" aria-expanded="false" title="Ask Vega — Finostat's trading co-pilot"><i>V</i>Ask Vega</button>
 <section id="vega" hidden role="dialog" aria-label="Vega, Finostat's trading co-pilot">
-  <div class="hd"><i>V</i><b>VEGA</b><span>TRADING CO-PILOT</span><small>live · not advice</small><button type="button" id="vega-x" aria-label="Close">×</button></div>
+  <div class="hd"><i>V</i><b>VEGA</b><span>TRADING CO-PILOT</span><small>site guide · not advice</small><button type="button" id="vega-x" aria-label="Close">×</button></div>
   <div class="log" id="vega-log"></div>
   <div class="chips" id="vega-chips"></div>
   <form id="vega-form" autocomplete="off"><input id="vega-in" placeholder="Ask about Nifty, gold, a panel, a plan…" maxlength="2000" aria-label="Message Vega"><button type="submit" id="vega-send">SEND</button></form>
-  <div class="fine">Vega reads live Finostat data and explains it. She is not a SEBI-registered adviser and never tells you what to buy — the decision stays yours.</div>
+  <div class="fine">Vega points you to the right page and quotes the numbers the site already shows. Not a SEBI-registered adviser; never tells you what to buy.</div>
 </section>
 <script>
 (function(){
@@ -44,13 +44,13 @@ SNIPPET = r"""
   var SUGGEST=page.indexOf('/xau-sovereign')===0?['What is gold doing right now?','How does XAU Sovereign decide BUY or SELL?','What do I get for ₹8,000?','Does it repaint?']
     :page.indexOf('/global')===0?['What is the BTC option chain showing?','Explain the strategy builder','What is DVOL?','How do I connect CoinDCX?']
     :page.indexOf('/dashboard')===0?['Where is the option chain?','What does GEX mean?','How do I set an alert?','What is the ATM straddle now?']
-    :['What is NIFTY doing right now?','Is gold a buy today?','Which plan should I pick?','What is max pain?'];
+    :['Where is the option chain?','What is gold doing?','Which plan should I pick?','What is max pain?'];
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function linkify(s){ return esc(s).replace(/(^|[\s(])(\/[a-z0-9\-\/#?=&.]+)/gi,function(m,pre,path){ var tail=''; while(/[.,)]$/.test(path)){ tail=path.slice(-1)+tail; path=path.slice(0,-1); } return pre+'<a href="'+path+'">'+path+'</a>'+tail; }); }
   function add(role,text,cls){ var d=document.createElement('div'); d.className='m '+(role==='user'?'u':'v')+(cls?' '+cls:''); d.innerHTML=role==='user'?esc(text):linkify(text); logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; return d; }
   function save(){ try{ sessionStorage.setItem('vega_hist',JSON.stringify(hist.slice(-12))); }catch(e){} }
   function renderChips(){ chips.innerHTML=hist.length?'':SUGGEST.map(function(s){ return '<button type="button">'+esc(s)+'</button>'; }).join(''); }
-  function open(){ box.hidden=false; btn.hidden=true; btn.setAttribute('aria-expanded','true'); if(!logEl.children.length){ if(hist.length){ hist.forEach(function(m){ add(m.role,m.content); }); } else { add('assistant',"Hi, I'm Vega — Finostat's trading co-pilot. Ask me what the market is doing, what a panel or a Greek means, or which plan fits you. I read the live numbers; I don't give buy/sell advice."); } } renderChips(); input.focus(); }
+  function open(){ box.hidden=false; btn.hidden=true; btn.setAttribute('aria-expanded','true'); if(!logEl.children.length){ if(hist.length){ hist.forEach(function(m){ add(m.role,m.content); }); } else { add('assistant',"Hi, I'm Vega — Finostat's guide. Tell me what you're looking for — the terminal, the option chain, gold, FII/DII, the calendar, plans, or what a term means — and I'll take you there."); } } renderChips(); input.focus(); }
   function close(){ box.hidden=true; btn.hidden=false; btn.setAttribute('aria-expanded','false'); }
   btn.addEventListener('click',open); $('vega-x').addEventListener('click',close);
   document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&!box.hidden) close(); });

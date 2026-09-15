@@ -24,7 +24,21 @@ def fake(payload, timeout):
 r = vega.ask([{"role": "user", "content": "nifty?"}], ctx, transport=fake)
 check("ask: payload shape + reply text", seen["model"] and seen["max_tokens"] == vega.MAX_TOKENS and "23456.7" in seen["system"] and seen["messages"][0]["role"] == "user" and r.startswith("NIFTY"))
 os.environ.pop("ANTHROPIC_API_KEY", None)
-check("no key -> offline message, no network", vega.ask([{"role": "user", "content": "x"}], ctx) == vega.OFFLINE)
+check("no key -> built-in guide answers, no network", "/dashboard" in vega.ask([{"role": "user", "content": "where is the terminal?"}], ctx) or "map" in vega.ask([{"role": "user", "content": "where is the terminal?"}], ctx))
+full = {"page": "/", "india": {"market_open": True, "quotes": {"NIFTY 50": {"price": 23456.7, "change": 0.42}, "BANKNIFTY": {"price": 51000.0, "change": -0.1}}, "atm": 23450, "atm_straddle": 180.5, "sheet_symbol": "NIFTY"},
+        "gold": {"spot_xau": 4350.2, "inr_per_10g": 123000, "xau_sovereign": {"1d": {"signal": "NEUTRAL"}, "4h": {"signal": "SELL"}}},
+        "fii_dii": {"cash_date": "2026-09-12", "fii_net_cr": -1234.5, "dii_net_cr": 2345.0, "fii_index_futures_net": -98000},
+        "next_events": [{"title": "FOMC decision", "country": "USD", "date": "2026-09-16", "when": "23:30"}], "crypto": {"BTC": {"usd": 76700, "change": -0.7}}, "world": {"S&P 500": {"last": 7656.9, "change": 0.86}},
+        "visitor": {"signed_in": False, "plan": "none"}}
+L = lambda q: vega.answer_local(q, full)
+check("guide: nifty quotes + straddle", "23,456.7" in L("what is nifty doing") and "180.5" in L("nifty?") and "/dashboard" in L("market now"))
+check("guide: gold words, no levels for guests", "4H SELL" in L("is gold a buy?") and "/xau-sovereign" in L("gold") and "entry" not in L("gold").lower().split("entry, stop")[0])
+check("guide: fii/dii numbers", "2,345" in L("fii dii today") and "/fii-dii" in L("flows"))
+check("guide: events", "FOMC" in L("when is the fed meeting") and "/calendar" in L("calendar"))
+check("guide: greeks + terms", "decay" in L("what is theta?") and "Put–call" in L("explain pcr") and "pin" in L("what does gex mean"))
+check("guide: plans, login, pine, chain, builder", "2,199" in L("how much is desk") and "/login" in L("how do i sign in") and "PINE SCRIPT" in L("pine script") and "/option-chain/nifty" in L("option chain") and "#p-builder" in L("iron condor builder"))
+check("guide: crypto + world", "76,700" in L("btc price") and "/global" in L("nasdaq"))
+check("guide: fallback map", "/dashboard" in L("asdkjh qwe") and "Hi, I'm Vega" in L("hello"))
 def boom(payload, timeout):
     raise urllib.error.HTTPError("u", 429, "rate", {}, io.BytesIO(b"{}"))
 check("429 -> busy message", "busy" in vega.ask([{"role": "user", "content": "x"}], ctx, transport=boom))
