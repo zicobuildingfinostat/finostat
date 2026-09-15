@@ -50,6 +50,7 @@ WHAT FINOSTAT IS
 - /global — the Global/Crypto terminal (Desk): world index tape (S&P, Nasdaq, Dow, DAX, Nikkei, HSI, FTSE, DXY, gold, crude, US10Y), TradingView charting, BTC/ETH option chains from Deribit with Greeks, an option buying & selling strategy builder (long/short straddle, strangle, iron condor, iron fly, spreads, butterfly, ratio), SURF/SKEW/CURV/GEX on crypto, DVOL and funding, CoinDCX account connect (read-only), and the XAU SOVEREIGN gold panel.
 - /vip-indicator — VIP Indicator, "the Indian markets buy·sell engine": the same engine on NIFTY, BANKNIFTY, FINNIFTY, SENSEX and every F&O stock, 5m/15m/1h/1D; one-time ₹12,999, lifetime, web app at /vip-indicator/app + TradingView Pine Script; Desk members have it as the STRUCT panel. Buy at /vip-indicator/buy.
 - /xau-sovereign — XAU Sovereign, "the gold buy·sell engine": a one-time ₹8,000 product (lifetime, nothing recurring). Nine published systems (Turtle breakout, Paul Tudor Jones's 200-bar rule, Linda Raschke's Holy Grail, MACD, RSI, ADX, Supertrend, Ichimoku, Bollinger, EMA ribbon) blended 50/50 with smart-money price action (market structure BOS/CHoCH, order blocks, fair value gaps, liquidity sweeps of equal highs/lows, premium/discount, displacement, rejection candles) into a score from −1 to +1; BUY from +0.25, SELL from −0.25 with hysteresis; non-repainting; entry, stop and 2R target; 1H/4H/1D; buyers also get the TradingView Pine Script. Buy at /xau-sovereign/buy (Cashfree, by mobile number). Desk members have it inside /global too. App for buyers: /xau-sovereign/app.
+- /blog — guides (option chain, expected move, IV percentile, OI build-up, market structure, order blocks/FVG, liquidity sweeps, Greeks for sellers, selling regime, gold, scalping, GEX) plus an automated daily desk read at 18:30 IST and Sunday week-ahead / Friday wrap.
 - Free pages: /calendar (economic calendar in IST with RBI, FOMC, India CPI/WPI/PMI, NSE holidays at /calendar/nse-holidays, expiry dates at /calendar/expiry-dates), /fii-dii (FII/DII cash flows + participant-wise positioning, evenings), /option-chain/nifty, /option-chain/banknifty, /option-chain/finnifty and /option-chain/<stock> (public chains from NSE, delayed), /brief (daily expiry brief 09:20 IST), /finch (12-chapter free options course with live data), /assessment (trader assessment), /strategies/<name> (strategy explainers).
 - Plans: Starter free (Finch, brief, calendar, index builder). Desk ₹2,199 / 30 days or ₹21,990 / year — the live terminal and Global terminal. Pro desk ₹5,599 / 30 days or ₹55,990 / year — adds recorded history, replay, backtests, unlimited alerts. Exclusive of GST. Nothing auto-renews. Pay by UPI/card/net banking through Cashfree with just a mobile number at /account?plan=desk (the account is created from the payment). Sign in: /login (email link) or the mobile number used at checkout. Help: hello@finostat.com, /contact.
 - Data: Upstox live feed for the Indian terminal; NSE public data for the free pages; Deribit/Kraken/CoinGecko/CNBC for global and crypto; Binance PAXG for gold candles.
@@ -201,6 +202,7 @@ INTENTS = [
     (("backtest", "replay", "history", "historical"), "history"),
     (("chart", "candle", "volume profile", "vp "), "chart"),
     (("finch", "course", "learn", "tutorial", "beginner", "teach", "greeks"), "learn"),
+    (("blog", "article", "guide", "desk read", "read of the day", "explain to me", "learn about"), "blog"),
     (("brief", "expiry brief", "morning"), "brief"),
     (("assess", "quiz", "test me", "profile"), "assessment"),
     (("contact", "support", "email", "phone", "founder", "who built", "talk to", "human", "whatsapp"), "contact"),
@@ -270,6 +272,8 @@ def answer_local(question: str, ctx: dict) -> str:
         return "The CHART panel in the terminal has candles with a volume profile on 1m–1d for any index or stock; type a symbol like RELIANCE. TradingView charts for crypto and world markets are in /global."
     if intent == "learn":
         return "Finch is the free 12-chapter options course with live data: /finch — start at /finch/start-here, then /finch/the-greeks and /finch/reading-the-chain. Ask me any term (delta, theta, OI, PCR, max pain, GEX) and I'll define it."
+    if intent == "blog":
+        return "The blog at /blog has guides on reading an option chain, the expected move, IV percentile, OI build-up, market structure, order blocks, liquidity, the Greeks a seller watches, when to sell premium, gold and scalping — plus a desk read after every close at 18:30 IST and a week-ahead every Sunday."
     if intent == "brief":
         return "The daily expiry brief lands at 09:20 IST at /brief — ATM straddle, expected move, OI walls, PCR and the day's events for NIFTY, BANKNIFTY and SENSEX."
     if intent == "assessment":

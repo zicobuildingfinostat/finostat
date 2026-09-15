@@ -60,6 +60,7 @@ import risk
 import move
 import strdhist
 import structure
+import blog
 import oiscan
 import vega_widget
 import algo
@@ -486,6 +487,112 @@ def _coindcx_payload(user, force: bool = False) -> dict:
     return out
 
 
+def _move_payload(u: str) -> dict:
+    ch = _analytics_chain(u)
+    if "error" in ch:
+        return ch
+    spot = float(ch["spot"])
+    atm = min(ch["rows"], key=lambda r: abs(r["strike"] - spot))
+    ce, pe = atm.get("ce") or {}, atm.get("pe") or {}
+    straddle = (ce.get("ltp") or 0) + (pe.get("ltp") or 0) if ce.get("ltp") is not None and pe.get("ltp") is not None else None
+    ivs = [x for x in (ce.get("iv"), pe.get("iv")) if x]
+    iv = sum(ivs) / len(ivs) if ivs else None
+    prev_close = None
+    for q in FEED.snapshot().get("quotes") or []:
+        if q.get("symbol") == u and q.get("price") and q.get("change") is not None and q["change"] > -100:
+            prev_close = q["price"] / (1 + q["change"] / 100.0)
+    cands = []
+    key = candles.resolve_key(u, getattr(FEED, "_meta", None))
+    if key:
+        try:
+            cands = CANDLES.series(key, "5m").get("candles") or []
+        except upstox_rest.RestError as exc:
+            log.info("move: candles unavailable for %s: %s", u, exc)
+    out = move.build(u, spot, iv, straddle, ch["t"], prev_close, cands, expiry=ch.get("expiry"))
+    out.update({"atm": atm["strike"], "live": ch.get("live"), "source": ch.get("source")})
+    return out
+
+
+def _ivp_now(u: str):
+    """Straddle percentile right now, only when the IVP study for today's DTE is already built (no archive pulls)."""
+    ch = _analytics_chain(u)
+    if "error" in ch:
+        return None
+    today = strdhist.datetime.now(strdhist.IST).date()
+    exp_d = strdhist.datetime.strptime(ch["expiry"], "%Y-%m-%d").date()
+    dte = strdhist.trading_days_between(today, exp_d)
+    study = HIST.store.meta_get(f"STRDHIST|{u}|{ch['expiry']}|{dte}|20", 10 * 365 * 86400)
+    if not study or not study.get("samples"):
+        return None
+    spot = float(ch["spot"])
+    atm = min(ch["rows"], key=lambda r: abs(r["strike"] - spot))
+    ce, pe = atm.get("ce") or {}, atm.get("pe") or {}
+    if ce.get("ltp") is None or pe.get("ltp") is None:
+        return None
+    straddle = ce["ltp"] + pe["ltp"]
+    m = strdhist.datetime.now(strdhist.IST).strftime("%H:%M")
+    m = min(strdhist.MINUTES, key=lambda x: abs(int(x[:2]) * 60 + int(x[3:]) - (int(m[:2]) * 60 + int(m[3:]))))
+    return strdhist.compare_now([[m, straddle, 100 * straddle / spot, None]], study["samples"])
+
+
+def _blog_gold() -> dict:
+    out = {"signals": {}}
+    for tf in ("1d", "4h"):
+        v = GOLD.view(tf, 60)
+        if "error" not in v:
+            out["signals"][tf] = v.get("signal")
+            out["spot"] = v.get("spot_xau") or v.get("entry")
+            out["inr_10g"] = v.get("inr_10g")
+    return out
+
+
+def _blog_flows() -> dict:
+    f = FLOWS.api(5)
+    lc, lp = f.get("latest_cash") or {}, f.get("latest") or {}
+    return {"cash_date": lc.get("date"), "fii_net": lc.get("fii_net"), "dii_net": lc.get("dii_net"), "fii_fut": (lp.get("fii") or {}).get("fut_idx_net")}
+
+
+def _blog_flows_week() -> dict:
+    f = FLOWS.api(10)
+    cash = (f.get("cash") or [])[-5:]
+    if not cash:
+        return {}
+    return {"fii_net": sum(c.get("fii_net") or 0 for c in cash), "dii_net": sum(c.get("dii_net") or 0 for c in cash), "days": len(cash)}
+
+
+def _blog_week_change() -> dict:
+    out = {}
+    for u in ("NIFTY 50", "BANKNIFTY", "SENSEX"):
+        key = candles.resolve_key(u, getattr(FEED, "_meta", None))
+        if not key:
+            continue
+        try:
+            rows = (CANDLES.series(key, "D").get("candles") or [])[-6:]
+        except Exception:                                           # noqa: BLE001
+            continue
+        if len(rows) < 2:
+            continue
+        week = rows[-5:]
+        out[u] = {"close": week[-1][4], "pct": round((week[-1][4] / rows[-6][4] - 1) * 100, 2) if len(rows) >= 6 else None, "high": max(r[2] for r in week), "low": min(r[3] for r in week)}
+    return out
+
+
+BLOG_SOURCES = {
+    "quotes": lambda: FEED.snapshot().get("quotes") or [],
+    "chain": lambda slug: PUBCHAIN.get(slug),
+    "oiscan": lambda u: OISCAN.view(u, "day"),
+    "move": _move_payload,
+    "ivp": _ivp_now,
+    "gold": _blog_gold,
+    "flows": _blog_flows,
+    "flows_week": _blog_flows_week,
+    "events": lambda days: ECON.high_impact(days),
+    "expiries": lambda: [r for r in econ_pages.expiry_rows(CONTRACTS_OF(FEED), econ.datetime.now(econ.IST).date(), HOLIDAYS.dates()) if 0 <= r["days"] <= 9],
+    "week_change": _blog_week_change,
+}
+BLOG = blog.Blog(AUTH.path, BLOG_SOURCES, holidays=HOLIDAYS)
+
+
 def _vega_context(user, page: str) -> dict:
     """What Vega may quote: live numbers the site already has, nothing else."""
     ctx: dict = {"time_ist": time.strftime("%Y-%m-%d %H:%M IST", time.gmtime(time.time() + 19800)), "page": page}
@@ -587,7 +694,7 @@ KNOWN_PREFIXES = ("/strategies/",)
 
 # URLs the original marketing page advertised that were never built. Anything
 # that already crawled or bookmarked them lands somewhere real.
-RETIRED = {"/aurum": "/xau-sovereign", "/aurum/buy": "/xau-sovereign/buy", "/aurum/app": "/xau-sovereign/app", "/analysis": "/dashboard", "/live-session": "/contact", "/blog": "/finch",
+RETIRED = {"/aurum": "/xau-sovereign", "/aurum/buy": "/xau-sovereign/buy", "/aurum/app": "/xau-sovereign/app", "/analysis": "/dashboard", "/live-session": "/contact",
            "/tools/gift-nifty": "/dashboard", "/tools": "/dashboard"}
 
 # The old /learn URLs (linked from the homepage since launch) map onto Finch chapters.
@@ -967,6 +1074,14 @@ class Handler(BaseHTTPRequestHandler):
                 if d is None:
                     return self._json({"error": "unknown symbol or not loaded yet"}, 404)
                 return self._json(d)
+            if route == "/blog":
+                return self._send(vega_widget.inject(blog.render_index(BLOG)), "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/blog/feed.xml":
+                return self._send(blog.render_feed(BLOG), "application/rss+xml; charset=utf-8", cache="public, max-age=600")
+            if route.startswith("/blog/") and route.count("/") == 2:
+                body = blog.render_post(BLOG, unquote(route.rsplit("/", 1)[1]).lower())
+                if body is not None:
+                    return self._send(vega_widget.inject(body), "text/html; charset=utf-8", cache="public, max-age=600")
             if route == "/fii-dii":
                 return self._send(vega_widget.inject(flows_page.render(FLOWS)), "text/html; charset=utf-8", cache="public, max-age=600")
             if route == "/calendar":
@@ -1302,30 +1417,8 @@ class Handler(BaseHTTPRequestHandler):
                                    "now": strdhist.compare_now(today_pts, res.get("samples", [])), "vix": vix, "live": ch.get("live")})
             if route == "/api/move":
                 qs = parse_qs(parsed.query)
-                u = qs.get("u", ["NIFTY 50"])[0]
-                ch = _analytics_chain(u)
-                if "error" in ch:
-                    return self._json(ch, 503)
-                spot = float(ch["spot"])
-                atm = min(ch["rows"], key=lambda r: abs(r["strike"] - spot))
-                ce, pe = atm.get("ce") or {}, atm.get("pe") or {}
-                straddle = (ce.get("ltp") or 0) + (pe.get("ltp") or 0) if ce.get("ltp") is not None and pe.get("ltp") is not None else None
-                ivs = [x for x in (ce.get("iv"), pe.get("iv")) if x]
-                iv = sum(ivs) / len(ivs) if ivs else None
-                prev_close = None
-                for q in FEED.snapshot().get("quotes") or []:
-                    if q.get("symbol") == u and q.get("price") and q.get("change") is not None and q["change"] > -100:
-                        prev_close = q["price"] / (1 + q["change"] / 100.0)
-                cands = []
-                key = candles.resolve_key(u, getattr(FEED, "_meta", None))
-                if key:
-                    try:
-                        cands = CANDLES.series(key, "5m").get("candles") or []
-                    except upstox_rest.RestError as exc:
-                        log.info("move: candles unavailable for %s: %s", u, exc)
-                out = move.build(u, spot, iv, straddle, ch["t"], prev_close, cands, expiry=ch.get("expiry"))
-                out.update({"atm": atm["strike"], "live": ch.get("live"), "source": ch.get("source")})
-                return self._json(out)
+                out = _move_payload(qs.get("u", ["NIFTY 50"])[0])
+                return self._json(out, 503 if "error" in out else 200)
             if route == "/api/oiscan":
                 qs = parse_qs(parsed.query)
                 out = OISCAN.view(qs.get("u", ["NIFTY 50"])[0], qs.get("w", ["15"])[0])
@@ -1357,7 +1450,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(rec or {"error": "no brief yet"}, 200 if rec else 404)
             if route == "/sitemap.xml":
                 static = (config.STATIC_ROOT / "sitemap.xml").read_text(encoding="utf-8")
-                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + pubchain.sitemap_entries(PUBCHAIN) + "</urlset>")
+                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + pubchain.sitemap_entries(PUBCHAIN) + blog.sitemap_entries(BLOG) + "</urlset>")
                 return self._send(xml.encode("utf-8"), "application/xml; charset=utf-8", cache="public, max-age=3600")
             if route == "/about":
                 return self._redirect("/founders")
@@ -2273,6 +2366,7 @@ def main() -> int:
     FEED.add_listener(ALERTS.on_snapshot)
     RECORDER.start()
     ALERTS.start()
+    BLOG.start()
     BACKUP.start()
     CONSTITUENTS.start()
     CHAINS.start()
