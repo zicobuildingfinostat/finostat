@@ -54,6 +54,8 @@ import gold
 import coindcx
 import pages_global
 import sovereign_page
+import vega
+import vega_widget
 import algo
 import watchdog
 import flows
@@ -228,6 +230,7 @@ FLOWS = flows.Flows(flows.Store(AUTH.path), HOLIDAYS)
 PUBCHAIN = pubchain.PublicChains(AUTH.path.parent, HOLIDAYS, contracts_of=lambda: CONTRACTS_OF(FEED))
 CRYPTO = crypto.Crypto()
 GOLD = gold.Gold()
+VEGA = vega.Vega(AUTH.path)
 _DCX_CACHE: dict = {}            # user_id -> (ts, payload)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
 ALGOS = algo.Store(AUTH.path)
@@ -346,6 +349,58 @@ def _coindcx_payload(user, force: bool = False) -> dict:
     _DCX_CACHE[user["id"]] = (time.time(), out)
     BROKERS.touch(user["id"], "coindcx")
     return out
+
+
+def _vega_context(user, page: str) -> dict:
+    """What Vega may quote: live numbers the site already has, nothing else."""
+    ctx: dict = {"time_ist": time.strftime("%Y-%m-%d %H:%M IST", time.gmtime(time.time() + 19800)), "page": page}
+    try:
+        snap = FEED.snapshot()
+        qs = {q.get("symbol"): q for q in (snap.get("quotes") or []) if q.get("symbol")}
+        ctx["india"] = {"market_open": WATCHDOG.in_session(), "feed_live": bool(snap.get("live")), "feed_mode": snap.get("feed_mode"),
+                        "quotes": {k: {"price": v.get("price"), "change": v.get("change")} for k, v in qs.items() if k in ("NIFTY 50", "BANKNIFTY", "SENSEX", "FINNIFTY", "INDIA VIX")},
+                        "sheet_symbol": snap.get("symbol"), "atm": snap.get("atm"), "atm_straddle": snap.get("straddle")}
+    except Exception:                                               # noqa: BLE001
+        pass
+    try:
+        entitled = _paid(user) or (user is not None and AUTH.has_product(user["id"], "sovereign"))
+        g = {}
+        for tf in ("1d", "4h", "1h"):
+            v = GOLD.view(tf, 60)
+            if "error" in v:
+                continue
+            g[tf] = {"signal": v["signal"], "score": v["score"], "regime": v["regime"], "confluence": v["confluence"]}
+            if entitled:
+                g[tf].update({"entry": v["entry"], "stop": v["stop"], "target": v["target"], "adx": v["adx"], "rsi": v["rsi"]})
+            else:
+                g[tf]["note"] = "levels are for XAU Sovereign buyers / Desk members"
+            ctx.setdefault("gold", {})["spot_xau"] = v.get("spot_xau")
+            ctx["gold"]["inr_per_10g"] = v.get("inr_10g")
+        ctx.setdefault("gold", {})["xau_sovereign"] = g
+    except Exception:                                               # noqa: BLE001
+        pass
+    try:
+        t = CRYPTO.tape()
+        ctx["crypto"] = {q["symbol"]: {"usd": q.get("price"), "change": q.get("change"), "inr": q.get("inr")} for q in t.get("crypto") or []}
+        ctx["world"] = {q["symbol"]: {"last": q.get("price"), "change": q.get("change")} for q in t.get("global") or []}
+    except Exception:                                               # noqa: BLE001
+        pass
+    try:
+        f = FLOWS.api(5)
+        lc, lp = f.get("latest_cash") or {}, f.get("latest") or {}
+        ctx["fii_dii"] = {"cash_date": lc.get("date"), "fii_net_cr": lc.get("fii_net"), "dii_net_cr": lc.get("dii_net"),
+                          "fii_index_futures_net": (lp.get("fii") or {}).get("fut_idx_net"), "positions_date": lp.get("date")}
+    except Exception:                                               # noqa: BLE001
+        pass
+    try:
+        ctx["next_events"] = [{"when": e.get("when"), "date": e.get("date"), "title": e.get("title"), "country": e.get("country"), "impact": e.get("impact")}
+                              for e in ECON.high_impact(10)[:6]]
+    except Exception:                                               # noqa: BLE001
+        pass
+    ctx["visitor"] = {"signed_in": user is not None, "plan": _plan_of(user) if user else "none",
+                      "owns_xau_sovereign": bool(user and AUTH.has_product(user["id"], "sovereign"))}
+    ctx["prices"] = {"desk_30d": 2199, "desk_year": 21990, "pro_30d": 5599, "pro_year": 55990, "xau_sovereign_once": 8000}
+    return ctx
 
 
 def _plan_of(user) -> str:
@@ -685,17 +740,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if route in ("/", "/index.html"):
                 _u = self._current_user()
-                return self._send(PAGE.render(paid=_paid(_u), signed_in=_u is not None), "text/html; charset=utf-8")
+                return self._send(vega_widget.inject(PAGE.render(paid=_paid(_u), signed_in=_u is not None)), "text/html; charset=utf-8")
             if route == "/dashboard":
                 user = self._current_user()
                 paid = _paid(user)
-                return self._send(pages.render_dashboard(FEED.snapshot(), locked=not paid, signed_in=user is not None,
-                                                         plan=_plan_of(user)),
+                return self._send(vega_widget.inject(pages.render_dashboard(FEED.snapshot(), locked=not paid, signed_in=user is not None,
+                                                                            plan=_plan_of(user))),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/global":
                 user = self._current_user()
-                return self._send(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user),
-                                                      pine=user is not None and AUTH.has_product(user["id"], "sovereign")),
+                return self._send(vega_widget.inject(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user),
+                                                                         pine=user is not None and AUTH.has_product(user["id"], "sovereign"))),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/xau-sovereign":
                 teaser = {}
@@ -704,7 +759,7 @@ class Handler(BaseHTTPRequestHandler):
                         teaser[tf] = GOLD.view(tf, 60).get("signal")
                     except Exception:                               # noqa: BLE001
                         pass
-                return self._send(sovereign_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]], teaser=teaser),
+                return self._send(vega_widget.inject(sovereign_page.render_sales(GOLD.spot(), configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]], teaser=teaser)),
                                   "text/html; charset=utf-8", cache="public, max-age=300")
             if route == "/xau-sovereign/buy":
                 user = self._current_user()
@@ -715,7 +770,7 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/xau-sovereign/app":
                 user = self._current_user()
                 owner = user is not None and AUTH.has_product(user["id"], "sovereign")
-                return self._send(pages_global.render_sovereign(locked=not (owner or _paid(user)), signed_in=user is not None, pine=owner),
+                return self._send(vega_widget.inject(pages_global.render_sovereign(locked=not (owner or _paid(user)), signed_in=user is not None, pine=owner)),
                                   "text/html; charset=utf-8", cache="no-store")
             if route == "/xau-sovereign/pine":
                 user = self._current_user()
@@ -747,7 +802,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "unknown symbol or not loaded yet"}, 404)
                 return self._json(d)
             if route == "/fii-dii":
-                return self._send(flows_page.render(FLOWS), "text/html; charset=utf-8", cache="public, max-age=600")
+                return self._send(vega_widget.inject(flows_page.render(FLOWS)), "text/html; charset=utf-8", cache="public, max-age=600")
             if route == "/calendar":
                 qs = parse_qs(parsed.query)
                 d = qs.get("d", [""])[0]
@@ -1280,6 +1335,19 @@ class Handler(BaseHTTPRequestHandler):
                     fn = ALERTS.rearm if parts[4] == "rearm" else ALERTS.delete
                     return self._json({"ok": fn(user["id"], int(parts[3]))})
                 return self._json({"error": "not found"}, 404)
+            if route == "/api/vega":
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body(limit=64 * 1024).decode("utf-8") or "{}")
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if not isinstance(body, dict):
+                    return self._json({"error": "expected an object"}, 400)
+                user = self._current_user()
+                page = str(body.get("page", ""))[:80]
+                out = VEGA.chat(body.get("messages"), _vega_context(user, page), ip=self._client_ip(), user_id=user["id"] if user else None, page=page)
+                return self._json(out, 200 if "reply" in out else 429 if "breather" in out.get("error", "") else 400)
             if route in ("/api/global/strategy", "/api/coindcx/connect", "/api/coindcx/disconnect"):
                 user = self._current_user()
                 if user is None:
