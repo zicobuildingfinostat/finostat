@@ -4,6 +4,7 @@ analytics suite (SURF, SKEW, CURV, GEX) on crypto chains, DVOL and funding, and 
 connection. Reuses the Indian terminal's stylesheet and paywall; nothing animates on its own."""
 from __future__ import annotations
 
+import chart_pa
 import pages
 import panels_pro
 
@@ -64,7 +65,7 @@ CSS = r"""
 .gd-sig .meter i{position:absolute;top:-5px;width:3px;height:18px;background:var(--gold);box-shadow:0 0 8px var(--gold)}.gd-sig .meter b{position:absolute;top:-16px;font-size:9px;letter-spacing:.1em;color:var(--faint)}.gd-sig .meter b.l{left:0}.gd-sig .meter b.m{left:50%;transform:translateX(-50%)}.gd-sig .meter b.r{right:0}
 .gd-sig .sub{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5}.gd-sig .sub b{color:var(--text);font-weight:500}
 .gd-sig .conf{font-size:9.5px;letter-spacing:.14em;padding:3px 8px;border:1px solid var(--line-strong);color:var(--muted);text-align:center}.gd-sig .conf.ok{color:var(--up);border-color:var(--up)}.gd-sig .conf.bad{color:var(--down);border-color:var(--down)}.gd-sig .conf.mid{color:var(--gold);border-color:var(--gold)}
-.gd-cvw{height:460px!important;cursor:crosshair}
+.gd-cvw{height:520px!important;cursor:crosshair}
 .gd-sys{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}.gd-sys>div{min-width:0}.gd-sys>div:first-child{border-right:1px solid var(--line)}
 .gd-sys h5{font-size:9.5px;letter-spacing:.14em;color:var(--faint);padding:6px 10px 2px;text-transform:uppercase}.gd-sys h5 i{font-style:normal;color:var(--gold);margin-left:8px}
 .gd-sys table td{padding:4px 8px;font-size:10.5px;text-align:left;vertical-align:top}.gd-sys td.v{font-weight:600;white-space:nowrap;width:44px}.gd-sys td.v.up{color:var(--up)}.gd-sys td.v.down{color:var(--down)}.gd-sys td.v.z{color:var(--faint)}
@@ -109,7 +110,7 @@ BODY = r"""
   <section class="panel a-wide" id="p-gold" aria-label="Gold signal">
     <div class="panel-hd"><span class="k">XAU</span><span class="s" id="gd-title">XAU SOVEREIGN · XAU/USD · 1D</span><span class="r"><a id="gd-pine" href="/xau-sovereign/pine" hidden style="color:var(--gold);border:1px solid var(--gold);padding:1px 7px;font-size:9.5px;letter-spacing:.1em" title="Download the TradingView Pine Script of this indicator">PINE SCRIPT ↓</a><span id="gd-state">—</span></span></div>
     <div class="oc-top"><span class="seg" id="gd-tf"><button type="button" data-tf="1h">1H</button><button type="button" data-tf="4h">4H</button><button type="button" data-tf="1d" class="on">1D</button></span>
-      <span class="seg" id="gd-layers"><button type="button" data-l="zones" class="on">ZONES</button><button type="button" data-l="liq" class="on">LIQUIDITY</button><button type="button" data-l="struct" class="on">STRUCTURE</button><button type="button" data-l="ma" class="on">MA</button><button type="button" data-l="st" class="on">SUPERTREND</button></span>
+      <span class="seg" id="gd-layers"><button type="button" data-l="zones" class="on">ZONES</button><button type="button" data-l="liq" class="on">LIQUIDITY</button><button type="button" data-l="struct" class="on">STRUCTURE</button><button type="button" data-l="ma" class="on">MA</button><button type="button" data-l="st" class="on">SUPERTREND</button><button type="button" data-l="fp" class="on">FOOTPRINT</button><button type="button" data-l="vp" class="on">PROFILE</button></span>
       <span class="an-note" id="gd-note">move the pointer over the chart to read a bar</span></div>
     <div class="gd-sig" id="gd-sig"></div>
     <div class="g-kpi" id="gd-kpi"></div>
@@ -267,7 +268,7 @@ JS_MAIN = r"""
 
 JS_GOLD = r"""
   /* GOLD signal */
-  var gd={tf:'1d',data:null,layers:{zones:true,liq:true,struct:true,ma:true,st:true},hover:null};
+  var gd={tf:'1d',data:null,layers:{zones:true,liq:true,struct:true,ma:true,st:true,fp:true,vp:true},hover:null};
   segInit($('gd-tf'),'data-tf',function(tf){ gd.tf=tf; loadGold(); });
   $('gd-layers').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; var k=b.getAttribute('data-l'); gd.layers[k]=!gd.layers[k]; b.classList.toggle('on',gd.layers[k]); drawGold(); });
   function loadGold(){ if(locked) return; $('gd-state').textContent='loading…'; var cvw=($('gd-cv').getBoundingClientRect().width||900); getJSON('/api/global/gold?tf='+gd.tf+'&bars='+Math.max(80,Math.min(240,Math.floor(cvw/4.2))),function(d){ gd.data=d; renderGold(d); drawGold(); },function(e){ $('gd-state').textContent=e; }); }
@@ -281,41 +282,7 @@ JS_GOLD = r"""
     function tbl(group){ var rows=d.systems.filter(function(x){ return x.group===group; }); return '<table>'+rows.map(function(x){ var v=x.vote>0?'BUY':x.vote<0?'SELL':'—'; return '<tr><td class="v '+(x.vote>0?'up':x.vote<0?'down':'z')+'">'+v+'</td><td class="n">'+x.name+'<small>'+x.who+' · w '+x.weight+'</small></td><td class="note">'+x.note+'</td></tr>'; }).join('')+'</table>'; }
     $('gd-sys').innerHTML='<div><h5>Classic systems<i>'+(d.classic_score>=0?'+':'')+nf(d.classic_score,2)+'</i></h5>'+tbl('classic')+'</div><div><h5>Price action · smart money<i>'+(d.pa_score>=0?'+':'')+nf(d.pa_score,2)+'</i></h5>'+tbl('price action')+'</div>';
     $('gd-state').textContent='LIVE · '+new Date(d.as_of*1000).toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit'})+' · '+d.source; }
-  function drawGold(){ var d=gd.data, cv=$('gd-cv'); if(!d||!cv||!d.series) return; var g=ctx2d(cv), c=g.c, S=d.series, n=S.t.length; var pad={l:8,r:64,t:14,b:18}; var scoreH=70; var ph=g.h-pad.t-pad.b-scoreH-8; var pw=g.w-pad.l-pad.r; var bw=pw/n;
-    var lo=Infinity, hi=-Infinity; for(var i=0;i<n;i++){ if(S.l[i]<lo) lo=S.l[i]; if(S.h[i]>hi) hi=S.h[i]; } if(d.stop){ lo=Math.min(lo,d.stop); hi=Math.max(hi,d.stop); } if(d.target){ lo=Math.min(lo,d.target); hi=Math.max(hi,d.target); } var m=(hi-lo)*.06||1; lo-=m; hi+=m;
-    function sx(i){ return pad.l+i*bw+bw/2; } function sy(p){ return pad.t+(hi-p)/(hi-lo)*ph; } var y0=pad.t+ph;
-    var L=gd.layers, pa=d.pa||{}; var dense=bw<4.5; c.save(); c.beginPath(); c.rect(pad.l,pad.t-12,pw,ph+14); c.clip();
-    // dealing range premium/discount
-    if(L.struct&&pa.range){ var r=pa.range, mid=(r.hi+r.lo)/2; c.fillStyle='rgba(255,92,108,.05)'; c.fillRect(sx(r.i0),sy(r.hi),g.w-pad.r-sx(r.i0),sy(mid)-sy(r.hi)); c.fillStyle='rgba(61,214,140,.05)'; c.fillRect(sx(r.i0),sy(mid),g.w-pad.r-sx(r.i0),sy(r.lo)-sy(mid)); c.strokeStyle='rgba(245,200,66,.35)'; c.setLineDash([2,4]); c.beginPath(); c.moveTo(sx(r.i0),sy(mid)); c.lineTo(g.w-pad.r,sy(mid)); c.stroke(); c.setLineDash([]); c.fillStyle='rgba(245,200,66,.6)'; c.textAlign='left'; c.fillText('50% · '+(pa.structure===1?'discount below':pa.structure===-1?'premium above':''),sx(r.i0)+3,sy(mid)-3); }
-    // zones
-    if(L.zones){ (pa.fvgs||[]).slice(dense?-4:-8).forEach(function(f){ c.fillStyle=f.dir===1?'rgba(61,214,140,.13)':'rgba(255,92,108,.13)'; c.fillRect(sx(f.i)-bw/2,sy(f.top),g.w-pad.r-sx(f.i)+bw/2,Math.max(1,sy(f.bot)-sy(f.top))); }); (pa.obs||[]).slice(dense?-3:-6).forEach(function(o){ c.fillStyle=o.dir===1?'rgba(106,53,240,.28)':'rgba(255,110,199,.22)'; c.fillRect(sx(o.i)-bw/2,sy(o.top),g.w-pad.r-sx(o.i)+bw/2,Math.max(1,sy(o.bot)-sy(o.top))); c.fillStyle=o.dir===1?'rgba(170,140,255,.9)':'rgba(255,150,220,.9)'; c.textAlign='left'; c.fillText(o.dir===1?'OB demand':'OB supply',sx(o.i)+2,sy(o.top)-2); }); }
-    // liquidity pools
-    if(L.liq){ (pa.pools||[]).slice(dense?-5:-10).forEach(function(p){ var end=p.swept&&p.swept>0?sx(p.swept):g.w-pad.r; c.strokeStyle=p.type==='EQH'?'rgba(255,92,108,.7)':'rgba(61,214,140,.7)'; c.setLineDash([4,3]); c.beginPath(); c.moveTo(sx(p.i0),sy(p.price)); c.lineTo(end,sy(p.price)); c.stroke(); c.setLineDash([]); c.fillStyle=p.type==='EQH'?'rgba(255,92,108,.9)':'rgba(61,214,140,.9)'; c.textAlign='left'; c.fillText(p.type+(p.swept&&p.swept>0?' swept':''),sx(p.i0)+2,sy(p.price)+(p.type==='EQH'?-3:10)); if(p.swept&&p.swept>0){ c.font='bold 11px IBM Plex Mono,monospace'; c.fillText('×',end-3,sy(p.price)+4); c.font='10px IBM Plex Mono,monospace'; } }); }
-    // MAs and bands
-    function line(arr,color,dash,w){ c.strokeStyle=color; c.lineWidth=w||1; if(dash) c.setLineDash(dash); c.beginPath(); var on=false; for(var i=0;i<n;i++){ if(arr[i]==null){ on=false; continue; } if(!on){ c.moveTo(sx(i),sy(arr[i])); on=true; } else c.lineTo(sx(i),sy(arr[i])); } c.stroke(); c.setLineDash([]); c.lineWidth=1; }
-    if(L.ma){ line(S.bb_up,'rgba(190,150,255,.18)'); line(S.bb_lo,'rgba(190,150,255,.18)'); line(S.e21,C.cyan,null,1); line(S.e50,C.gold,null,1); line(S.s200,'rgba(168,156,207,.8)',[6,4],1.2); }
-    if(L.st){ for(var i=1;i<n;i++){ if(S.st[i]==null||S.st[i-1]==null||S.st_dir[i]!==S.st_dir[i-1]) continue; c.strokeStyle=S.st_dir[i]===1?'rgba(61,214,140,.9)':'rgba(255,92,108,.9)'; c.lineWidth=1.4; c.beginPath(); c.moveTo(sx(i-1),sy(S.st[i-1])); c.lineTo(sx(i),sy(S.st[i])); c.stroke(); } c.lineWidth=1; }
-    // candles
-    var cw=Math.max(1,bw*.62); for(var i=0;i<n;i++){ var up=S.c[i]>=S.o[i]; c.strokeStyle=up?C.up:C.down; c.fillStyle=up?C.up:C.down; c.beginPath(); c.moveTo(sx(i),sy(S.h[i])); c.lineTo(sx(i),sy(S.l[i])); c.stroke(); var top=sy(Math.max(S.o[i],S.c[i])), hgt=Math.max(1,Math.abs(sy(S.o[i])-sy(S.c[i]))); c.fillRect(sx(i)-cw/2,top,cw,hgt); }
-    // structure: swings + breaks
-    if(L.struct){ c.font='9px IBM Plex Mono,monospace'; (pa.swings||[]).slice(dense?-14:-40).forEach(function(s){ if(s.i<0||s.i>=n) return; c.fillStyle=s.type==='high'?'rgba(255,92,108,.85)':'rgba(61,214,140,.85)'; c.textAlign='center'; c.fillText(s.tag,sx(s.i),s.type==='high'?sy(s.price)-4:sy(s.price)+11); }); (pa.events||[]).slice(dense?-6:-14).forEach(function(e){ if(e.i<0||e.i>=n) return; var col=e.type==='CHoCH'?C.gold:(e.dir===1?C.up:C.down); c.strokeStyle=col; c.setLineDash([3,2]); c.beginPath(); c.moveTo(sx(e.from),sy(e.level)); c.lineTo(sx(e.i),sy(e.level)); c.stroke(); c.setLineDash([]); c.fillStyle=col; c.textAlign='center'; c.fillText(e.type,sx((e.from+e.i)/2),e.dir===1?sy(e.level)-4:sy(e.level)+11); }); c.font='10px IBM Plex Mono,monospace'; }
-    // signal markers
-    (d.markers||[]).forEach(function(mk){ var i=mk.i; if(i<0||i>=n) return; c.textAlign='center'; if(mk.side==='BUY'){ c.fillStyle=C.up; c.font='bold 13px IBM Plex Mono,monospace'; c.fillText('▲',sx(i),sy(S.l[i])+14); c.font='9px IBM Plex Mono,monospace'; c.fillText('BUY',sx(i),sy(S.l[i])+24); } else if(mk.side==='SELL'){ c.fillStyle=C.down; c.font='bold 13px IBM Plex Mono,monospace'; c.fillText('▼',sx(i),sy(S.h[i])-6); c.font='9px IBM Plex Mono,monospace'; c.fillText('SELL',sx(i),sy(S.h[i])-16); } else { c.fillStyle='rgba(168,156,207,.9)'; c.font='11px IBM Plex Mono,monospace'; c.fillText('×',sx(i),sy(S.h[i])-6); } c.font='10px IBM Plex Mono,monospace'; });
-    c.restore();
-    // levels on the right
-    function level(p,color,txt,dash){ if(p==null) return; c.strokeStyle=color; if(dash) c.setLineDash(dash); c.beginPath(); c.moveTo(pad.l,sy(p)); c.lineTo(g.w-pad.r,sy(p)); c.stroke(); c.setLineDash([]); c.fillStyle=color; c.fillRect(g.w-pad.r+1,sy(p)-7,pad.r-2,14); c.fillStyle='#0c0626'; c.textAlign='left'; c.fillText(txt,g.w-pad.r+4,sy(p)+4); }
-    level(d.entry,C.cyan,nf(d.entry,0),[1,3]); level(d.stop,C.down,'SL '+nf(d.stop,0),[4,3]); level(d.target,C.up,'T '+nf(d.target,0),[4,3]);
-    // price axis
-    c.fillStyle=C.faint; c.textAlign='left'; for(var k=0;k<=5;k++){ var v=lo+(hi-lo)*k/5; if(Math.abs(sy(v)-sy(d.entry))<9||(d.stop&&Math.abs(sy(v)-sy(d.stop))<9)||(d.target&&Math.abs(sy(v)-sy(d.target))<9)) continue; c.fillText(nf(v,0),g.w-pad.r+4,sy(v)+3); }
-    // time axis
-    c.textAlign='center'; var step=Math.max(1,Math.round(n/Math.max(3,Math.floor(pw/(gd.tf==='1d'?70:110))))); for(var i=0;i<n;i+=step){ var dt=new Date(S.t[i]); c.fillText(gd.tf==='1d'?dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}),sx(i),g.h-scoreH-10); }
-    // score strip
-    var sy0=y0+8+scoreH/2, sh=scoreH/2-4; c.strokeStyle='rgba(190,150,255,.14)'; c.beginPath(); c.moveTo(pad.l,sy0); c.lineTo(g.w-pad.r,sy0); c.stroke(); c.strokeStyle='rgba(255,255,255,.12)'; c.setLineDash([2,3]); c.beginPath(); c.moveTo(pad.l,sy0-sh*.25); c.lineTo(g.w-pad.r,sy0-sh*.25); c.moveTo(pad.l,sy0+sh*.25); c.lineTo(g.w-pad.r,sy0+sh*.25); c.stroke(); c.setLineDash([]);
-    for(var i=0;i<n;i++){ var v=S.score[i]; if(v==null) continue; c.fillStyle=S.state[i]===1?'rgba(61,214,140,.85)':S.state[i]===-1?'rgba(255,92,108,.85)':'rgba(168,156,207,.5)'; var hh=v*sh; c.fillRect(sx(i)-cw/2,Math.min(sy0,sy0-hh),cw,Math.abs(hh)||1); }
-    c.fillStyle=C.faint; c.textAlign='left'; c.fillText('composite score  +1',pad.l+2,y0+18); c.fillText('−1',pad.l+2,y0+8+scoreH-2);
-    // hover
-    if(gd.hover!=null&&gd.hover>=0&&gd.hover<n){ var i=gd.hover; c.strokeStyle='rgba(245,200,66,.45)'; c.beginPath(); c.moveTo(sx(i),pad.t); c.lineTo(sx(i),g.h-pad.b); c.stroke(); var dt=new Date(S.t[i]); $('gd-note').textContent=dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+(gd.tf!=='1d'?' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):'')+'  O '+nf(S.o[i],1)+'  H '+nf(S.h[i],1)+'  L '+nf(S.l[i],1)+'  C '+nf(S.c[i],1)+'  score '+(S.score[i]==null?'—':(S.score[i]>=0?'+':'')+nf(S.score[i],2))+'  '+(S.state[i]===1?'BUY':S.state[i]===-1?'SELL':'neutral'); }
-    gd.geom={pad:pad,bw:bw,n:n}; }
+  function drawGold(){ var r=window.finoPA&&window.finoPA.draw($('gd-cv'),gd.data,{layers:gd.layers,tf:gd.tf,hover:gd.hover}); if(!r) return; gd.geom=r.geom; if(r.hoverText) $('gd-note').textContent=r.hoverText; }
   $('gd-cv').addEventListener('pointermove',function(e){ if(!gd.geom) return; var r=e.currentTarget.getBoundingClientRect(); var i=Math.floor((e.clientX-r.left-gd.geom.pad.l)/gd.geom.bw); if(i!==gd.hover){ gd.hover=i; drawGold(); } });
   $('gd-cv').addEventListener('pointerleave',function(){ gd.hover=null; drawGold(); $('gd-note').textContent='move the pointer over the chart to read a bar'; });
   window.addEventListener('resize',function(){ drawGold(); });
@@ -403,6 +370,7 @@ def render_sovereign(locked: bool = False, signed_in: bool = False, pine: bool =
 </head>
 <body>
 __GUARD__{body}
+<script>{chart_pa.JS}</script>
 <script>{js}</script>
 __PAYWALL__
 </body>
@@ -453,6 +421,7 @@ def _doc() -> str:
 </head>
 <body>
 __GUARD__{body}
+<script>{chart_pa.JS}</script>
 <script>{js}</script>
 <script>{_analytics_js()}</script>
 __PAYWALL__

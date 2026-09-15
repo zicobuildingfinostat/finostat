@@ -36,8 +36,9 @@ CF_VERSION = "2023-08-01"
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "https://finostat.com").rstrip("/") or "https://finostat.com"
 PRICES = {"desk": {"monthly": 2199, "yearly": 21990}, "pro": {"monthly": 5599, "yearly": 55990}}   # rupees, exclusive of GST
 DAYS = {"monthly": 30, "yearly": 365, "lifetime": 0}
-LABEL = {"desk": "Desk", "pro": "Pro desk", "sovereign": "XAU Sovereign · XAU/USD indicator"}
-PRODUCTS = {"sovereign": 8000}          # one-time purchases, rupees, exclusive of GST; period is always "lifetime"
+LABEL = {"desk": "Desk", "pro": "Pro desk", "sovereign": "XAU Sovereign · XAU/USD indicator", "vip": "VIP Indicator · Indian markets indicator"}
+PRODUCTS = {"sovereign": 8000, "vip": 12999}
+PRODUCT_APP = {"sovereign": "/xau-sovereign/app", "vip": "/vip-indicator/app"}          # one-time purchases, rupees, exclusive of GST; period is always "lifetime"
 
 
 def valid_item(plan: str, period: str) -> bool:
@@ -399,7 +400,7 @@ class RenewalReminder:
 def receipt_lines(grant: dict, email: str) -> list[str]:
     rs = lambda p: f"₹{p / 100:,.2f}"
     lines = [(f"Product: {LABEL[grant['plan']]} · one-time purchase" if grant["plan"] in PRODUCTS else f"Plan: {LABEL[grant['plan']]} · {grant['period']} ({DAYS[grant['period']]} days)"),
-             ("Access: lifetime · open it at https://finostat.com/xau-sovereign/app (Pine Script button inside)" if grant["plan"] in PRODUCTS else f"Active until: {time.strftime('%d %b %Y', time.gmtime(grant['until'] + 19800))} (IST)"),
+             (f"Access: lifetime · open it at https://finostat.com{PRODUCT_APP.get(grant['plan'], '/account')} (Pine Script button inside)" if grant["plan"] in PRODUCTS else f"Active until: {time.strftime('%d %b %Y', time.gmtime(grant['until'] + 19800))} (IST)"),
              f"Amount: {rs(grant['base'])}" + (f" + GST {rs(grant['gst'])} = {rs(grant['amount'])}" if grant["gst"] else ""),
              f"Payment id: {grant['payment_id']}", f"Order id: {grant['order_id']}", f"Receipt: {grant['receipt']}",
              f"Account: {email}"]

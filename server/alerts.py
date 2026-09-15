@@ -32,7 +32,8 @@ FIXED_METRICS = {"straddle", "bfly", "net"}
 #   book:<delta|gamma|vega|theta|daypnl>   the user's own book, ₹ terms (RISK board)
 #   oi:<U>:<CE|PE> @strike / oichg:<U>:<CE|PE> @strike   open interest now / change over 15 min (OISCAN)
 #   pcr:<U>   put-call ratio     gexflip:<U>   dealer gamma flip level     xau:<1d|4h|1h>   XAU Sovereign score −1..+1
-EXTRA_KINDS = ("book", "oi", "oichg", "pcr", "gexflip", "xau")
+EXTRA_KINDS = ("book", "oi", "oichg", "pcr", "gexflip", "xau", "struct", "structdir", "scalp", "seller")
+STRUCT_TFS = ("5m", "15m", "1h", "D")
 BOOK_KEYS = ("delta", "gamma", "vega", "theta", "daypnl")
 OI_UNDERLYINGS = ("NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX")
 XAU_TFS = ("1d", "4h", "1h")
@@ -53,6 +54,8 @@ def parse_extra(metric: str):
     if kind in ("pcr", "gexflip") and len(parts) == 1 and parts[0] in OI_UNDERLYINGS:
         return kind, parts
     if kind == "xau" and len(parts) == 1 and parts[0] in XAU_TFS:
+        return kind, parts
+    if kind in ("struct", "structdir", "scalp", "seller") and len(parts) == 2 and parts[1] in STRUCT_TFS and (parts[0] in OI_UNDERLYINGS or (parts[0].startswith("NSE:") and 3 < len(parts[0]) <= 24)):
         return kind, parts
     return None
 DEFAULT_SYMBOLS = {"NIFTY 50", "BANKNIFTY", "SENSEX", "FINNIFTY", "INDIA VIX"}
@@ -106,6 +109,14 @@ def metric_label(metric: str, strike) -> str:
             return f"{parts[0]} gamma flip"
         if kind == "xau":
             return f"XAU Sovereign {parts[0].upper()} score"
+        if kind == "struct":
+            return f"{parts[0]} {parts[1]} engine score"
+        if kind == "structdir":
+            return f"{parts[0]} {parts[1]} structure (+1 bull / −1 bear)"
+        if kind == "scalp":
+            return f"{parts[0]} {parts[1]} scalper score"
+        if kind == "seller":
+            return f"{parts[0]} {parts[1]} sell-premium score"
     return f"{metric.upper()} {strike}"
 
 

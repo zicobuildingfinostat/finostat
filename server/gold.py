@@ -570,6 +570,26 @@ def analyze(c: list[list], tf: str = "1d") -> dict:
     }
 
 
+def slice_view(full: dict, bars: int) -> dict:
+    """Trim an analyze() result to the last `bars` candles, shifting every drawing index."""
+    d = dict(full)
+    if "series" in d:
+        n = len(d["series"]["t"])
+        cut = max(0, n - bars)
+        d["series"] = {k: v[cut:] for k, v in d["series"].items()}
+        d["markers"] = [dict(m, i=m["i"] - cut) for m in d["markers"] if m["i"] >= cut]
+        pa = d["pa"]
+        d["pa"] = {"structure": pa["structure"],
+                   "swings": [dict(x, i=x["i"] - cut) for x in pa["swings"] if x["i"] >= cut],
+                   "events": [dict(x, i=x["i"] - cut, **{"from": max(0, x["from"] - cut)}) for x in pa["events"] if x["i"] >= cut],
+                   "fvgs": [dict(x, i=max(0, x["i"] - cut)) for x in pa["fvgs"]],
+                   "obs": [dict(x, i=max(0, x["i"] - cut)) for x in pa["obs"]],
+                   "pools": [dict(x, i0=max(0, x["i0"] - cut), i1=max(0, x["i1"] - cut), swept=(x["swept"] - cut if x["swept"] and x["swept"] > 0 else x["swept"])) for x in pa["pools"]],
+                   "range": dict(pa["range"], i0=max(0, pa["range"]["i0"] - cut), i1=max(0, pa["range"]["i1"] - cut)) if pa["range"] else None}
+        d["offset"] = cut
+    return d
+
+
 class Gold:
     def __init__(self):
         self._lock = threading.Lock()
@@ -596,21 +616,12 @@ class Gold:
                 log.info("gold: refresh failed: %s", exc)
                 if not hit:
                     return {"error": f"gold candles unavailable: {str(exc)[:80]}"}
-        d = dict(hit[1])
-        if "series" in d:
-            n = len(d["series"]["t"])
-            cut = max(0, n - bars)
-            d["series"] = {k: v[cut:] for k, v in d["series"].items()}
-            d["markers"] = [dict(m, i=m["i"] - cut) for m in d["markers"] if m["i"] >= cut]
-            pa = d["pa"]
-            d["pa"] = {"structure": pa["structure"],
-                       "swings": [dict(x, i=x["i"] - cut) for x in pa["swings"] if x["i"] >= cut],
-                       "events": [dict(x, i=x["i"] - cut, **{"from": max(0, x["from"] - cut)}) for x in pa["events"] if x["i"] >= cut],
-                       "fvgs": [dict(x, i=max(0, x["i"] - cut)) for x in pa["fvgs"]],
-                       "obs": [dict(x, i=max(0, x["i"] - cut)) for x in pa["obs"]],
-                       "pools": [dict(x, i0=max(0, x["i0"] - cut), i1=max(0, x["i1"] - cut), swept=(x["swept"] - cut if x["swept"] and x["swept"] > 0 else x["swept"])) for x in pa["pools"]],
-                       "range": dict(pa["range"], i0=max(0, pa["range"]["i0"] - cut), i1=max(0, pa["range"]["i1"] - cut)) if pa["range"] else None}
-            d["offset"] = cut
+        d = slice_view(hit[1], bars)
+        try:
+            import footprint as _fp
+            _fp.attach(d)
+        except Exception:                                           # noqa: BLE001
+            pass
         d["spot_xau"] = self.spot()
         d["source"] = "binance PAXGUSDT"
         if usdinr and d.get("entry"):

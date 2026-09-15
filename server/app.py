@@ -54,10 +54,12 @@ import gold
 import coindcx
 import pages_global
 import sovereign_page
+import vip_page
 import vega
 import risk
 import move
 import strdhist
+import structure
 import oiscan
 import vega_widget
 import algo
@@ -155,7 +157,7 @@ def _guest_settle(order_id: str, secure: bool):
     if user is None:
         return {"error": "account missing"}, None
     product = row.get("plan") in payments.PRODUCTS
-    nxt = "/xau-sovereign/app?paid=1" if product else "/dashboard?paid=1"
+    nxt = (payments.PRODUCT_APP.get(row.get("plan"), "/account") + "?paid=1") if product else "/dashboard?paid=1"
     if authmod.is_phone_only(user["email"]):
         sid = AUTH.create_session(user["id"])
         return {"ok": True, "signed_in": True, "next": nxt, "plan": user["plan"]}, authmod.Auth.cookie_header(sid, secure)
@@ -163,7 +165,7 @@ def _guest_settle(order_id: str, secure: bool):
     token = AUTH.create_link(user["email"])
     sent = bool(token) and mailer.send_magic_link(user["email"], f"{PUBLIC_URL or 'https://finostat.com'}/auth/verify?token={quote(token, safe='')}&next={quote(nxt, safe='')}")
     masked = user["email"][:2] + "***" + user["email"][user["email"].find("@"):]
-    what = "XAU Sovereign is unlocked" if product else f"{user['plan']} is active"
+    what = f"{payments.LABEL.get(row.get('plan'), 'your purchase').split(' ·')[0]} is unlocked" if product else f"{user['plan']} is active"
     return {"ok": True, "signed_in": False, "plan": user["plan"],
             "message": f"Payment received and {what} on the account for {masked}. " + ("We've emailed your sign-in link there." if sent else "Sign in with your email link to open it.")}, None
 
@@ -249,6 +251,44 @@ def _fo_stock_keys() -> list[tuple[str, str]]:
 
 OISCAN = oiscan.Sampler(UREST, AUTH.path, WATCHDOG.in_session, stock_keys_fn=_fo_stock_keys, step_fn=lambda u: upstox_rest.STEP.get(u))
 OISCAN.start()
+def _seller_extras(u: str) -> dict:
+    """What the option-selling engine gets on indices: straddle percentile (if the IVP study is built), expected day move, realised vs expected."""
+    out: dict = {}
+    try:
+        ch = _analytics_chain(u)
+        if "rows" in ch:
+            spot = float(ch["spot"])
+            atm = min(ch["rows"], key=lambda r: abs(r["strike"] - spot))
+            ce, pe = atm.get("ce") or {}, atm.get("pe") or {}
+            ivs = [x for x in (ce.get("iv"), pe.get("iv")) if x]
+            straddle = (ce.get("ltp") or 0) + (pe.get("ltp") or 0) if ce.get("ltp") is not None and pe.get("ltp") is not None else None
+            exp = move.expected(spot, sum(ivs) / len(ivs) if ivs else None, straddle, ch["t"])
+            out["em_day"] = exp.get("em_day")
+            prev_close = None
+            for q in FEED.snapshot().get("quotes") or []:
+                if q.get("symbol") == u and q.get("price") and q.get("change") is not None and q["change"] > -100:
+                    prev_close = q["price"] / (1 + q["change"] / 100.0)
+            ikey = candles.resolve_key(u, getattr(FEED, "_meta", None))
+            if ikey and exp.get("em_day"):
+                cands = CANDLES.series(ikey, "5m").get("candles") or []
+                real = move.realised(move.today_only(cands), prev_close)
+                cmp_ = move.compare(exp, real)
+                out["realised_vs_expected_pct"] = cmp_.get("range_vs_expected_pct")
+            today = strdhist.datetime.now(strdhist.IST).date()
+            exp_d = strdhist.datetime.strptime(ch["expiry"], "%Y-%m-%d").date()
+            dte = strdhist.trading_days_between(today, exp_d)
+            study = HIST.store.meta_get(f"STRDHIST|{u}|{ch['expiry']}|{dte}|20", 10 * 365 * 86400)
+            if study and study.get("samples") and straddle and spot:
+                m = strdhist.datetime.now(strdhist.IST).strftime("%H:%M")
+                m = min(strdhist.MINUTES, key=lambda x: abs(int(x[:2]) * 60 + int(x[3:]) - (int(m[:2]) * 60 + int(m[3:]))))
+                now_pts = [[m, straddle, 100 * straddle / spot, None]]
+                out["iv_percentile"] = strdhist.compare_now(now_pts, study["samples"]).get("pct_percentile")
+    except Exception as exc:                                        # noqa: BLE001
+        log.info("seller extras for %s: %s", u, exc)
+    return out
+
+
+STRUCT = structure.Structure(CANDLES, lambda label: candles.resolve_key(label, getattr(FEED, "_meta", None)), extras_fn=lambda u: _cached(f"sellx:{u}", 60.0, lambda: _seller_extras(u)))
 
 _PROV_CACHE: dict = {}
 
@@ -313,7 +353,18 @@ def _prov_xau(metric: str, strike, user_id: int):
     return v.get("score") if "error" not in v else None
 
 
-ALERTS.providers.update({"book": _prov_book, "oi": _prov_oi, "oichg": _prov_oi, "pcr": _prov_pcr, "gexflip": _prov_gexflip, "xau": _prov_xau})
+def _prov_struct(metric: str, strike, user_id: int):
+    kind, u, tf = metric.split(":", 2)[0], metric.split(":")[1], metric.split(":")[-1]
+    if u.startswith("NSE"):                                          # NSE:SYM carries its own colon
+        u = ":".join(metric.split(":")[1:-1])
+    v = STRUCT.view(u, tf, 60, "scalp" if kind == "scalp" else "seller" if kind == "seller" else "struct")
+    if "error" in v:
+        return None
+    return v.get("direction") if kind == "structdir" else v.get("score")
+
+
+ALERTS.providers.update({"book": _prov_book, "oi": _prov_oi, "oichg": _prov_oi, "pcr": _prov_pcr, "gexflip": _prov_gexflip, "xau": _prov_xau,
+                         "struct": _prov_struct, "structdir": _prov_struct, "scalp": _prov_struct, "seller": _prov_struct})
 VEGA = vega.Vega(AUTH.path)
 _DCX_CACHE: dict = {}            # user_id -> (ts, payload)
 _OWNER_EMAILS = {e.strip().lower() for e in (os.environ.get("OWNER_EMAIL", "") + "," + os.environ.get("FINOSTAT_TRADE_USERS", "")).split(",") if e.strip()}
@@ -836,6 +887,37 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(vega_widget.inject(pages_global.render(locked=not _paid(user), signed_in=user is not None, plan=_plan_of(user),
                                                                          pine=user is not None and AUTH.has_product(user["id"], "sovereign"))),
                                   "text/html; charset=utf-8", cache="no-store")
+            if route == "/vip-indicator":
+                teaser = {}
+                for lbl, u, tf in (("NIFTY 15m", "NIFTY 50", "15m"), ("NIFTY 1D", "NIFTY 50", "D"), ("BANKNIFTY 15m", "BANKNIFTY", "15m")):
+                    try:
+                        v = STRUCT.view(u, tf, 60)
+                        teaser[lbl] = v.get("signal")
+                    except Exception:                               # noqa: BLE001
+                        pass
+                return self._send(vega_widget.inject(vip_page.render_sales(teaser, configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]])),
+                                  "text/html; charset=utf-8", cache="public, max-age=300")
+            if route == "/vip-indicator/buy":
+                user = self._current_user()
+                if user is not None and AUTH.has_product(user["id"], "vip"):
+                    return self._redirect("/vip-indicator/app")
+                return self._send(guest.render("vip", "lifetime", configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]]),
+                                  "text/html; charset=utf-8", cache="no-store")
+            if route == "/vip-indicator/app":
+                user = self._current_user()
+                owner = user is not None and AUTH.has_product(user["id"], "vip")
+                return self._send(vega_widget.inject(vip_page.render_app(locked=not (owner or _paid(user)), signed_in=user is not None, pine=owner)),
+                                  "text/html; charset=utf-8", cache="no-store")
+            if route == "/vip-indicator/pine":
+                user = self._current_user()
+                if user is None:
+                    return self._redirect("/login?next=%2Fvip-indicator%2Fapp")
+                if not AUTH.has_product(user["id"], "vip"):
+                    return self._redirect("/vip-indicator")
+                which = parse_qs(parsed.query).get("which", ["struct"])[0]
+                which = which if which in vip_page.PINES else "struct"
+                return self._send(vip_page.pine_for(user["email"], which), "text/plain; charset=utf-8", cache="no-store",
+                                  headers=[("Content-Disposition", f'attachment; filename="{vip_page.PINES[which][0]}"')])
             if route == "/xau-sovereign":
                 teaser = {}
                 for tf in ("1d", "4h", "1h"):
@@ -1156,6 +1238,19 @@ class Handler(BaseHTTPRequestHandler):
                 out = risk.board(bp["positions"], FEED.snapshot().get("quotes") or [], funds=funds, limits=limits)
                 out["broker"] = client is not None
                 return self._json(out)
+            if route == "/api/struct":
+                user = self._current_user()
+                if not (_paid(user) or (user is not None and AUTH.has_product(user["id"], "vip"))):
+                    return self._json({"error": "VIP Indicator is a one-time ₹12,999 purchase, or part of Desk", "need": "vip", "signed_in": user is not None}, 402)
+                qs = parse_qs(parsed.query)
+                u = qs.get("u", ["NIFTY 50"])[0]
+                tf = qs.get("tf", ["15m"])[0]
+                try:
+                    bars = max(60, min(400, int(qs.get("bars", ["220"])[0])))
+                except ValueError:
+                    bars = 220
+                out = STRUCT.view(u, tf, bars, qs.get("engine", ["struct"])[0])
+                return self._json(out, 503 if "error" in out else 200)
             if route == "/api/strdhist":
                 qs = parse_qs(parsed.query)
                 u = qs.get("u", ["NIFTY 50"])[0]
