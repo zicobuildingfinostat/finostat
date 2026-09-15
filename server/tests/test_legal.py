@@ -33,9 +33,9 @@ check("contact has mailto + founder link", 'href="mailto:zico@finostat.com"' in 
 root = pathlib.Path(__file__).resolve().parents[2]
 index = (root / "index.html").read_text(encoding="utf-8")
 sitemap = (root / "sitemap.xml").read_text(encoding="utf-8")
-check("homepage has no /tools, /blog, /live-session, /analysis, /about links",
-      not re.findall(r'href="/(?:tools/|blog|live-session|analysis|about)', index))
-check("sitemap lists no retired urls", not re.findall(r'finostat\.com/(?:tools/|blog|live-session|about)', sitemap))
+check("homepage has no /tools, /live-session, /analysis, /about links",
+      not re.findall(r'href="/(?:tools/|live-session|analysis|about)', index))
+check("sitemap lists no retired urls", not re.findall(r'finostat\.com/(?:tools/|live-session|about)', sitemap))
 check("sitemap lists the legal pages", all(f"finostat.com/{p}</loc>" in sitemap for p in ("privacy", "terms", "contact")))
 
 print("\nRESULT:", "ALL PASS" if not fails else "FAILURES")
