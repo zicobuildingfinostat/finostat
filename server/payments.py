@@ -138,12 +138,12 @@ def _cf_call(path: str, body: dict | None = None) -> dict:
         raise PaymentError("Cashfree is unreachable right now; try again in a minute") from exc
 
 
-def cashfree_create_order(order_id: str, amount_paise: int, customer: dict, note: str) -> dict:
+def cashfree_create_order(order_id: str, amount_paise: int, customer: dict, note: str, return_url: str | None = None) -> dict:
     """POST /pg/orders. Cashfree wants rupees with paise as decimals and a phone number."""
     body = {"order_id": order_id, "order_amount": round(amount_paise / 100.0, 2), "order_currency": "INR",
             "customer_details": {"customer_id": f"u{customer['id']}", "customer_email": customer["email"],
                                  "customer_phone": customer["phone"], "customer_name": customer.get("name") or customer["email"].split("@")[0]},
-            "order_meta": {"return_url": f"{PUBLIC_URL}/account?cf_order={{order_id}}", "notify_url": f"{PUBLIC_URL}/api/pay/cashfree/webhook"},
+            "order_meta": {"return_url": return_url or f"{PUBLIC_URL}/account?cf_order={{order_id}}", "notify_url": f"{PUBLIC_URL}/api/pay/cashfree/webhook"},
             "order_note": note[:200]}
     out = _cf_call("/orders", body)
     if not out.get("payment_session_id"):

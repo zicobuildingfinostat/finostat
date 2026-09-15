@@ -61,6 +61,8 @@ import move
 import strdhist
 import structure
 import blog
+import shop as shopmod
+import shop_catalog
 import oiscan
 import vega_widget
 import algo
@@ -591,6 +593,16 @@ BLOG_SOURCES = {
     "week_change": _blog_week_change,
 }
 BLOG = blog.Blog(AUTH.path, BLOG_SOURCES, holidays=HOLIDAYS)
+def _is_owner(user) -> bool:
+    return bool(user and str(user.get("email", "")).lower() in _OWNER_EMAILS)
+
+
+def _shop_notify(order: dict) -> None:
+    lines = SHOP.receipt_lines(order)
+    if order.get("email") and "@" in order["email"] and not order["email"].endswith("@mobile.finostat"):
+        threading.Thread(target=mailer.send_plain, args=(order["email"], f"Finostat shop — order {order['id']} confirmed", "Thank you. Your order is confirmed and will ship in 5–7 days.", lines),
+                         kwargs={"cta_url": f"{PUBLIC_URL or 'https://finostat.com'}/shop/order/{order['id']}", "cta": "Track your order →"}, daemon=True).start()
+    threading.Thread(target=mailer.send_owner_note, args=(f"Finostat shop: new order ₹{order['amount']:,} — {order['name']}", lines + ["Manage: /shop/admin"]), daemon=True).start()
 
 
 def _vega_context(user, page: str) -> dict:
@@ -680,6 +692,17 @@ def _gate(user, ukey: str):
     return False, {"error": "plan required", "need": need, "plan": plan,
                    "signed_in": user is not None, "feature": feature}
 PUBLIC_URL = os.environ.get("FINOSTAT_PUBLIC_URL", "").strip().rstrip("/")
+
+SHOP = shopmod.Shop(AUTH.path, recorder._data_dir() / "shop", create_order=payments.cashfree_create_order, fetch_order=payments.cashfree_fetch_order,
+                    fetch_payments=payments.cashfree_fetch_payments, public_url=PUBLIC_URL or "https://finostat.com")
+try:
+    _seeded = shop_catalog.seed(SHOP)
+    if _seeded:
+        log.info("shop: seeded %d starter products", _seeded)
+except Exception as exc:                                            # noqa: BLE001
+    log.warning("shop seed failed: %s", exc)
+
+
 # Search-engine ownership proofs. Both are public tokens, set as plain env in fly.toml.
 #   GOOGLE_SITE_VERIFICATION  -> <meta name="google-site-verification"> on the homepage
 #   BING_SITE_VERIFICATION    -> <meta name="msvalidate.01">
@@ -1074,6 +1097,40 @@ class Handler(BaseHTTPRequestHandler):
                 if d is None:
                     return self._json({"error": "unknown symbol or not loaded yet"}, 404)
                 return self._json(d)
+            if route == "/shop":
+                return self._send(vega_widget.inject(shopmod.render_index(SHOP)), "text/html; charset=utf-8", cache="public, max-age=120")
+            if route == "/shop/cart":
+                user = self._current_user()
+                pf = {"email": user["email"] if user and not authmod.is_phone_only(user["email"]) else "", "phone": (AUTH.get_prefs(user["id"]).get("phone") if user else "") or ""}
+                return self._send(shopmod.render_cart(SHOP, configured="cashfree" in [p["id"] for p in payments.providers() if p["configured"]], prefill=pf), "text/html; charset=utf-8", cache="no-store")
+            if route == "/shop/admin":
+                user = self._current_user()
+                if not _is_owner(user):
+                    return self._redirect("/login?next=%2Fshop%2Fadmin") if user is None else self._send(b"Forbidden", "text/plain; charset=utf-8", 403)
+                return self._send(shopmod.render_admin(SHOP), "text/html; charset=utf-8", cache="no-store")
+            if route.startswith("/shop/img/"):
+                p = SHOP.image_path(route.rsplit("/", 1)[1])
+                if p is None:
+                    return self._json({"error": "not found"}, 404)
+                ctype = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp", "svg": "image/svg+xml"}[p.suffix[1:]]
+                return self._send(p.read_bytes(), ctype, cache="public, max-age=86400")
+            if route.startswith("/shop/order/"):
+                oid = route.rsplit("/", 1)[1]
+                if parse_qs(parsed.query).get("cf_order"):
+                    try:
+                        r = SHOP.confirm(oid)
+                        if r.get("newly_paid"):
+                            _shop_notify(r["order"])
+                    except Exception as exc:                        # noqa: BLE001
+                        log.info("shop confirm on return failed: %s", exc)
+                body = shopmod.render_order(SHOP, oid)
+                if body is None:
+                    return self._json({"error": "not found"}, 404)
+                return self._send(body, "text/html; charset=utf-8", cache="no-store")
+            if route.startswith("/shop/") and route.count("/") == 2:
+                body = shopmod.render_product(SHOP, unquote(route.rsplit("/", 1)[1]).lower())
+                if body is not None:
+                    return self._send(vega_widget.inject(body), "text/html; charset=utf-8", cache="public, max-age=120")
             if route == "/blog":
                 return self._send(vega_widget.inject(blog.render_index(BLOG)), "text/html; charset=utf-8", cache="public, max-age=300")
             if route == "/blog/feed.xml":
@@ -1450,7 +1507,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(rec or {"error": "no brief yet"}, 200 if rec else 404)
             if route == "/sitemap.xml":
                 static = (config.STATIC_ROOT / "sitemap.xml").read_text(encoding="utf-8")
-                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + pubchain.sitemap_entries(PUBCHAIN) + blog.sitemap_entries(BLOG) + "</urlset>")
+                xml = static.replace("</urlset>", brief.sitemap_entries(BRIEFS) + pubchain.sitemap_entries(PUBCHAIN) + blog.sitemap_entries(BLOG) + shopmod.sitemap_entries(SHOP) + "</urlset>")
                 return self._send(xml.encode("utf-8"), "application/xml; charset=utf-8", cache="public, max-age=3600")
             if route == "/about":
                 return self._redirect("/founders")
@@ -1723,6 +1780,50 @@ class Handler(BaseHTTPRequestHandler):
                 limits = risk.clean_limits(body.get("limits") if isinstance(body, dict) else None)
                 AUTH.set_prefs(user["id"], {"risk_limits": limits})
                 return self._json({"ok": True, "limits": limits})
+            if route in ("/api/shop/checkout", "/api/shop/verify", "/api/shop/admin/image", "/api/shop/admin/product", "/api/shop/admin/settings", "/api/shop/admin/order"):
+                if self.headers.get("X-Requested-With") != "fetch":
+                    return self._json({"error": "bad request"}, 400)
+                try:
+                    body = json.loads(self._read_body(limit=(9 * 1024 * 1024 if route == "/api/shop/admin/image" else 64 * 1024)).decode("utf-8") or "{}")
+                except ValueError:
+                    return self._json({"error": "invalid json"}, 400)
+                if not isinstance(body, dict):
+                    return self._json({"error": "expected an object"}, 400)
+                user = self._current_user()
+                if route.startswith("/api/shop/admin/"):
+                    if not _is_owner(user):
+                        return self._json({"error": "owner only"}, 403)
+                    try:
+                        if route.endswith("/image"):
+                            return self._json({"image": SHOP.save_image(str(body.get("mime", "")), str(body.get("data", "")))})
+                        if route.endswith("/product"):
+                            op = body.get("op", "create")
+                            if op == "delete":
+                                return self._json({"ok": SHOP.delete_product(int(body.get("id") or 0))})
+                            return self._json({"product": SHOP.save_product(body, int(body["id"]) if op == "update" and body.get("id") else None)})
+                        if route.endswith("/settings"):
+                            return self._json({"settings": SHOP.set_settings(body)})
+                        o = SHOP.update_order(str(body.get("order_id", ""))[:40], status=body.get("status"), tracking=body.get("tracking"), note=body.get("note"))
+                        return self._json({"order": o} if o else {"error": "unknown order"}, 200 if o else 404)
+                    except shopmod.ShopError as exc:
+                        return self._json({"error": str(exc)}, 400)
+                if route == "/api/shop/checkout":
+                    if "cashfree" not in [p["id"] for p in payments.providers() if p["configured"]]:
+                        return self._json({"error": "online payment is not switched on yet"}, 503)
+                    if not _guest_limiter.allow(self._client_ip()):
+                        return self._json({"error": "Too many attempts — try again in a few minutes"}, 429)
+                    try:
+                        out = SHOP.checkout(body.get("items") or [], body.get("customer") or {}, user["id"] if user else None)
+                    except shopmod.ShopError as exc:
+                        return self._json({"error": str(exc)}, 400)
+                    except payments.PaymentError as exc:
+                        return self._json({"error": f"Cashfree: {exc}"}, 502)
+                    out["env"] = payments.cf_env()
+                    return self._json(out)
+                r = SHOP.confirm(str(body.get("order_id", ""))[:40])
+                if r.get("newly_paid"):
+                    _shop_notify(r["order"])
+                return self._json({k: v for k, v in r.items() if k != "order"} | {"status": (r.get("order") or {}).get("status")}, 200 if "error" not in r else 404)
             if route == "/api/vega":
                 if self.headers.get("X-Requested-With") != "fetch":
                     return self._json({"error": "bad request"}, 400)
@@ -2147,6 +2248,10 @@ class Handler(BaseHTTPRequestHandler):
                 log.info("cashfree webhook: signature ok, type=%s order=%s status=%s known=%s", evt.get("type"), oid, pay.get("payment_status"), bool(oid and PAYMENTS.get(oid)))
                 if evt.get("type") == "PAYMENT_SUCCESS_WEBHOOK" and str(pay.get("payment_status", "")).upper() == "SUCCESS" and oid and PAYMENTS.get(oid):
                     _grant_and_notify(oid, str(pay.get("cf_payment_id") or "cf"), "webhook")
+                elif evt.get("type") == "PAYMENT_SUCCESS_WEBHOOK" and str(pay.get("payment_status", "")).upper() == "SUCCESS" and oid and str(oid).startswith("shop") and SHOP.order(oid):
+                    newly = SHOP.mark_paid(oid, str(pay.get("cf_payment_id") or "cf"))
+                    if newly:
+                        _shop_notify(newly)
                 return self._json({"ok": True})
             if route == "/api/pay/webhook":
                 raw = self._read_body(limit=256 * 1024)
