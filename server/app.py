@@ -57,6 +57,7 @@ import sovereign_page
 import vega
 import risk
 import move
+import strdhist
 import oiscan
 import vega_widget
 import algo
@@ -508,7 +509,7 @@ def _paid(user) -> bool:
 TERMINAL_APIS = {"/api/sheet", "/api/sheet/stream", "/api/mini", "/api/history", "/api/news", "/api/news/stream",
                  "/api/symbols", "/api/quote", "/api/underlyings", "/api/alerts",
                  "/api/surface", "/api/skew", "/api/curve", "/api/gex", "/api/replay/days", "/api/replay/day", "/api/backtest", "/api/candles", "/api/algo",
-                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move"}
+                 "/api/global/tape", "/api/global/chain", "/api/global/surface", "/api/global/skew", "/api/global/curve", "/api/global/gex", "/api/coindcx", "/api/risk", "/api/oiscan", "/api/oiscan/stocks", "/api/move", "/api/strdhist"}
 
 
 def _gate(user, ukey: str):
@@ -1155,6 +1156,55 @@ class Handler(BaseHTTPRequestHandler):
                 out = risk.board(bp["positions"], FEED.snapshot().get("quotes") or [], funds=funds, limits=limits)
                 out["broker"] = client is not None
                 return self._json(out)
+            if route == "/api/strdhist":
+                qs = parse_qs(parsed.query)
+                u = qs.get("u", ["NIFTY 50"])[0]
+                try:
+                    n = max(5, min(40, int(qs.get("n", ["20"])[0])))
+                except ValueError:
+                    n = 20
+                ch = _analytics_chain(u)
+                if "error" in ch:
+                    return self._json(ch, 503)
+                today = strdhist.datetime.now(strdhist.IST).date()
+                exp_d = strdhist.datetime.strptime(ch["expiry"], "%Y-%m-%d").date()
+                dte = strdhist.trading_days_between(today, exp_d)
+                key = f"STRDHIST|{u}|{ch['expiry']}|{dte}|{n}"
+                job = HIST._job(key, lambda j: strdhist.study(HIST, u, dte, n, today, job=j))
+                if job.get("status") != "done":
+                    return self._json({"status": job.get("status"), "progress": job.get("progress"), "error": job.get("error"), "u": u, "expiry": ch["expiry"], "dte": dte})
+                res = job["result"] or {"samples": []}
+                # today's straddle path from live 1-minute candles, ATM fixed at today's open
+                today_pts, atm_today, spot_open = [], None, None
+                try:
+                    ikey = candles.resolve_key(u, getattr(FEED, "_meta", None))
+                    spot_c = [c for c in (CANDLES.series(ikey, "1m").get("candles") or []) if str(c[0])[:10] == today.isoformat()] if ikey else []
+                    if spot_c:
+                        spot_open = float(spot_c[0][1])
+                        step = upstox_rest.STEP.get(u) or 50
+                        atm_today = int(round(spot_open / step) * step)
+                        name = contracts.INDEX_UNDERLYINGS[u][0]
+                        exp_ms = int(_expiry_ts(ch["expiry"]) * 1000) + int(8.5 * 3600 * 1000)
+                        exps = CONTRACTS_OF(FEED).expiries(name)
+                        exp_ms = min(exps, key=lambda e: abs(e - exp_ms)) if exps else exp_ms
+                        kc, kp = CONTRACTS_OF(FEED).key_for(name, exp_ms, atm_today, "CE"), CONTRACTS_OF(FEED).key_for(name, exp_ms, atm_today, "PE")
+                        if kc and kp:
+                            ce = strdhist._by_minute([c for c in CANDLES.series(kc[0], "1m").get("candles") or [] if str(c[0])[:10] == today.isoformat()])
+                            pe = strdhist._by_minute([c for c in CANDLES.series(kp[0], "1m").get("candles") or [] if str(c[0])[:10] == today.isoformat()])
+                            today_pts = strdhist.build_points(strdhist._by_minute(spot_c), ce, pe, _expiry_ts(ch["expiry"]), today, atm_today)
+                except Exception as exc:                            # noqa: BLE001
+                    log.info("strdhist: today's series unavailable for %s: %s", u, exc)
+                vix = None
+                try:
+                    vk = candles.resolve_key("INDIA VIX", getattr(FEED, "_meta", None))
+                    if vk:
+                        vix = strdhist.vix_rank([float(c[4]) for c in CANDLES.series(vk, "D").get("candles") or []][-252:])
+                except Exception:                                   # noqa: BLE001
+                    pass
+                return self._json({"status": "done", "u": u, "expiry": ch["expiry"], "dte": dte, "n": res.get("n", 0),
+                                   "samples": [{k: v for k, v in s.items() if k != "points"} | {"points": s["points"]} for s in res.get("samples", [])],
+                                   "bands": strdhist.bands(res.get("samples", [])), "today": {"points": today_pts, "atm": atm_today, "spot_open": spot_open},
+                                   "now": strdhist.compare_now(today_pts, res.get("samples", [])), "vix": vix, "live": ch.get("live")})
             if route == "/api/move":
                 qs = parse_qs(parsed.query)
                 u = qs.get("u", ["NIFTY 50"])[0]

@@ -186,6 +186,7 @@ INTENTS = [
     (("global", "world", "s&p", "spx", "nasdaq", "dow", "dax", "nikkei", "dxy", "crude", "us10y", "hang seng", "ftse"), "world"),
     (("plan", "price", "pricing", "cost", "subscri", "desk", "pro desk", "how much", "pay", "upi", "cashfree", "refund", "gst"), "plans"),
     (("login", "log in", "sign in", "signin", "sign up", "signup", "account", "otp", "password", "magic link", "register"), "login"),
+    (("iv percentile", "iv rank", "ivp", "ivr", "straddle history", "is premium rich", "premium rich", "premium cheap", "vix rank"), "ivp"),
     (("expected move", "realised", "realized", "implied move", "1 sigma", "one sigma", "how much will nifty move"), "move"),
     (("risk board", "risk", "greeks board", "my limits", "hedge", "margin"), "risk"),
     (("oiscan", "oi scan", "build-up", "buildup", "build up", "screener", "short covering", "long unwinding", "oi change"), "oiscan"),
@@ -236,6 +237,8 @@ def answer_local(question: str, ctx: dict) -> str:
     if intent == "pine":
         return ("XAU Sovereign buyers get the TradingView Pine Script: open /xau-sovereign/app and press PINE SCRIPT ↓. In TradingView: Pine Editor → select all → paste → Add to chart; alerts under Alerts → Condition → XAU Sovereign. "
                 "Not a buyer yet? It's ₹8,000 once at /xau-sovereign/buy.")
+    if intent == "ivp":
+        return ("The IVP panel in the terminal ranks today's ATM straddle and implied vol against the same clock time on the last 20 expiry cycles at the same distance to expiry, and shows the 1-year India VIX rank — the quick answer to whether premium is rich or cheap right now. Type IVP in the terminal command line (Desk).")
     if intent == "move":
         return ("The MOVE panel in the terminal shows the expected day and week move from ATM IV, what the straddle charges to expiry, and today's realised range and move against them, with the 1σ band on the day's path. Type MOVE in the terminal command line (Desk). The daily brief at /brief carries the expected move each morning too.")
     if intent == "risk":
